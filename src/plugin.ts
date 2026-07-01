@@ -73,42 +73,28 @@ export function glideSourceStamping(): Plugin {
 
       if (!result) return null;
 
+      const injection = `
+        import { GlideBridge, GlideOverlay } from '@srivarsank/glide';
+        if (typeof window !== 'undefined' && !window.__glide_initialized__) {
+          window.__glide_initialized__ = true;
+          const bridge = new GlideBridge(window);
+          bridge.init();
+          const overlay = new GlideOverlay(window);
+          overlay.init();
+          overlay.onResize((source, rect, delta) => {
+            window.parent.postMessage({
+              type: 'glide:element-resized',
+              source,
+              rect,
+              delta
+            }, '*');
+          });
+        }
+      `;
+
       return {
-        code: result.code ?? code,
+        code: injection + '\n' + (result.code ?? code),
         map: result.map,
-      };
-    },
-
-    transformIndexHtml(html) {
-      if (!isDev) return html;
-      return {
-        html,
-        tags: [
-          {
-            tag: 'script',
-            attrs: { type: 'module' },
-            children: `
-              import { GlideBridge, GlideOverlay } from '/node_modules/@srivarsank/glide/dist/index.js';
-              if (typeof window !== 'undefined') {
-                const bridge = new GlideBridge(window);
-                bridge.init();
-
-                const overlay = new GlideOverlay(window);
-                overlay.init();
-
-                overlay.onResize((source, rect, delta) => {
-                  window.parent.postMessage({
-                    type: 'glide:element-resized',
-                    source,
-                    rect,
-                    delta
-                  }, '*');
-                });
-              }
-            `,
-            injectTo: 'body',
-          }
-        ]
       };
     },
   };
