@@ -140,19 +140,60 @@ function getNewClass(property: string, value: any): string {
   }
 }
 
+function getExistingValue(existingClasses: string, property: string): number {
+  const classes = existingClasses.split(/\s+/).filter(Boolean);
+  for (const c of classes) {
+    if (matchesProperty(c, property)) {
+      const parts = c.split(':');
+      const name = parts[parts.length - 1];
+
+      // JIT matches e.g. ml-[-16px] or ml-[16px]
+      const jitMatch = name.match(/-\[([-\d]+)(?:px)?\]$/);
+      if (jitMatch) {
+        return Number(jitMatch[1]);
+      }
+
+      // Standard Tailwind matches e.g. ml-4
+      let prefix = '';
+      if (property.startsWith('margin') || property.startsWith('padding')) {
+        const char = property.includes('Left') ? 'l' : property.includes('Right') ? 'r' : property.includes('Top') ? 't' : 'b';
+        prefix = property.startsWith('margin') ? `m${char}-` : `p${char}-`;
+      }
+      if (prefix && name.startsWith(prefix)) {
+        const valStr = name.slice(prefix.length);
+        const val = Number(valStr);
+        if (!isNaN(val)) {
+          return val * 4;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 export function updateClassString(
   existingClasses: string,
   property: string,
   value: any,
   breakpoint?: string
 ): string {
-  const classes = existingClasses.split(/\s+/).filter(Boolean);
-
   if (property === 'className') {
     return value;
   }
 
-  const newClass = getNewClass(property, value);
+  let finalValue = value;
+  const valStr = String(value).trim();
+  if (valStr.startsWith('+=') || valStr.startsWith('-=')) {
+    const isNegative = valStr.startsWith('-=');
+    const change = Number(valStr.slice(2).replace('px', ''));
+    if (!isNaN(change)) {
+      const current = getExistingValue(existingClasses, property);
+      finalValue = isNegative ? (current - change) : (current + change);
+    }
+  }
+
+  const classes = existingClasses.split(/\s+/).filter(Boolean);
+  const newClass = getNewClass(property, finalValue);
   if (!newClass) return existingClasses;
 
   if (breakpoint) {
@@ -169,7 +210,6 @@ export function updateClassString(
   } else {
     const filtered = classes.filter(c => {
       const parts = c.split(':');
-      // If it doesn't have a breakpoint prefix, check if it matches the property
       if (parts.length === 1) {
         return !matchesProperty(c, property);
       }

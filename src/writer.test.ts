@@ -129,4 +129,22 @@ describe('AST Write-back Engine', () => {
     expect(result).not.toContain('Original Title');
     expect(result).toContain('<h1>');
   });
+
+  test('should support relative spacing modifications (nudge)', () => {
+    const code = `
+      export function Box() {
+        return (
+          <div className="bg-white ml-4">
+            Box
+          </div>
+        );
+      }
+    `;
+
+    // Coordinates for <div ...> (line 4, column 11), decrease margin by 4px
+    const result = updateClassName(code, 4, 11, 'marginLeft', '-=4px');
+    // ml-4 (16px) - 4px = 12px -> ml-3
+    expect(result).toContain('className="bg-white ml-3"');
+  });
 });
+
