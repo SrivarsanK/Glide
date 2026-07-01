@@ -13,3 +13,5 @@ export { GlideOverlay } from './overlay.js';
 export { snapToGrid } from './snap.js';
 export { saveUploadedAsset } from './assets.js';
 export { reorderJSXElement, insertJSXElement } from './reorder.js';
+export { updateHTMLClass, updateHTMLText, parseHTMLToReact, getElementClass } from './html.js';
+
