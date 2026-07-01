@@ -894,7 +894,7 @@ export function getEditorHTML(port: number): string {
               item.style.paddingLeft = (12 + depth * 16) + 'px';
               
               // 1. Labeling: Generate rich descriptive HTML
-              const isComponent = node.name[0].toUpperCase() === node.name[0];
+              const isComponent = node.name.length > 0 && node.name[0].toUpperCase() === node.name[0];
               const badgeClass = isComponent ? 'layer-tag-badge component' : 'layer-tag-badge html';
               const badgeText = isComponent ? 'Comp' : 'HTML';
               
