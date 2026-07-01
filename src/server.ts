@@ -1,6 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server } from 'http';
+import * as fs from 'fs';
 import { getEditorHTML } from './editor-html.js';
+import { buildComponentTree } from './tree.js';
+import { reorderJSXElement } from './reorder.js';
 
 export interface EditChange {
   type: 'style' | 'class';
@@ -47,6 +50,54 @@ export class GlideServer {
           ws.on('message', async (data: string) => {
             try {
               const message = JSON.parse(data);
+
+              if (message.type === 'get-tree') {
+                const { file } = message;
+                if (fs.existsSync(file)) {
+                  const code = fs.readFileSync(file, 'utf-8');
+                  const tree = buildComponentTree(code);
+                  ws.send(JSON.stringify({
+                    type: 'tree',
+                    file,
+                    tree
+                  }));
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'reorder') {
+                const { file, targetId, parentId, siblingId, position } = message;
+                if (fs.existsSync(file)) {
+                  try {
+                    const code = fs.readFileSync(file, 'utf-8');
+                    const updated = reorderJSXElement(code, targetId, parentId, siblingId, position);
+                    fs.writeFileSync(file, updated, 'utf-8');
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: true
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
 
               if (message.type === 'edit') {
                 const { file, line, column, change } = message as EditMessage;

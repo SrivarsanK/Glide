@@ -22,6 +22,16 @@ describe('GlideBridge Client Bridge', () => {
           eventListeners[event] = eventListeners[event].filter((h) => h !== handler);
         }
       }),
+      getElementById: vi.fn(() => null),
+      createElement: vi.fn(() => ({
+        id: '',
+        textContent: '',
+        remove: vi.fn(),
+        setAttribute: vi.fn(),
+        removeAttribute: vi.fn(),
+      })),
+      head: { appendChild: vi.fn() },
+      querySelector: vi.fn(() => null),
     };
     mockWindow = {
       document: mockDocument,
@@ -55,6 +65,10 @@ describe('GlideBridge Client Bridge', () => {
         height: 80,
       } as any)),
       closest: vi.fn((selector) => (selector === '[data-cf-source]' ? mockElement : null)),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'DIV',
+      className: 'hero-section',
     };
 
     const mousemoveHandler = eventListeners['mousemove'][0];
@@ -64,6 +78,8 @@ describe('GlideBridge Client Bridge', () => {
       {
         type: 'glide:element-hovered',
         source: 'src/App.tsx:10:5',
+        tagName: 'div',
+        classNames: 'hero-section',
         rect: {
           left: 60,
           top: 120,
@@ -79,10 +95,14 @@ describe('GlideBridge Client Bridge', () => {
     const bridge = new GlideBridge(mockWindow);
     bridge.init();
 
-    const mockElement = {
+    const mockElement: any = {
       getAttribute: () => 'src/App.tsx:10:5',
       getBoundingClientRect: () => ({ left: 50, top: 100, width: 200, height: 80 }),
       closest: (sel: string) => (sel === '[data-cf-source]' ? mockElement : null),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'SECTION',
+      className: '',
     };
 
     const mousemoveHandler = eventListeners['mousemove'][0];
@@ -99,10 +119,14 @@ describe('GlideBridge Client Bridge', () => {
     const bridge = new GlideBridge(mockWindow);
     bridge.init();
 
-    const mockElement = {
+    const mockElement: any = {
       getAttribute: () => 'src/App.tsx:10:5',
       getBoundingClientRect: () => ({ left: 50, top: 100, width: 200, height: 80 }),
       closest: (sel: string) => (sel === '[data-cf-source]' ? mockElement : null),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'BUTTON',
+      className: 'btn-primary',
     };
 
     const mockEvent = {
@@ -120,6 +144,8 @@ describe('GlideBridge Client Bridge', () => {
       {
         type: 'glide:element-selected',
         source: 'src/App.tsx:10:5',
+        tagName: 'button',
+        classNames: 'btn-primary',
         rect: {
           left: 60,
           top: 120,

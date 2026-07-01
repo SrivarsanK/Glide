@@ -162,10 +162,12 @@ export function getEditorHTML(port: number): string {
             overflow: auto;
           }
           .preview-frame-wrapper {
-            background: #ffffff;
+            background: transparent;
             border-radius: 8px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border: 1px solid var(--border-color);
             position: relative;
+            overflow: hidden;
             transition: width 0.3s, height 0.3s;
           }
           iframe {
@@ -173,7 +175,8 @@ export function getEditorHTML(port: number): string {
             height: 100%;
             border: none;
             border-radius: 8px;
-            background: #ffffff;
+            background: transparent;
+            display: block;
           }
           .properties-group {
             padding: 20px;
@@ -276,6 +279,22 @@ export function getEditorHTML(port: number): string {
               <span>Properties</span>
             </div>
 
+            <div class="properties-group" id="element-info" style="display:none">
+              <div class="properties-title">Element</div>
+              <div style="margin-bottom:8px;">
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Tag</div>
+                <div id="info-tag" style="font-size:13px;color:var(--accent-color);font-weight:600;"></div>
+              </div>
+              <div style="margin-bottom:8px;">
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Source</div>
+                <div id="info-source" style="font-size:11px;color:var(--text-secondary);word-break:break-all;font-family:monospace;"></div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Classes</div>
+                <div id="info-classes" style="font-size:11px;color:#a78bfa;word-break:break-all;font-family:monospace;"></div>
+              </div>
+            </div>
+
             <div class="properties-group">
               <div class="properties-title">Spacing (Margin & Padding)</div>
               <div class="prop-row">
@@ -318,9 +337,7 @@ export function getEditorHTML(port: number): string {
 
         <script>
           let socket = null;
-          let selectedElement = null;
-
-          function connectWebSocket() {
+          let selectedElement = null;          function connectWebSocket() {
             socket = new WebSocket('ws://localhost:${port}');
             const dot = document.getElementById('status-dot');
             const text = document.getElementById('status-text');
@@ -334,6 +351,15 @@ export function getEditorHTML(port: number): string {
               dot.className = 'status-dot';
               text.textContent = 'Disconnected';
               setTimeout(connectWebSocket, 2000);
+            });
+
+            socket.addEventListener('message', (event) => {
+              try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'tree') {
+                  renderLayersTree(message.tree);
+                }
+              } catch {}
             });
           }
 
@@ -379,31 +405,74 @@ export function getEditorHTML(port: number): string {
           });
 
           function updatePropertiesPanel(data) {
-            // Parse classes to prefill inputs
-            const source = data.source;
+            const { source, tagName, classNames, rect } = data;
             const parts = source.split(':');
-            
-            // Temporary simple presets
-            document.getElementById('prop-width').value = data.rect.width + 'px';
-            document.getElementById('prop-height').value = data.rect.height + 'px';
+
+            // Show element info panel
+            const infoPanel = document.getElementById('element-info');
+            if (infoPanel) infoPanel.style.display = 'block';
+
+            const tagEl = document.getElementById('info-tag');
+            if (tagEl) tagEl.textContent = '<' + (tagName || '?') + '>';
+
+            const srcEl = document.getElementById('info-source');
+            if (srcEl) srcEl.textContent = source;
+
+            const clsEl = document.getElementById('info-classes');
+            if (clsEl) clsEl.textContent = classNames || '(none)';
+
+            document.getElementById('prop-width').value = Math.round(rect.width) + 'px';
+            document.getElementById('prop-height').value = Math.round(rect.height) + 'px';
           }
 
           function updateLayersPanel(data) {
+            const source = data.source;
+            const parts = source.split(':');
+            if (parts.length >= 3 && socket && socket.readyState === WebSocket.OPEN) {
+              const file = parts[0];
+              socket.send(JSON.stringify({
+                type: 'get-tree',
+                file
+              }));
+            }
+          }
+
+          function renderLayersTree(tree) {
             const list = document.getElementById('layers-list');
             list.innerHTML = '';
+            
+            function renderNode(node, depth) {
+              const item = document.createElement('div');
+              item.className = 'layer-item';
+              if (selectedElement && selectedElement.source === node.id) {
+                item.className += ' active';
+              }
+              item.style.paddingLeft = (12 + depth * 16) + 'px';
+              item.innerHTML = \`
+                <div class="layer-name">
+                  <span class="layer-tag">\${node.name[0].toUpperCase() === node.name[0] ? 'Component' : 'HTML'}</span>
+                  \${node.name}
+                </div>
+              \`;
+              
+              item.addEventListener('click', () => {
+                const iframe = document.getElementById('app-iframe');
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:select-element-by-id',
+                    id: node.id
+                  }, '*');
+                }
+              });
 
-            const parts = data.source.split('/');
-            const fileName = parts[parts.length - 1].split(':')[0];
+              list.appendChild(item);
+              
+              if (node.children) {
+                node.children.forEach(child => renderNode(child, depth + 1));
+              }
+            }
 
-            const item = document.createElement('div');
-            item.className = 'layer-item active';
-            item.innerHTML = \`
-              <div class="layer-name">
-                <span class="layer-tag">Component</span>
-                \${fileName}
-              </div>
-            \`;
-            list.appendChild(item);
+            tree.forEach(node => renderNode(node, 0));
           }
 
           // Initial load
