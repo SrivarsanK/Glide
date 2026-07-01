@@ -1193,15 +1193,9 @@
               const dx = lastPointerX - dragStartPos.x;
               const dy = lastPointerY - dragStartPos.y;
 
-              if (selectedRect) {
-                const shiftedRect = {
-                  x: selectedRect.x + dx,
-                  y: selectedRect.y + dy,
-                  width: selectedRect.width,
-                  height: selectedRect.height
-                };
-                clearOverlay();
-                drawSelectionBox(shiftedRect, false);
+              const g = document.getElementById('selection-group');
+              if (g) {
+                g.setAttribute('transform', 'translate(' + dx + ', ' + dy + ')');
               }
 
               const iframe = document.getElementById('app-iframe');
@@ -1264,10 +1258,28 @@
           const svg = document.getElementById('overlay-svg');
 
           function clearOverlay() {
-            while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+            const g = document.getElementById('selection-group');
+            if (g) {
+              g.innerHTML = '';
+              g.removeAttribute('transform');
+            }
+            const hoverRects = Array.from(svg.querySelectorAll('svg > rect'));
+            hoverRects.forEach(r => svg.removeChild(r));
+          }
+
+          function createSelectionGroup() {
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.id = 'selection-group';
+            svg.appendChild(g);
+            return g;
           }
 
           function drawSelectionBox(rect, isHover) {
+            const container = isHover ? svg : (document.getElementById('selection-group') || createSelectionGroup());
+            if (!isHover) {
+              container.innerHTML = '';
+            }
+
             const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
             r.setAttribute('x', rect.x);
             r.setAttribute('y', rect.y);
@@ -1280,10 +1292,9 @@
               r.setAttribute('stroke-dasharray', '4 2');
               r.setAttribute('opacity', '0.5');
             }
-            svg.appendChild(r);
+            container.appendChild(r);
 
             if (!isHover) {
-              // Draw 8 resize handles
               const handles = [
                 [rect.x, rect.y], [rect.x + rect.width/2, rect.y], [rect.x + rect.width, rect.y],
                 [rect.x + rect.width, rect.y + rect.height/2],
@@ -1299,7 +1310,7 @@
                 h.setAttribute('fill', 'white');
                 h.setAttribute('stroke', '#0d99ff');
                 h.setAttribute('stroke-width', '1');
-                svg.appendChild(h);
+                container.appendChild(h);
               });
             }
           }
