@@ -1285,6 +1285,25 @@ export function getEditorHTML(port: number): string {
               hoveredRect = null;
               drawOverlay();
             }
+            if (data.type === 'glide:element-dragging') {
+              if (selectedRect) {
+                const shiftedRect = {
+                  x: selectedRect.x + data.dx,
+                  y: selectedRect.y + data.dy,
+                  width: selectedRect.width,
+                  height: selectedRect.height
+                };
+                clearOverlay();
+                drawSelectionBox(shiftedRect, false);
+              }
+            }
+            if (data.type === 'glide:element-drag-end') {
+              // Write final offset back to source file
+              sendStyleChange(data.source, 'marginLeft', data.marginLeft + 'px');
+              sendStyleChange(data.source, 'marginTop', data.marginTop + 'px');
+              // Clear current stored rect so HMR redraws fresh bounds
+              selectedRect = null;
+            }
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };
             }

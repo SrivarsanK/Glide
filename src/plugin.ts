@@ -108,21 +108,91 @@ const BRIDGE_SCRIPT = `
     }, '*');
   }
 
-  document.addEventListener('mousemove', function(e) {
+  var isDragging = false;
+  var startX = 0;
+  var startY = 0;
+  var dragEl = null;
+  var initialMarginLeft = 0;
+  var initialMarginTop = 0;
+
+  document.addEventListener('pointerdown', function(e) {
     var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
     if (el) {
-      if (hovered !== el) {
-        if (hovered) hovered.removeAttribute('data-glide-hover');
-        hovered = el;
-        el.setAttribute('data-glide-hover', '');
-        sendMsg('glide:element-hovered', el);
-      }
-    } else if (hovered) {
-      hovered.removeAttribute('data-glide-hover');
-      hovered = null;
-      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      isDragging = true;
+      dragEl = el;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      var cs = window.getComputedStyle(el);
+      initialMarginLeft = parseInt(cs.marginLeft) || 0;
+      initialMarginTop = parseInt(cs.marginTop) || 0;
+      
+      el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      e.stopPropagation();
     }
-  });
+  }, true);
+
+  document.addEventListener('pointermove', function(e) {
+    if (isDragging && dragEl) {
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      
+      dragEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+      dragEl.style.zIndex = '9999';
+      
+      window.parent.postMessage({
+        type: 'glide:element-dragging',
+        source: dragEl.getAttribute('data-gl-source'),
+        dx: dx,
+        dy: dy
+      }, '*');
+      
+      e.preventDefault();
+      e.stopPropagation();
+    } else {
+      // Normal hover behavior
+      var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
+      if (el) {
+        if (hovered !== el) {
+          if (hovered) hovered.removeAttribute('data-glide-hover');
+          hovered = el;
+          el.setAttribute('data-glide-hover', '');
+          sendMsg('glide:element-hovered', el);
+        }
+      } else if (hovered) {
+        hovered.removeAttribute('data-glide-hover');
+        hovered = null;
+        window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      }
+    }
+  }, true);
+
+  document.addEventListener('pointerup', function(e) {
+    if (isDragging && dragEl) {
+      isDragging = false;
+      dragEl.releasePointerCapture(e.pointerId);
+      
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      
+      dragEl.style.transform = '';
+      dragEl.style.zIndex = '';
+      
+      window.parent.postMessage({
+        type: 'glide:element-drag-end',
+        source: dragEl.getAttribute('data-gl-source'),
+        dx: dx,
+        dy: dy,
+        marginLeft: initialMarginLeft + dx,
+        marginTop: initialMarginTop + dy
+      }, '*');
+      
+      dragEl = null;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   document.addEventListener('click', function(e) {
     var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
