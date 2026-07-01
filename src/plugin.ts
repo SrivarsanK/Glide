@@ -108,94 +108,51 @@ const BRIDGE_SCRIPT = `
     }, '*');
   }
 
-  var isDragging = false;
-  var startX = 0;
-  var startY = 0;
-  var dragEl = null;
-  var initialMarginLeft = 0;
-  var initialMarginTop = 0;
-
   document.addEventListener('pointerdown', function(e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
+    var target = e.target;
+    if (target.nodeType === 3) target = target.parentNode;
+    var el = target && target.closest && target.closest('[data-gl-source]');
     if (el) {
-      isDragging = true;
-      dragEl = el;
-      startX = e.clientX;
-      startY = e.clientY;
-      
       var cs = window.getComputedStyle(el);
-      initialMarginLeft = parseInt(cs.marginLeft) || 0;
-      initialMarginTop = parseInt(cs.marginTop) || 0;
-      
-      el.setPointerCapture(e.pointerId);
+      var initML = parseInt(cs.marginLeft) || 0;
+      var initMT = parseInt(cs.marginTop) || 0;
+
+      window.parent.postMessage({
+        type: 'glide:element-drag-start',
+        source: el.getAttribute('data-gl-source'),
+        initialMarginLeft: initML,
+        initialMarginTop: initMT,
+        clientX: e.clientX,
+        clientY: e.clientY
+      }, '*');
+
       e.preventDefault();
       e.stopPropagation();
     }
   }, true);
 
   document.addEventListener('pointermove', function(e) {
-    if (isDragging && dragEl) {
-      var dx = e.clientX - startX;
-      var dy = e.clientY - startY;
-      
-      dragEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
-      dragEl.style.zIndex = '9999';
-      
-      window.parent.postMessage({
-        type: 'glide:element-dragging',
-        source: dragEl.getAttribute('data-gl-source'),
-        dx: dx,
-        dy: dy
-      }, '*');
-      
-      e.preventDefault();
-      e.stopPropagation();
-    } else {
-      // Normal hover behavior
-      var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
-      if (el) {
-        if (hovered !== el) {
-          if (hovered) hovered.removeAttribute('data-glide-hover');
-          hovered = el;
-          el.setAttribute('data-glide-hover', '');
-          sendMsg('glide:element-hovered', el);
-        }
-      } else if (hovered) {
-        hovered.removeAttribute('data-glide-hover');
-        hovered = null;
-        window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+    var target = e.target;
+    if (target.nodeType === 3) target = target.parentNode;
+    var el = target && target.closest && target.closest('[data-gl-source]');
+    if (el) {
+      if (hovered !== el) {
+        if (hovered) hovered.removeAttribute('data-glide-hover');
+        hovered = el;
+        el.setAttribute('data-glide-hover', '');
+        sendMsg('glide:element-hovered', el);
       }
-    }
-  }, true);
-
-  document.addEventListener('pointerup', function(e) {
-    if (isDragging && dragEl) {
-      isDragging = false;
-      dragEl.releasePointerCapture(e.pointerId);
-      
-      var dx = e.clientX - startX;
-      var dy = e.clientY - startY;
-      
-      dragEl.style.transform = '';
-      dragEl.style.zIndex = '';
-      
-      window.parent.postMessage({
-        type: 'glide:element-drag-end',
-        source: dragEl.getAttribute('data-gl-source'),
-        dx: dx,
-        dy: dy,
-        marginLeft: initialMarginLeft + dx,
-        marginTop: initialMarginTop + dy
-      }, '*');
-      
-      dragEl = null;
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (hovered) {
+      hovered.removeAttribute('data-glide-hover');
+      hovered = null;
+      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
   }, true);
 
   document.addEventListener('click', function(e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
+    var target = e.target;
+    if (target.nodeType === 3) target = target.parentNode;
+    var el = target && target.closest && target.closest('[data-gl-source]');
     if (el) {
       e.preventDefault();
       e.stopPropagation();
@@ -207,14 +164,30 @@ const BRIDGE_SCRIPT = `
   }, true);
 
   window.addEventListener('message', function(e) {
-    if (!e.data || e.data.type !== 'glide:select-element-by-id') return;
-    var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
-    if (el) {
-      if (selected) selected.removeAttribute('data-glide-selected');
-      selected = el;
-      el.setAttribute('data-glide-selected', '');
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      sendMsg('glide:element-selected', el);
+    if (!e.data) return;
+    if (e.data.type === 'glide:select-element-by-id') {
+      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      if (el) {
+        if (selected) selected.removeAttribute('data-glide-selected');
+        selected = el;
+        el.setAttribute('data-glide-selected', '');
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        sendMsg('glide:element-selected', el);
+      }
+    }
+    if (e.data.type === 'glide:apply-drag-delta') {
+      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      if (el) {
+        el.style.transform = 'translate(' + e.data.dx + 'px, ' + e.data.dy + 'px)';
+        el.style.zIndex = '9999';
+      }
+    }
+    if (e.data.type === 'glide:apply-drag-commit') {
+      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      if (el) {
+        el.style.transform = '';
+        el.style.zIndex = '';
+      }
     }
   });
 })();

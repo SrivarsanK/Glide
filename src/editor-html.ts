@@ -1,4 +1,4 @@
-export function getEditorHTML(port: number): string {
+﻿export function getEditorHTML(port: number): string {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -913,6 +913,13 @@ export function getEditorHTML(port: number): string {
           let lockedIds = new Set();
           let hiddenIds = new Set();
           let shadowCount = 0;
+           let dragStartPos = null;
+           let dragSource = null;
+           let dragInitialML = 0;
+           let dragInitialMT = 0;
+           let isDraggingElement = false;
+           let lastPointerX = 0;
+           let lastPointerY = 0;
 
           const iframeWidth = { current: 1440 };
 
@@ -1177,12 +1184,61 @@ export function getEditorHTML(port: number): string {
             const cx = Math.round((e.clientX - rect.left - panX) / zoomLevel);
             const cy = Math.round((e.clientY - rect.top - panY) / zoomLevel);
             document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
+            
+            // Track raw pointer coordinates in parent window
+            lastPointerX = e.clientX;
+            lastPointerY = e.clientY;
+
+            if (isDraggingElement && dragSource) {
+              const dx = lastPointerX - dragStartPos.x;
+              const dy = lastPointerY - dragStartPos.y;
+
+              if (selectedRect) {
+                const shiftedRect = {
+                  x: selectedRect.x + dx,
+                  y: selectedRect.y + dy,
+                  width: selectedRect.width,
+                  height: selectedRect.height
+                };
+                clearOverlay();
+                drawSelectionBox(shiftedRect, false);
+              }
+
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:apply-drag-delta',
+                  source: dragSource,
+                  dx: dx,
+                  dy: dy
+                }, '*');
+              }
+            }
           });
 
           document.addEventListener('mouseup', () => {
             if (isPanning) {
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+            }
+            if (isDraggingElement && dragSource) {
+              isDraggingElement = false;
+              const dx = lastPointerX - dragStartPos.x;
+              const dy = lastPointerY - dragStartPos.y;
+
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:apply-drag-commit',
+                  source: dragSource
+                }, '*');
+              }
+
+              sendStyleChange(dragSource, 'marginLeft', (dragInitialML + dx) + 'px');
+              sendStyleChange(dragSource, 'marginTop', (dragInitialMT + dy) + 'px');
+              
+              selectedRect = null;
+              dragSource = null;
             }
           });
 
@@ -1284,6 +1340,13 @@ export function getEditorHTML(port: number): string {
               hoveredElement = null;
               hoveredRect = null;
               drawOverlay();
+            }
+            if (data.type === 'glide:element-drag-start') {
+              isDraggingElement = true;
+              dragSource = data.source;
+              dragInitialML = data.initialMarginLeft;
+              dragInitialMT = data.initialMarginTop;
+              dragStartPos = { x: lastPointerX, y: lastPointerY };
             }
             if (data.type === 'glide:element-dragging') {
               if (selectedRect) {
