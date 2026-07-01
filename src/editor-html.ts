@@ -569,7 +569,7 @@ export function getEditorHTML(port: number): string {
 
           function parseSource(source) {
             if (!source) return null;
-            const match = source.match(/^(.*):(\d+):(\d+)$/);
+            const match = source.match(/^(.*):(\\d+):(\\d+)$/);
             if (!match) return null;
             return {
               file: match[1],

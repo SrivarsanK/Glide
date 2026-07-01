@@ -95,6 +95,7 @@ export function glideSourceStamping(): Plugin {
 
   return {
     name: 'vite-plugin-glide-source-stamping',
+    enforce: 'pre',
 
     configResolved(config) {
       isDev = config.command === 'serve';
