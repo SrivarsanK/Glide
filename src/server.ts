@@ -132,6 +132,7 @@ export class GlideServer {
 
               if (message.type === 'edit') {
                 const { file, line, column, change } = message as EditMessage;
+                console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column}`);
 
                 // Validate parameters
                 if (!file || typeof line !== 'number' || typeof column !== 'number' || !change) {
@@ -150,6 +151,7 @@ export class GlideServer {
                   try {
                     await callback(file, line, column, change);
                   } catch (err: any) {
+                    console.error(`[Glide] Edit handler error:`, err.message);
                     ws.send(
                       JSON.stringify({
                         type: 'status',

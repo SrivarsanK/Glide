@@ -124,6 +124,9 @@ describe('AST Write-back Engine', () => {
 
     // Coordinates for <h1> (line 4, column 11)
     const result = updateJSXText(code, 4, 11, 'Updated Title');
-    expect(result).toContain('<h1>Updated Title</h1>');
+    // Format is preserved (whitespace around text kept), only the text is replaced
+    expect(result).toContain('Updated Title');
+    expect(result).not.toContain('Original Title');
+    expect(result).toContain('<h1>');
   });
 });

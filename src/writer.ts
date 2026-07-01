@@ -1,10 +1,7 @@
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
-import * as t from '@babel/types';
-import _generate from '@babel/generator';
 
 const traverse = (traverseModule as any).default || traverseModule;
-const generate = (_generate as any).default || _generate;
 
 export function findJSXElementAt(
   sourceCode: string,
@@ -137,47 +134,49 @@ export function updateJSXText(
     plugins: ['jsx', 'typescript'],
   });
 
-  let targetElementPath: any = null;
+  let targetNode: any = null;
 
   traverse(ast, {
     JSXElement(path: any) {
       const loc = path.node.openingElement.loc;
       if (loc && loc.start.line === line && loc.start.column === column - 1) {
-        targetElementPath = path;
+        targetNode = path.node;
         path.stop();
       }
     },
   });
 
-  if (!targetElementPath) {
+  if (!targetNode) {
     throw new Error(`JSX element not found at line ${line}, column ${column}`);
   }
 
-  // Replace children of target element with new text node
-  targetElementPath.node.children = [t.jsxText(newText)];
-
-  // Generate code for root JSX element
-  let rootJSXPath = targetElementPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
+  // Find the first JSXText child and replace just its content
+  const children: any[] = targetNode.children || [];
+  
+  const textChild = children.find((c: any) => c.type === 'JSXText');
+  
+  if (textChild && textChild.start != null && textChild.end != null) {
+    // Preserve surrounding whitespace/indentation inside the element
+    const existingRaw = sourceCode.slice(textChild.start, textChild.end);
+    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
+    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
+    const replacement = leadingWs + newText + trailingWs;
+    return sourceCode.slice(0, textChild.start) + replacement + sourceCode.slice(textChild.end);
   }
 
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
+  // No existing text child — insert text between opening and closing tags
+  const openEnd = targetNode.openingElement.end;
+  const closeStart = targetNode.closingElement
+    ? targetNode.closingElement.start
+    : openEnd;
 
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
+  if (openEnd == null || closeStart == null) {
+    throw new Error('Cannot determine insertion point for text.');
   }
 
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return sourceCode.substring(0, start) + newJSXCode + sourceCode.substring(end);
+  return (
+    sourceCode.slice(0, openEnd) +
+    newText +
+    sourceCode.slice(closeStart)
+  );
 }

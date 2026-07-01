@@ -556,8 +556,19 @@ export function getEditorHTML(port: number): string {
                 if (message.type === 'tree') {
                   currentFile = message.file;
                   renderLayersTree(message.tree);
+                } else if (message.type === 'status') {
+                  if (message.success) {
+                    // After any successful file edit, re-request the tree so layers refresh
+                    if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
+                    }
+                  } else {
+                    console.error('[Glide] Server error:', message.error);
+                  }
                 }
-              } catch {}
+              } catch (e) {
+                console.error('[Glide] WS parse error:', e);
+              }
             });
           }
 
