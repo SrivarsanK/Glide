@@ -902,6 +902,10 @@ export function getEditorHTML(port: number): string {
           let socket = null;
           let currentFile = null;
           let selectedElement = null;
+          let selectedRect = null;
+          let selectedComputedStyles = null;
+          let hoveredElement = null;
+          let hoveredRect = null;
           let currentTool = 'select';
           let zoomLevel = 1.0;
           let panX = 0, panY = 0;
@@ -1110,6 +1114,10 @@ export function getEditorHTML(port: number): string {
             // Escape = deselect
             if (key === 'Escape') {
               selectedElement = null;
+              selectedRect = null;
+              selectedComputedStyles = null;
+              hoveredElement = null;
+              hoveredRect = null;
               clearOverlay();
               showNoSelection();
               return;
@@ -1240,6 +1248,16 @@ export function getEditorHTML(port: number): string {
             }
           }
 
+          function drawOverlay() {
+            clearOverlay();
+            if (selectedRect) {
+              drawSelectionBox(selectedRect, false);
+            }
+            if (hoveredRect && (!selectedElement || hoveredElement.source !== selectedElement.source)) {
+              drawSelectionBox(hoveredRect, true);
+            }
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // BRIDGE COMMUNICATION (postMessage from iframe)
           // ═══════════════════════════════════════════════════════════════
@@ -1251,14 +1269,21 @@ export function getEditorHTML(port: number): string {
               updateLayersPanel(data);
             }
             if (data.type === 'glide:overlay') {
-              clearOverlay();
-              if (data.rect) {
-                drawSelectionBox(data.rect, data.isHover);
-              }
-              if (data.source) {
+              if (data.isHover) {
+                hoveredElement = { source: data.source };
+                hoveredRect = data.rect;
+              } else {
                 selectedElement = { source: data.source };
+                selectedRect = data.rect;
+                selectedComputedStyles = data.computedStyles;
                 populatePropsFromComputed(data.computedStyles || {}, data.rect || {});
               }
+              drawOverlay();
+            }
+            if (data.type === 'glide:element-hover-exit') {
+              hoveredElement = null;
+              hoveredRect = null;
+              drawOverlay();
             }
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };
