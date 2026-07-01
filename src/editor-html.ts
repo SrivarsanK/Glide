@@ -1471,6 +1471,32 @@ export function getEditorHTML(port: number): string {
                 inp.focus();
                 inp.select();
 
+                let fontStr = '16px sans-serif';
+                if (selectedComputedStyles) {
+                  fontStr = (selectedComputedStyles.fontWeight || '400') + ' ' + 
+                            (selectedComputedStyles.fontSize || '16px') + ' ' + 
+                            (selectedComputedStyles.fontFamily || 'sans-serif');
+                }
+
+                inp.addEventListener('input', () => {
+                  const text = inp.value;
+                  const containerWidth = selectedRect ? selectedRect.width : 200;
+                  const containerHeight = selectedRect ? selectedRect.height : 40;
+                  
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  ctx.font = fontStr;
+                  const textWidth = ctx.measureText(text).width;
+                  
+                  if (textWidth > containerWidth || (textWidth / containerWidth * 20) > containerHeight) {
+                    inp.style.border = '1px solid var(--danger)';
+                    inp.style.boxShadow = '0 0 4px rgba(239, 68, 68, 0.5)';
+                  } else {
+                    inp.style.border = '1px solid var(--accent-color)';
+                    inp.style.boxShadow = 'none';
+                  }
+                });
+
                 const commit = () => {
                   const newText = inp.value.trim();
                   if (newText && newText !== (node.text || node.name) && node.text !== undefined) {
