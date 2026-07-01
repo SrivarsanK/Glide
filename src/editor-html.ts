@@ -543,6 +543,15 @@ export function getEditorHTML(port: number): string {
             ⚡ <span>Glide</span>
           </div>
 
+          <!-- App URL input -->
+          <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
+            <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
+              <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
+              <input type="text" id="app-url" value="http://localhost:5173/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
+            </div>
+            <button class="device-btn" id="btn-load" style="height: 30px; padding: 0 10px;">Connect</button>
+          </div>
+
           <!-- Figma-style tool switcher -->
           <div class="figma-toolbar" id="figma-toolbar">
             <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
@@ -1783,8 +1792,25 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           // INIT
           // ═══════════════════════════════════════════════════════════════
+          // Load app by URL input
+          document.getElementById('btn-load').addEventListener('click', () => {
+            const url = document.getElementById('app-url').value.trim();
+            if (url) loadApp(url);
+          });
+
+          document.getElementById('app-url').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              const url = e.target.value.trim();
+              if (url) loadApp(url);
+            }
+          });
+
           connectSocket();
-          loadApp('http://localhost:${port}');
+          // Load default url on start
+          const defaultUrl = document.getElementById('app-url').value.trim();
+          if (defaultUrl) {
+            loadApp(defaultUrl);
+          }
           applyTransform();
         </script>
       </body>
