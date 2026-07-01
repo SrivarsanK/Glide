@@ -1185,29 +1185,7 @@
             const cy = Math.round((e.clientY - rect.top - panY) / zoomLevel);
             document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
             
-            // Track raw pointer coordinates in parent window
-            lastPointerX = e.clientX;
-            lastPointerY = e.clientY;
 
-            if (isDraggingElement && dragSource) {
-              const dx = lastPointerX - dragStartPos.x;
-              const dy = lastPointerY - dragStartPos.y;
-
-              const g = document.getElementById('selection-group');
-              if (g) {
-                g.setAttribute('transform', 'translate(' + dx + ', ' + dy + ')');
-              }
-
-              const iframe = document.getElementById('app-iframe');
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({
-                  type: 'glide:apply-drag-delta',
-                  source: dragSource,
-                  dx: dx,
-                  dy: dy
-                }, '*');
-              }
-            }
           });
 
           document.addEventListener('mouseup', () => {
@@ -1215,25 +1193,7 @@
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
             }
-            if (isDraggingElement && dragSource) {
-              isDraggingElement = false;
-              const dx = lastPointerX - dragStartPos.x;
-              const dy = lastPointerY - dragStartPos.y;
 
-              const iframe = document.getElementById('app-iframe');
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({
-                  type: 'glide:apply-drag-commit',
-                  source: dragSource
-                }, '*');
-              }
-
-              sendStyleChange(dragSource, 'marginLeft', (dragInitialML + dx) + 'px');
-              sendStyleChange(dragSource, 'marginTop', (dragInitialMT + dy) + 'px');
-              
-              selectedRect = null;
-              dragSource = null;
-            }
           });
 
           // Spacebar = temp hand tool
@@ -1352,31 +1312,18 @@
               hoveredRect = null;
               drawOverlay();
             }
-            if (data.type === 'glide:element-drag-start') {
-              isDraggingElement = true;
-              dragSource = data.source;
-              dragInitialML = data.initialMarginLeft;
-              dragInitialMT = data.initialMarginTop;
-              dragStartPos = { x: lastPointerX, y: lastPointerY };
-            }
+
             if (data.type === 'glide:element-dragging') {
-              if (selectedRect) {
-                const shiftedRect = {
-                  x: selectedRect.x + data.dx,
-                  y: selectedRect.y + data.dy,
-                  width: selectedRect.width,
-                  height: selectedRect.height
-                };
-                clearOverlay();
-                drawSelectionBox(shiftedRect, false);
+              const g = document.getElementById('selection-group');
+              if (g) {
+                g.setAttribute('transform', 'translate(' + data.dx + ', ' + data.dy + ')');
               }
             }
             if (data.type === 'glide:element-drag-end') {
-              // Write final offset back to source file
               sendStyleChange(data.source, 'marginLeft', data.marginLeft + 'px');
               sendStyleChange(data.source, 'marginTop', data.marginTop + 'px');
-              // Clear current stored rect so HMR redraws fresh bounds
               selectedRect = null;
+              clearOverlay();
             }
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };

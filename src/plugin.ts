@@ -108,20 +108,34 @@ const BRIDGE_SCRIPT = `
     }, '*');
   }
 
+  var isDragging = false;
+  var startX = 0;
+  var startY = 0;
+  var dragEl = null;
+  var initialMarginLeft = 0;
+  var initialMarginTop = 0;
+
   document.addEventListener('pointerdown', function(e) {
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
     var el = target && target.closest && target.closest('[data-gl-source]');
     if (el) {
-      var cs = window.getComputedStyle(el);
-      var initML = parseInt(cs.marginLeft) || 0;
-      var initMT = parseInt(cs.marginTop) || 0;
+      isDragging = true;
+      dragEl = el;
+      startX = e.clientX;
+      startY = e.clientY;
 
+      var cs = window.getComputedStyle(el);
+      initialMarginLeft = parseInt(cs.marginLeft) || 0;
+      initialMarginTop = parseInt(cs.marginTop) || 0;
+
+      el.setPointerCapture(e.pointerId);
+      
       window.parent.postMessage({
         type: 'glide:element-drag-start',
         source: el.getAttribute('data-gl-source'),
-        initialMarginLeft: initML,
-        initialMarginTop: initMT,
+        initialMarginLeft: initialMarginLeft,
+        initialMarginTop: initialMarginTop,
         clientX: e.clientX,
         clientY: e.clientY
       }, '*');
@@ -132,20 +146,64 @@ const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('pointermove', function(e) {
-    var target = e.target;
-    if (target.nodeType === 3) target = target.parentNode;
-    var el = target && target.closest && target.closest('[data-gl-source]');
-    if (el) {
-      if (hovered !== el) {
-        if (hovered) hovered.removeAttribute('data-glide-hover');
-        hovered = el;
-        el.setAttribute('data-glide-hover', '');
-        sendMsg('glide:element-hovered', el);
+    if (isDragging && dragEl) {
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+
+      dragEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+      dragEl.style.zIndex = '9999';
+
+      window.parent.postMessage({
+        type: 'glide:element-dragging',
+        source: dragEl.getAttribute('data-gl-source'),
+        dx: dx,
+        dy: dy
+      }, '*');
+
+      e.preventDefault();
+      e.stopPropagation();
+    } else {
+      var target = e.target;
+      if (target.nodeType === 3) target = target.parentNode;
+      var el = target && target.closest && target.closest('[data-gl-source]');
+      if (el) {
+        if (hovered !== el) {
+          if (hovered) hovered.removeAttribute('data-glide-hover');
+          hovered = el;
+          el.setAttribute('data-glide-hover', '');
+          sendMsg('glide:element-hovered', el);
+        }
+      } else if (hovered) {
+        hovered.removeAttribute('data-glide-hover');
+        hovered = null;
+        window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
       }
-    } else if (hovered) {
-      hovered.removeAttribute('data-glide-hover');
-      hovered = null;
-      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+    }
+  }, true);
+
+  document.addEventListener('pointerup', function(e) {
+    if (isDragging && dragEl) {
+      isDragging = false;
+      dragEl.releasePointerCapture(e.pointerId);
+
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+
+      dragEl.style.transform = '';
+      dragEl.style.zIndex = '';
+
+      window.parent.postMessage({
+        type: 'glide:element-drag-end',
+        source: dragEl.getAttribute('data-gl-source'),
+        dx: dx,
+        dy: dy,
+        marginLeft: initialMarginLeft + dx,
+        marginTop: initialMarginTop + dy
+      }, '*');
+
+      dragEl = null;
+      e.preventDefault();
+      e.stopPropagation();
     }
   }, true);
 
@@ -173,20 +231,6 @@ const BRIDGE_SCRIPT = `
         el.setAttribute('data-glide-selected', '');
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         sendMsg('glide:element-selected', el);
-      }
-    }
-    if (e.data.type === 'glide:apply-drag-delta') {
-      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
-      if (el) {
-        el.style.transform = 'translate(' + e.data.dx + 'px, ' + e.data.dy + 'px)';
-        el.style.zIndex = '9999';
-      }
-    }
-    if (e.data.type === 'glide:apply-drag-commit') {
-      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
-      if (el) {
-        el.style.transform = '';
-        el.style.zIndex = '';
       }
     }
   });
