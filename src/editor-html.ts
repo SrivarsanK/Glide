@@ -230,6 +230,9 @@ export function getEditorHTML(port: number): string {
           .status-dot.connected {
             background: #10b981;
           }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
         </style>
       </head>
       <body>
@@ -269,6 +272,10 @@ export function getEditorHTML(port: number): string {
           <!-- Center Canvas -->
           <div class="canvas-container">
             <div class="preview-frame-wrapper" id="preview-wrapper" style="width: 1024px; height: 768px;">
+              <div id="canvas-loading" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-surface);z-index:10;border-radius:8px;gap:12px;">
+                <div style="width:32px;height:32px;border:3px solid var(--border-color);border-top-color:var(--accent-color);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+                <span id="load-status" style="font-size:13px;color:var(--text-secondary);">Loading app...</span>
+              </div>
               <iframe id="app-iframe" src="about:blank"></iframe>
             </div>
           </div>
@@ -337,7 +344,9 @@ export function getEditorHTML(port: number): string {
 
         <script>
           let socket = null;
-          let selectedElement = null;          function connectWebSocket() {
+          let selectedElement = null;
+
+          function connectWebSocket() {
             socket = new WebSocket('ws://localhost:${port}');
             const dot = document.getElementById('status-dot');
             const text = document.getElementById('status-text');
@@ -363,11 +372,49 @@ export function getEditorHTML(port: number): string {
             });
           }
 
-          // Load Iframe Bridge Injection
-          document.getElementById('btn-load').addEventListener('click', () => {
-            const url = document.getElementById('app-url').value;
+          function loadApp(url) {
             const iframe = document.getElementById('app-iframe');
+            const loading = document.getElementById('canvas-loading');
+            const statusEl = document.getElementById('load-status');
+
+            // Show loading overlay
+            if (loading) loading.style.display = 'flex';
+            if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
+
+            iframe.onload = () => {
+              // Hide overlay once the page is in — give a tiny delay for paint
+              setTimeout(() => {
+                if (loading) loading.style.display = 'none';
+              }, 300);
+            };
+            iframe.onerror = () => {
+              if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
+            };
+
             iframe.src = url;
+            document.getElementById('app-url').value = url;
+          }
+
+          // Load Iframe — button click
+          document.getElementById('btn-load').addEventListener('click', () => {
+            const url = document.getElementById('app-url').value.trim();
+            if (url) loadApp(url);
+          });
+
+          // Also trigger on Enter key in the URL input
+          document.getElementById('app-url').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              const url = e.target.value.trim();
+              if (url) loadApp(url);
+            }
+          });
+
+          // Auto-load the default app URL when page opens
+          window.addEventListener('DOMContentLoaded', () => {
+            const defaultUrl = document.getElementById('app-url').value.trim();
+            if (defaultUrl && defaultUrl !== 'about:blank') {
+              loadApp(defaultUrl);
+            }
           });
 
           // Handle message communication from GlideBridge running inside iframe
