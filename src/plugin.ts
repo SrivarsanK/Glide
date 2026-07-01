@@ -32,6 +32,55 @@ const BRIDGE_SCRIPT = `
   function sendMsg(type, el) {
     var src = el.getAttribute('data-gl-source') || '';
     var r = el.getBoundingClientRect();
+    
+    // Extract computed styles
+    var cs = window.getComputedStyle(el);
+    var computedStyles = {
+      tagName: el.tagName.toLowerCase(),
+      display: cs.display,
+      flexDirection: cs.flexDirection,
+      justifyContent: cs.justifyContent,
+      alignItems: cs.alignItems,
+      flexWrap: cs.flexWrap,
+      gap: cs.gap,
+      rowGap: cs.rowGap,
+      columnGap: cs.columnGap,
+      marginTop: cs.marginTop,
+      marginBottom: cs.marginBottom,
+      marginLeft: cs.marginLeft,
+      marginRight: cs.marginRight,
+      paddingTop: cs.paddingTop,
+      paddingBottom: cs.paddingBottom,
+      paddingLeft: cs.paddingLeft,
+      paddingRight: cs.paddingRight,
+      fontFamily: cs.fontFamily,
+      fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight,
+      letterSpacing: cs.letterSpacing,
+      textAlign: cs.textAlign,
+      textDecoration: cs.textDecoration,
+      color: cs.color,
+      backgroundColor: cs.backgroundColor,
+      background: cs.background,
+      backgroundImage: cs.backgroundImage,
+      opacity: cs.opacity,
+      borderColor: cs.borderColor,
+      borderWidth: cs.borderWidth,
+      borderStyle: cs.borderStyle,
+      borderTopLeftRadius: cs.borderTopLeftRadius,
+      borderTopRightRadius: cs.borderTopRightRadius,
+      borderBottomRightRadius: cs.borderBottomRightRadius,
+      borderBottomLeftRadius: cs.borderBottomLeftRadius,
+      boxShadow: cs.boxShadow,
+      transform: cs.transform,
+      width: cs.width,
+      height: cs.height,
+      position: cs.position,
+      top: cs.top,
+      left: cs.left
+    };
+
     window.parent.postMessage({
       type: type,
       source: src,
@@ -43,6 +92,19 @@ const BRIDGE_SCRIPT = `
         width: r.width,
         height: r.height
       }
+    }, '*');
+
+    window.parent.postMessage({
+      type: 'glide:overlay',
+      source: src,
+      rect: {
+        x: r.left + window.scrollX,
+        y: r.top + window.scrollY,
+        width: r.width,
+        height: r.height
+      },
+      isHover: type === 'glide:element-hovered',
+      computedStyles: computedStyles
     }, '*');
   }
 
