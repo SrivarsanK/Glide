@@ -13,6 +13,9 @@
     "dist"
   ],
   "main": "dist/index.js",
+  "bin": {
+    "glide": "dist/cli.js"
+  },
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",

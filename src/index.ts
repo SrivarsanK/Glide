@@ -7,6 +7,6 @@ export { HistoryManager } from './history.js';
 export { updateVueSFCClass } from './vue.js';
 export { updateSvelteClass } from './svelte.js';
 export { updateCSSModuleRule } from './css.js';
-export { updateClassString } from './writer.js';
+export { updateClassString, updateClassName } from './writer.js';
 export { snapToGrid } from './snap.js';
 export { saveUploadedAsset } from './assets.js';
