@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "description": "A visual code-native design tool overlay",
   "publishConfig": {
-    "access": "restricted"
+    "registry": "https://npm.pkg.github.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srivarsank/glide.git"
+  },
+  "files": [
+    "dist"
+  ],
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
