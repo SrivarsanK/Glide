@@ -31,8 +31,29 @@ describe('glideSourceStamping Vite Plugin', () => {
       expect(transformedCode).toContain('data-cf-source="src/App.tsx:4:11"');
       expect(transformedCode).toContain('data-cf-source="src/App.tsx:5:13"');
       expect(transformedCode).toContain('data-cf-source="src/App.tsx:6:13"');
+      // Bridge is injected via transformIndexHtml, NOT as a module import
+      expect(transformedCode).not.toContain("import { GlideBridge");
     } else {
       throw new Error('transform method not found on plugin');
+    }
+  });
+
+  test('injects inline bridge script into index.html in dev mode', () => {
+    const plugin = glideSourceStamping();
+
+    if (plugin.configResolved && typeof plugin.configResolved === 'function') {
+      plugin.configResolved({ command: 'serve', root: '/project' } as any);
+    }
+
+    const html = '<html><head></head><body></body></html>';
+
+    if (plugin.transformIndexHtml && typeof plugin.transformIndexHtml === 'function') {
+      const result = (plugin.transformIndexHtml as any)(html);
+      expect(result).toContain('__glide_initialized__');
+      expect(result).toContain('data-cf-source');
+      expect(result).toContain('<script>');
+    } else {
+      throw new Error('transformIndexHtml not found on plugin');
     }
   });
 
