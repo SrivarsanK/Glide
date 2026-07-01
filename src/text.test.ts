@@ -23,4 +23,32 @@ describe('Pretext Text Measurement', () => {
     expect(layout.lineCount).toBe(2);
     expect(layout.lines).toEqual(['hello', 'world']);
   });
+
+  test('should bypass DOM to predict heights of a virtual list of text items using Pretext math', () => {
+    const listItems = [
+      'Short msg',
+      'This is a longer message that should wrap to multiple lines',
+      'Another short message',
+    ];
+    const font = '16px Inter';
+    const containerWidth = 100; // narrow width to force wrapping
+    const lineHeight = 20; // 20px per line
+    
+    const results = listItems.map(text => {
+      // 1. Prepare & measure off-screen (skip DOM reflows)
+      const layout = measureTextLayout(text, font, containerWidth);
+      // 2. Perform purely mathematical calculations on width/height
+      const height = layout.lineCount * lineHeight;
+      return { height, lineCount: layout.lineCount, lines: layout.lines };
+    });
+
+    // Verify first item fits in 1 line
+    expect(results[0].lineCount).toBe(1);
+    expect(results[0].height).toBe(20);
+
+    // Verify second item wraps to multiple lines
+    expect(results[1].lineCount).toBeGreaterThan(1);
+    expect(results[1].height).toBe(results[1].lineCount * lineHeight);
+  });
 });
+
