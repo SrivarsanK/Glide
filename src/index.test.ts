@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
-import { VERSION } from './index.js';
+import { VERSION, glideSourceStamping, GlideServer } from './index.js';
 
-test('version is defined', () => {
+test('exports are defined', () => {
   expect(VERSION).toBe('0.1.0');
+  expect(glideSourceStamping).toBeDefined();
+  expect(GlideServer).toBeDefined();
 });
