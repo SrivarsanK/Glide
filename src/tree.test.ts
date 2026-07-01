@@ -6,13 +6,13 @@ describe('JSX Component Tree Parser', () => {
     const code = `
       export function Page() {
         return (
-          <div data-cf-source="src/Page.tsx:4:11">
-            <header data-cf-source="src/Page.tsx:5:13">
-              <h1 data-cf-source="src/Page.tsx:6:15">Title</h1>
+          <div data-gl-source="src/Page.tsx:4:11">
+            <header data-gl-source="src/Page.tsx:5:13">
+              <h1 data-gl-source="src/Page.tsx:6:15">Title</h1>
             </header>
-            <main data-cf-source="src/Page.tsx:8:13">
-              <section data-cf-source="src/Page.tsx:9:15">
-                <Card.Body data-cf-source="src/Page.tsx:10:17">Content</Card.Body>
+            <main data-gl-source="src/Page.tsx:8:13">
+              <section data-gl-source="src/Page.tsx:9:15">
+                <Card.Body data-gl-source="src/Page.tsx:10:17">Content</Card.Body>
               </section>
             </main>
           </div>
@@ -44,10 +44,10 @@ describe('JSX Component Tree Parser', () => {
     const code = `
       export function Panel() {
         return (
-          <div data-cf-source="root">
-            <ul data-cf-source="list">
-              <li data-cf-source="item-1">One</li>
-              <li data-cf-source="item-2">Two</li>
+          <div data-gl-source="root">
+            <ul data-gl-source="list">
+              <li data-gl-source="item-1">One</li>
+              <li data-gl-source="item-2">Two</li>
             </ul>
           </div>
         );
@@ -64,7 +64,7 @@ describe('JSX Component Tree Parser', () => {
     const code = `
       export function Panel() {
         return (
-          <div data-cf-source="root">
+          <div data-gl-source="root">
             <span>Text</span>
           </div>
         );

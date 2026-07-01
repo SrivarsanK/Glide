@@ -6,10 +6,10 @@ describe('AST Layer Reordering', () => {
     const code = `
       export function List() {
         return (
-          <ul data-cf-source="parent">
-            <li data-cf-source="item-1">Item One</li>
-            <li data-cf-source="item-2">Item Two</li>
-            <li data-cf-source="item-3">Item Three</li>
+          <ul data-gl-source="parent">
+            <li data-gl-source="item-1">Item One</li>
+            <li data-gl-source="item-2">Item Two</li>
+            <li data-gl-source="item-3">Item Three</li>
           </ul>
         );
       }
@@ -18,18 +18,18 @@ describe('AST Layer Reordering', () => {
     // Move item-3 before item-1
     const updated = reorderJSXElement(code, 'item-3', 'parent', 'item-1', 'before');
 
-    expect(updated).toContain('<li data-cf-source="item-3">Item Three</li><li data-cf-source="item-1">Item One</li>');
+    expect(updated).toContain('<li data-gl-source="item-3">Item Three</li><li data-gl-source="item-1">Item One</li>');
   });
 
   test('should move element to a different parent container', () => {
     const code = `
       export function App() {
         return (
-          <div data-cf-source="root">
-            <header data-cf-source="header">
-              <span data-cf-source="target">Target Text</span>
+          <div data-gl-source="root">
+            <header data-gl-source="header">
+              <span data-gl-source="target">Target Text</span>
             </header>
-            <main data-cf-source="main">
+            <main data-gl-source="main">
               <p>Main content</p>
             </main>
           </div>
@@ -40,8 +40,8 @@ describe('AST Layer Reordering', () => {
     // Move target element to be a child of main container
     const updated = reorderJSXElement(code, 'target', 'main', null, 'after');
 
-    expect(updated).not.toContain('<header data-cf-source="header">\n              <span data-cf-source="target">Target Text</span>\n            </header>');
-    expect(updated).toContain('<main data-cf-source="main">\n              <p>Main content</p>\n            <span data-cf-source="target">Target Text</span></main>');
+    expect(updated).not.toContain('<header data-gl-source="header">\n              <span data-gl-source="target">Target Text</span>\n            </header>');
+    expect(updated).toContain('<main data-gl-source="main">\n              <p>Main content</p>\n            <span data-gl-source="target">Target Text</span></main>');
   });
 
   test('should keep comments and unrelated variables untouched', () => {
@@ -52,9 +52,9 @@ describe('AST Layer Reordering', () => {
       export function Banner() {
         // Render banner
         return (
-          <div data-cf-source="banner">
-            <h1 data-cf-source="h1">{title}</h1>
-            <p data-cf-source="p">Subtitle</p>
+          <div data-gl-source="banner">
+            <h1 data-gl-source="h1">{title}</h1>
+            <p data-gl-source="p">Subtitle</p>
           </div>
         );
       }
@@ -66,6 +66,6 @@ describe('AST Layer Reordering', () => {
     expect(updated).toContain('const title = "Welcome";');
     expect(updated).toContain('// Helper variable');
     expect(updated).toContain('// Render banner');
-    expect(updated).toContain('<p data-cf-source="p">Subtitle</p>');
+    expect(updated).toContain('<p data-gl-source="p">Subtitle</p>');
   });
 });

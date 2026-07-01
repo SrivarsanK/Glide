@@ -79,7 +79,7 @@ export class GlideBridge {
 
     if (data.type === 'glide:select-element-by-id') {
       const el = this.targetWindow.document.querySelector(
-        `[data-cf-source="${data.id}"]`
+        `[data-gl-source="${data.id}"]`
       ) as HTMLElement | null;
       if (el) {
         this.clearSelection();
@@ -95,7 +95,7 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest('[data-cf-source]') as HTMLElement | null;
+    const sourceEl = target.closest('[data-gl-source]') as HTMLElement | null;
 
     if (sourceEl) {
       if (this.activeHoverElement !== sourceEl) {
@@ -114,7 +114,7 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest('[data-cf-source]') as HTMLElement | null;
+    const sourceEl = target.closest('[data-gl-source]') as HTMLElement | null;
     if (sourceEl) {
       event.preventDefault();
       event.stopPropagation();
@@ -126,23 +126,92 @@ export class GlideBridge {
   };
 
   private sendTelemetry(type: string, el: HTMLElement): void {
-    const source = el.getAttribute('data-cf-source') || '';
+    const source = el.getAttribute('data-gl-source') || '';
     const rect = el.getBoundingClientRect();
+    const getCS = (this.targetWindow as any).getComputedStyle;
+    const cs = typeof getCS === 'function' ? getCS(el) : {} as CSSStyleDeclaration;
 
-    this.targetWindow.parent.postMessage(
-      {
-        type,
+    const computedStyles = {
+      tagName: el.tagName.toLowerCase(),
+      // Layout
+      display: cs.display,
+      flexDirection: cs.flexDirection,
+      justifyContent: cs.justifyContent,
+      alignItems: cs.alignItems,
+      flexWrap: cs.flexWrap,
+      gap: cs.gap,
+      rowGap: cs.rowGap,
+      columnGap: cs.columnGap,
+      // Spacing
+      marginTop: cs.marginTop,
+      marginBottom: cs.marginBottom,
+      marginLeft: cs.marginLeft,
+      marginRight: cs.marginRight,
+      paddingTop: cs.paddingTop,
+      paddingBottom: cs.paddingBottom,
+      paddingLeft: cs.paddingLeft,
+      paddingRight: cs.paddingRight,
+      // Typography
+      fontFamily: cs.fontFamily,
+      fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight,
+      letterSpacing: cs.letterSpacing,
+      textAlign: cs.textAlign,
+      textDecoration: cs.textDecoration,
+      color: cs.color,
+      // Background / Fill
+      backgroundColor: cs.backgroundColor,
+      background: cs.background,
+      backgroundImage: cs.backgroundImage,
+      opacity: cs.opacity,
+      // Border
+      borderColor: cs.borderColor,
+      borderWidth: cs.borderWidth,
+      borderStyle: cs.borderStyle,
+      borderTopLeftRadius: cs.borderTopLeftRadius,
+      borderTopRightRadius: cs.borderTopRightRadius,
+      borderBottomRightRadius: cs.borderBottomRightRadius,
+      borderBottomLeftRadius: cs.borderBottomLeftRadius,
+      // Shadow & transform
+      boxShadow: cs.boxShadow,
+      transform: cs.transform,
+      width: cs.width,
+      height: cs.height,
+      position: cs.position,
+      top: cs.top,
+      left: cs.left,
+    };
+
+    const normalized = {
+      type,
+      source,
+      tagName: el.tagName.toLowerCase(),
+      classNames: el.className,
+      rect: {
+        left: rect.left + this.targetWindow.scrollX,
+        top: rect.top + this.targetWindow.scrollY,
+        width: rect.width,
+        height: rect.height,
+      },
+    };
+
+    if (this.targetWindow !== this.targetWindow.parent) {
+      this.targetWindow.parent.postMessage(normalized, '*');
+
+      // Also emit overlay message with full computed styles for properties panel
+      this.targetWindow.parent.postMessage({
+        type: 'glide:overlay',
         source,
-        tagName: el.tagName.toLowerCase(),
-        classNames: el.className,
         rect: {
-          left: rect.left + this.targetWindow.scrollX,
-          top: rect.top + this.targetWindow.scrollY,
+          x: rect.left + this.targetWindow.scrollX,
+          y: rect.top + this.targetWindow.scrollY,
           width: rect.width,
           height: rect.height,
         },
-      },
-      '*'
-    );
+        isHover: type === 'glide:element-hovered',
+        computedStyles,
+      }, '*');
+    }
   }
 }

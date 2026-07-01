@@ -16,6 +16,8 @@ export function getEditorHTML(port: number): string {
             --text-secondary: #9ca3af;
             --accent-color: #38bdf8;
             --accent-hover: #0ea5e9;
+            --danger: #ef4444;
+            --success: #22c55e;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
@@ -27,72 +29,32 @@ export function getEditorHTML(port: number): string {
             height: 100vh;
             overflow: hidden;
           }
+
+          /* ── HEADER ── */
           header {
-            height: 56px;
+            height: 48px;
             background: var(--bg-surface);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 20px;
+            padding: 0 16px;
             z-index: 10;
+            flex-shrink: 0;
+            gap: 12px;
           }
           .logo {
             font-weight: 700;
-            font-size: 18px;
+            font-size: 15px;
             color: var(--accent-color);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+            white-space: nowrap;
           }
-          .logo span {
-            color: var(--text-primary);
-          }
-          .toolbar {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-          }
-          .toolbar-input-group {
-            display: flex;
-            align-items: center;
-            background: var(--bg-element);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 4px 8px;
-          }
-          .toolbar-input-group label {
-            font-size: 11px;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-            margin-right: 8px;
-            font-weight: 600;
-          }
-          .toolbar-input-group input {
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 13px;
-            outline: none;
-            width: 140px;
-          }
-          .btn {
-            background: var(--accent-color);
-            color: var(--bg-base);
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: background 0.2s;
-          }
-          .btn:hover {
-            background: var(--accent-hover);
-          }
-          
-          /* Figma-style Toolbar styles */
+          .logo span { color: var(--text-primary); }
+
+          /* ── FIGMA-STYLE TOOL TOOLBAR ── */
           .figma-toolbar {
             display: flex;
             align-items: center;
@@ -100,454 +62,870 @@ export function getEditorHTML(port: number): string {
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 2px;
-            gap: 2px;
+            gap: 1px;
           }
           .tool-btn {
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            font-size: 14px;
             position: relative;
           }
-          .tool-btn:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.05);
-          }
-          .tool-btn.active {
-            color: var(--accent-color);
-            background: rgba(56, 189, 248, 0.15);
-          }
-          
-          /* Comment Pin styles */
-          .comment-pin {
-            position: absolute;
-            z-index: 1000;
+          .tool-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+          .tool-btn.active { color: var(--accent-color); background: rgba(56,189,248,0.15); }
+          .tool-btn-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 2px; }
+
+          /* ── DEVICE PREVIEW TOOLBAR ── */
+          .device-bar {
             display: flex;
             align-items: center;
-            justify-content: center;
-            cursor: default;
+            gap: 4px;
           }
-          .pin-dot {
-            width: 24px;
-            height: 24px;
-            background: var(--accent-color);
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #000;
-            font-size: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            border: 2px solid var(--text-primary);
-          }
-          .pin-dot span {
-            transform: rotate(45deg);
-            display: inline-block;
-          }
-          .pin-popover {
-            position: absolute;
-            top: 30px;
-            left: 12px;
-            background: var(--bg-surface);
+          .device-btn {
+            background: transparent;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 8px;
-            width: 200px;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            z-index: 1001;
-          }
-          .pin-popover textarea {
-            background: var(--bg-base);
-            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 3px 7px;
             border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+          }
+          .device-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+          .device-btn.active { color: var(--accent-color); border-color: var(--accent-color); background: rgba(56,189,248,0.1); }
+          .device-custom-input {
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 6px;
-            font-size: 12px;
-            resize: none;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            width: 60px;
             outline: none;
             font-family: inherit;
           }
-          .pin-btn {
+
+          /* ── ZOOM CONTROLS ── */
+          .zoom-control {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 8px;
+          }
+          .zoom-btn {
+            background: none;
             border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-          }
-          .pin-cancel {
-            background: transparent;
             color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            width: 20px;
+            height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 3px;
+            transition: color 0.15s;
           }
-          .pin-submit {
-            background: var(--accent-color);
-            color: var(--bg-base);
-          }
+          .zoom-btn:hover { color: var(--text-primary); }
+          #zoom-label { font-size: 12px; color: var(--text-primary); min-width: 36px; text-align: center; }
+
+          /* ── MAIN LAYOUT ── */
           .main-container {
             display: flex;
             flex: 1;
-            height: calc(100vh - 56px);
+            height: calc(100vh - 48px);
             overflow: hidden;
           }
+
+          /* ── SIDEBARS ── */
           .sidebar {
-            width: 280px;
+            width: 260px;
+            flex-shrink: 0;
             background: var(--bg-surface);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
+            overflow: hidden;
           }
           .sidebar-right {
             border-right: none;
             border-left: 1px solid var(--border-color);
+            width: 270px;
+            overflow-y: auto;
           }
           .sidebar-header {
-            padding: 14px 20px;
-            font-size: 12px;
+            padding: 10px 14px;
+            font-size: 11px;
             text-transform: uppercase;
             color: var(--text-secondary);
-            font-weight: 600;
+            font-weight: 700;
             border-bottom: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            letter-spacing: 0.6px;
+            flex-shrink: 0;
           }
-          .layers-list {
-            padding: 10px;
-          }
+
+          /* ── LAYERS PANEL ── */
+          .layers-scroll { flex: 1; overflow-y: auto; padding: 6px; }
           .layer-item {
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 4px;
-            font-size: 13px;
+            font-size: 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 2px;
-            transition: background 0.15s, opacity 0.15s, border 0.1s;
-            user-select: none;
-          }
-          .layer-item:hover {
-            background: var(--bg-element);
-          }
-          .layer-item.active {
-            background: rgba(56, 189, 248, 0.15);
-            color: var(--accent-color);
-            border-left: 2px solid var(--accent-color);
-          }
-          .layer-item.dragging {
-            opacity: 0.4;
-            background: rgba(255, 255, 255, 0.05);
-          }
-          .layer-name {
-            display: flex;
-            align-items: center;
             gap: 6px;
-            width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            margin-bottom: 1px;
+            transition: background 0.12s;
+            user-select: none;
+            position: relative;
           }
+          .layer-item:hover { background: var(--bg-element); }
+          .layer-item.active {
+            background: rgba(56,189,248,0.12);
+            color: var(--accent-color);
+          }
+          .layer-item.locked { opacity: 0.4; }
+          .layer-item.component-root { background: rgba(0,120,255,0.07); }
+          .layer-icon { font-size: 12px; flex-shrink: 0; opacity: 0.7; }
+          .layer-name-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .layer-class { color: #a78bfa; font-size: 10px; font-family: monospace; margin-left: 2px; }
+          .layer-text-snippet { color: #fbbf24; font-size: 10px; font-style: italic; margin-left: 2px; }
+          .layer-actions { display: none; align-items: center; gap: 4px; margin-left: auto; }
+          .layer-item:hover .layer-actions { display: flex; }
+          .layer-action-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 3px;
+            font-size: 11px;
+            line-height: 1;
+            transition: color 0.15s;
+          }
+          .layer-action-btn:hover { color: var(--text-primary); }
+          .layer-action-btn.hidden-state { color: #ef4444; }
           .layer-tag-badge {
-            font-size: 9px;
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-weight: 600;
+            font-size: 8px;
+            padding: 1px 3px;
+            border-radius: 3px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            flex-shrink: 0;
           }
-          .layer-tag-badge.component {
-            background: rgba(167, 139, 250, 0.15);
-            color: #c084fc;
-          }
-          .layer-tag-badge.html {
-            background: rgba(156, 163, 175, 0.12);
-            color: #9ca3af;
-          }
-          .layer-info-name {
-            font-weight: 500;
-            color: var(--text-primary);
-          }
-          .layer-info-class {
-            color: #a78bfa;
-            font-size: 11px;
-            font-family: monospace;
-            opacity: 0.85;
-          }
-          .layer-info-text {
-            color: #fbbf24;
-            font-size: 11px;
-            font-style: italic;
-            opacity: 0.85;
-          }
+          .layer-tag-badge.component { background: rgba(167,139,250,0.15); color: #c084fc; }
+          .layer-tag-badge.html { background: rgba(156,163,175,0.1); color: #6b7280; }
+
+          /* ── CANVAS ── */
           .canvas-container {
             flex: 1;
-            background: var(--bg-base);
+            background: #0d1117;
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+            background-size: 24px 24px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 40px;
-            position: relative;
-            overflow: auto;
-          }
-          .preview-frame-wrapper {
-            background: transparent;
-            border-radius: 8px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-            border: 1px solid var(--border-color);
             position: relative;
             overflow: hidden;
-            transition: width 0.3s, height 0.3s;
           }
-          iframe {
-            width: 100%;
-            height: 100%;
+          .canvas-viewport {
+            position: relative;
+            transform-origin: center center;
+            transition: transform 0.05s;
+          }
+          .preview-frame-wrapper {
+            background: #fff;
+            border-radius: 6px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.08);
+            position: relative;
+            overflow: hidden;
+          }
+          #app-iframe {
+            width: 1440px;
+            height: 880px;
             border: none;
-            border-radius: 8px;
-            background: transparent;
             display: block;
           }
-          .properties-group {
-            padding: 20px;
-            border-bottom: 1px solid var(--border-color);
+          .canvas-loading {
+            position: absolute;
+            inset: 0;
+            background: rgba(9,13,22,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 5;
+            border-radius: 6px;
           }
-          .properties-title {
-            font-size: 11px;
+          .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+
+          /* ── SELECTION OVERLAY SVG ── */
+          #overlay-svg {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 10;
+          }
+
+          /* ── PROPERTIES PANEL ── */
+          .props-section {
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 14px;
+          }
+          .props-section-title {
+            font-size: 10px;
             text-transform: uppercase;
             color: var(--text-secondary);
-            font-weight: 600;
-            margin-bottom: 14px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            margin-bottom: 10px;
           }
-          .prop-row {
+          .props-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+          }
+          .props-grid-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 4px;
+          }
+          .props-row {
             display: flex;
-            gap: 12px;
-            margin-bottom: 12px;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
           }
-          .prop-field {
+          .props-field {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+          }
+          .props-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-weight: 500;
+          }
+          .props-input {
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 4px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            transition: border-color 0.15s;
+          }
+          .props-input:focus { border-color: var(--accent-color); }
+          .props-select {
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            cursor: pointer;
+          }
+          .icon-btn-group { display: flex; gap: 3px; }
+          .icon-btn {
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 5px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.15s;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .icon-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+          .icon-btn.active { color: var(--accent-color); border-color: var(--accent-color); background: rgba(56,189,248,0.1); }
+
+          /* Box model diagram */
+          .box-model {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+          }
+          .box-outer {
+            border: 1px dashed #4b5563;
+            border-radius: 4px;
+            padding: 18px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+          }
+          .box-inner {
+            border: 1px solid #4b5563;
+            border-radius: 2px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+          }
+          .box-label {
+            font-size: 9px;
+            color: #6b7280;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+          }
+          .box-input {
+            position: absolute;
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-size: 11px;
+            font-family: inherit;
+            outline: none;
+            width: 32px;
+            text-align: center;
+            padding: 2px 2px;
+            border-radius: 3px;
+          }
+          .box-input:focus { border-color: var(--accent-color); }
+          .mt-input { top: 2px; left: 50%; transform: translateX(-50%); }
+          .mb-input { bottom: 2px; left: 50%; transform: translateX(-50%); }
+          .ml-input { left: 2px; top: 50%; transform: translateY(-50%); }
+          .mr-input { right: 2px; top: 50%; transform: translateY(-50%); }
+          .pt-input { top: 2px; left: 50%; transform: translateX(-50%); }
+          .pb-input { bottom: 2px; left: 50%; transform: translateX(-50%); }
+          .pl-input { left: 2px; top: 50%; transform: translateY(-50%); }
+          .pr-input { right: 2px; top: 50%; transform: translateY(-50%); }
+
+          /* Color swatch */
+          .color-row { display: flex; align-items: center; gap: 8px; }
+          .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+          }
+          .color-swatch input[type="color"] {
+            position: absolute;
+            inset: -4px;
+            width: calc(100% + 8px);
+            height: calc(100% + 8px);
+            opacity: 0;
+            cursor: pointer;
+          }
+          .opacity-row { display: flex; align-items: center; gap: 6px; }
+          .opacity-slider {
+            flex: 1;
+            accent-color: var(--accent-color);
+          }
+
+          /* Shadow rows */
+          .shadow-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border-color);
+          }
+          .shadow-row:last-child { border-bottom: none; }
+          .add-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: 1px dashed var(--border-color);
+            color: var(--text-secondary);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            width: 100%;
+            justify-content: center;
+            transition: all 0.15s;
+          }
+          .add-btn:hover { color: var(--accent-color); border-color: var(--accent-color); }
+
+          .no-selection {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 4px;
-          }
-          .prop-field label {
-            font-size: 11px;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             color: var(--text-secondary);
+            padding: 20px;
+            text-align: center;
           }
-          .prop-field input, .prop-field select {
-            background: var(--bg-element);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 6px 8px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 13px;
-            outline: none;
+          .no-selection-icon { font-size: 32px; opacity: 0.3; }
+          .no-selection-text { font-size: 12px; line-height: 1.5; }
+
+          /* ── COMMENT PINS ── */
+          .comment-pin {
+            position: absolute;
+            z-index: 1000;
+            cursor: default;
           }
-          .status-badge {
+          .pin-dot {
+            width: 24px; height: 24px;
+            background: var(--accent-color);
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            display: flex; align-items: center; justify-content: center;
+            color: #000; font-size: 11px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 2px solid white;
+          }
+          .pin-dot span { transform: rotate(45deg); display: inline-block; }
+
+          /* ── STATUS BAR ── */
+          .status-bar {
+            height: 24px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 12px;
+            padding: 0 14px;
+            gap: 16px;
+            font-size: 11px;
             color: var(--text-secondary);
+            flex-shrink: 0;
           }
-          .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #ef4444;
-          }
-          .status-dot.connected {
-            background: #10b981;
-          }
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
+          .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+          .status-dot.error { background: var(--danger); }
+
+          /* Scrollbar */
+          ::-webkit-scrollbar { width: 4px; height: 4px; }
+          ::-webkit-scrollbar-track { background: transparent; }
+          ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
         </style>
       </head>
       <body>
+        <!-- ═══════════════════════════════════ HEADER ═══════════════════════════════════ -->
         <header>
-          <div class="logo" style="width:200px;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            Glide <span>Canvas</span>
+          <div class="logo">
+            ⚡ <span>Glide</span>
           </div>
 
-          <!-- Figma Tools in the Center -->
-          <div class="figma-toolbar">
-            <button class="tool-btn active" id="tool-move" title="Move Tool (V)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="3 3 10.07 19.97 12.58 12.58 19.97 10.07 3 3"/>
-                <line x1="13" y1="13" x2="19" y2="19"/>
-              </svg>
+          <!-- Figma-style tool switcher -->
+          <div class="figma-toolbar" id="figma-toolbar">
+            <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 1l5.5 12 1.5-5 5-1.5L1 1z"/></svg>
             </button>
-            <button class="tool-btn" id="tool-frame" title="Frame Tool (F)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="3" y1="9" x2="21" y2="9"/>
-                <line x1="3" y1="15" x2="21" y2="15"/>
-                <line x1="9" y1="3" x2="9" y2="21"/>
-                <line x1="15" y1="3" x2="15" y2="21"/>
-              </svg>
-            </button>
-            <button class="tool-btn" id="tool-rectangle" title="Rectangle Tool (R)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              </svg>
-            </button>
-            <button class="tool-btn" id="tool-ellipse" title="Ellipse Tool (O)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-              </svg>
-            </button>
-            <button class="tool-btn" id="tool-text" title="Text Tool (T)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="4 7 4 4 20 4 20 7"/>
-                <line x1="9" y1="20" x2="15" y2="20"/>
-                <line x1="12" y1="4" x2="12" y2="20"/>
-              </svg>
-            </button>
-            <button class="tool-btn" id="tool-hand" title="Hand Tool (H)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/>
-                <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6"/>
-                <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8.5"/>
-                <path d="M6 14v-1.5a1.5 1.5 0 0 0-3 0V18a6 6 0 0 0 6 6h4a8 8 0 0 0 8-8v-3a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2"/>
-              </svg>
-            </button>
-            <button class="tool-btn" id="tool-comment" title="Comment Tool (C)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </button>
+            <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">✋</button>
+            <div class="tool-btn-sep"></div>
+            <button class="tool-btn" id="tool-frame" data-tool="frame" title="Frame (F/A)">⬜</button>
+            <button class="tool-btn" id="tool-rect" data-tool="rect" title="Rectangle (R)">▬</button>
+            <button class="tool-btn" id="tool-ellipse" data-tool="ellipse" title="Ellipse (O)">⬤</button>
+            <button class="tool-btn" id="tool-text" data-tool="text" title="Text (T)">T</button>
+            <div class="tool-btn-sep"></div>
+            <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">💬</button>
           </div>
 
-          <div class="toolbar">
-            <div class="toolbar-input-group">
-              <label for="app-url">App Url</label>
-              <input type="text" id="app-url" value="http://localhost:5173/">
-            </div>
-            <button class="btn" id="btn-load">Connect App</button>
-            <div class="status-badge" style="display:flex;align-items:center;gap:8px;margin-left:8px;">
-              <div class="status-dot" id="status-dot"></div>
-              <span id="status-text" style="font-size:12px;color:var(--text-secondary)">Disconnected</span>
-            </div>
+          <!-- Device preview -->
+          <div class="device-bar" id="device-bar">
+            <button class="device-btn" data-width="320" title="Mobile S">📱 320</button>
+            <button class="device-btn" data-width="375" title="Mobile M">375</button>
+            <button class="device-btn" data-width="425" title="Mobile L">425</button>
+            <button class="device-btn" data-width="768" title="Tablet">768</button>
+            <button class="device-btn" data-width="1024" title="Laptop">1024</button>
+            <button class="device-btn active" data-width="1440" title="Desktop">🖥 1440</button>
+            <button class="device-btn" data-width="2560" title="4K">4K</button>
+            <input class="device-custom-input" id="custom-width" type="number" placeholder="Custom" title="Custom width (px)">
+          </div>
+
+          <!-- Zoom controls -->
+          <div class="zoom-control">
+            <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+            <span id="zoom-label">100%</span>
+            <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+            <button class="zoom-btn" id="zoom-fit" title="Fit (Ctrl+0)" style="font-size:10px;width:auto;padding:0 4px;">Fit</button>
           </div>
         </header>
 
+        <!-- ═══════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════ -->
         <div class="main-container">
-          <!-- Left Panel -->
-          <div class="sidebar">
+
+          <!-- LEFT SIDEBAR — LAYERS -->
+          <div class="sidebar" id="glide-layers">
             <div class="sidebar-header">
               <span>Layers</span>
+              <span id="layer-count" style="font-size:10px;color:var(--text-secondary);font-weight:400"></span>
             </div>
-            <div class="layers-list" id="layers-list">
-              <div style="color: var(--text-secondary); font-size: 13px; padding: 10px;">Select an element in the canvas to view hierarchy</div>
-            </div>
-          </div>
-
-          <!-- Center Canvas -->
-          <div class="canvas-container">
-            <div class="preview-frame-wrapper" id="preview-wrapper" style="width: 1024px; height: 768px;">
-              <div id="canvas-loading" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-surface);z-index:10;border-radius:8px;gap:12px;">
-                <div style="width:32px;height:32px;border:3px solid var(--border-color);border-top-color:var(--accent-color);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-                <span id="load-status" style="font-size:13px;color:var(--text-secondary);">Loading app...</span>
+            <div class="layers-scroll" id="layers-list">
+              <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                Click an element<br>on the canvas to<br>see layers.
               </div>
-              <iframe id="app-iframe" src="about:blank"></iframe>
             </div>
           </div>
 
-          <!-- Right Panel -->
-          <div class="sidebar sidebar-right">
+          <!-- CANVAS -->
+          <div class="canvas-container" id="canvas-container">
+            <div class="canvas-viewport" id="canvas-viewport">
+              <div class="preview-frame-wrapper" id="frame-wrapper">
+                <div class="canvas-loading" id="canvas-loading">
+                  <div class="spinner"></div>
+                  <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
+                </div>
+                <iframe id="app-iframe" src="http://localhost:${port}" title="App Preview"></iframe>
+                <svg id="overlay-svg" style="position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:10;">
+                  <defs>
+                    <filter id="shadow-filter">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/>
+                    </filter>
+                  </defs>
+                  <!-- selection/hover drawn dynamically -->
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDEBAR — PROPERTIES -->
+          <div class="sidebar sidebar-right" id="glide-properties">
             <div class="sidebar-header">
               <span>Properties</span>
+              <span id="selected-tag" style="font-size:10px;color:var(--accent-color);font-weight:400;font-family:monospace"></span>
             </div>
 
-            <div class="properties-group" id="element-info" style="display:none">
-              <div class="properties-title">Element</div>
-              <div style="margin-bottom:8px;">
-                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Tag</div>
-                <div id="info-tag" style="font-size:13px;color:var(--accent-color);font-weight:600;"></div>
-              </div>
-              <div style="margin-bottom:8px;">
-                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Source</div>
-                <div id="info-source" style="font-size:11px;color:var(--text-secondary);word-break:break-all;font-family:monospace;"></div>
-              </div>
-              <div>
-                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Classes</div>
-                <div id="info-classes" style="font-size:11px;color:#a78bfa;word-break:break-all;font-family:monospace;"></div>
-              </div>
+            <div id="no-selection-msg" class="no-selection">
+              <div class="no-selection-icon">🎯</div>
+              <div class="no-selection-text">Select an element on the canvas to edit its properties</div>
             </div>
 
-            <div class="properties-group">
-              <div class="properties-title">Spacing (Margin & Padding)</div>
-              <div class="prop-row">
-                <div class="prop-field">
-                  <label>Margin Left</label>
-                  <input type="text" id="prop-ml" placeholder="auto">
-                </div>
-                <div class="prop-field">
-                  <label>Margin Right</label>
-                  <input type="text" id="prop-mr" placeholder="auto">
-                </div>
-              </div>
-              <div class="prop-row">
-                <div class="prop-field">
-                  <label>Padding Left</label>
-                  <input type="text" id="prop-pl" placeholder="0">
-                </div>
-                <div class="prop-field">
-                  <label>Padding Right</label>
-                  <input type="text" id="prop-pr" placeholder="0">
-                </div>
-              </div>
-            </div>
+            <div id="props-content" style="display:none;">
 
-            <div class="properties-group">
-              <div class="properties-title">Sizing</div>
-              <div class="prop-row">
-                <div class="prop-field">
-                  <label>Width</label>
-                  <input type="text" id="prop-width" placeholder="auto">
+              <!-- Position & Size -->
+              <div class="props-section" id="section-geometry">
+                <div class="props-section-title">Position & Size</div>
+                <div class="props-grid" style="margin-bottom:6px;">
+                  <div class="props-field">
+                    <span class="props-label">X</span>
+                    <input class="props-input" id="prop-x" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Y</span>
+                    <input class="props-input" id="prop-y" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">W</span>
+                    <input class="props-input" id="prop-w" type="number" placeholder="auto">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">H</span>
+                    <input class="props-input" id="prop-h" type="number" placeholder="auto">
+                  </div>
                 </div>
-                <div class="prop-field">
-                  <label>Height</label>
-                  <input type="text" id="prop-height" placeholder="auto">
+                <div class="props-field">
+                  <span class="props-label">Rotation (°)</span>
+                  <input class="props-input" id="prop-rotation" type="number" placeholder="0" value="0">
                 </div>
               </div>
-            </div>
+
+              <!-- Layout (Flex) — shown only when display=flex -->
+              <div class="props-section" id="section-flex" style="display:none;">
+                <div class="props-section-title">Layout (Flex)</div>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">Direction</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" id="flex-row" title="Row">⇒ Row</button>
+                    <button class="icon-btn" id="flex-col" title="Column">⇓ Col</button>
+                  </div>
+                </div>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">Justify</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" id="jc-start" title="flex-start">⟤</button>
+                    <button class="icon-btn" id="jc-center" title="center">⊡</button>
+                    <button class="icon-btn" id="jc-end" title="flex-end">⟥</button>
+                    <button class="icon-btn" id="jc-between" title="space-between">⟺</button>
+                    <button class="icon-btn" id="jc-around" title="space-around">⟛</button>
+                  </div>
+                </div>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">Align</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" id="ai-start" title="flex-start">⤒</button>
+                    <button class="icon-btn" id="ai-center" title="center">⊞</button>
+                    <button class="icon-btn" id="ai-end" title="flex-end">⤓</button>
+                    <button class="icon-btn" id="ai-stretch" title="stretch">⤡</button>
+                  </div>
+                </div>
+                <div class="props-grid">
+                  <div class="props-field">
+                    <span class="props-label">Gap</span>
+                    <input class="props-input" id="prop-gap" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Row Gap</span>
+                    <input class="props-input" id="prop-row-gap" type="number" placeholder="0">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Spacing (Box Model) -->
+              <div class="props-section">
+                <div class="props-section-title">Spacing</div>
+                <!-- Margin -->
+                <div style="font-size:10px;color:#6b7280;margin-bottom:4px;font-weight:600;">Margin</div>
+                <div class="box-outer" style="position:relative;margin-bottom:6px;">
+                  <input class="box-input mt-input" id="prop-mt" type="number" placeholder="0" title="Margin Top">
+                  <input class="box-input mb-input" id="prop-mb" type="number" placeholder="0" title="Margin Bottom">
+                  <input class="box-input ml-input" id="prop-ml" type="number" placeholder="0" title="Margin Left">
+                  <input class="box-input mr-input" id="prop-mr" type="number" placeholder="0" title="Margin Right">
+                  <span class="box-label">M</span>
+                </div>
+                <!-- Padding -->
+                <div style="font-size:10px;color:#6b7280;margin-bottom:4px;font-weight:600;">Padding</div>
+                <div class="box-outer" style="position:relative;">
+                  <input class="box-input pt-input" id="prop-pt" type="number" placeholder="0" title="Padding Top">
+                  <input class="box-input pb-input" id="prop-pb" type="number" placeholder="0" title="Padding Bottom">
+                  <input class="box-input pl-input" id="prop-pl" type="number" placeholder="0" title="Padding Left">
+                  <input class="box-input pr-input" id="prop-pr" type="number" placeholder="0" title="Padding Right">
+                  <span class="box-label">P</span>
+                </div>
+              </div>
+
+              <!-- Typography -->
+              <div class="props-section" id="section-typography">
+                <div class="props-section-title">Typography</div>
+                <div class="props-field" style="margin-bottom:6px;">
+                  <span class="props-label">Font Family</span>
+                  <input class="props-input" id="prop-font-family" type="text" placeholder="Inter, sans-serif">
+                </div>
+                <div class="props-grid" style="margin-bottom:6px;">
+                  <div class="props-field">
+                    <span class="props-label">Size (px)</span>
+                    <input class="props-input" id="prop-font-size" type="number" placeholder="16">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Weight</span>
+                    <select class="props-select" id="prop-font-weight">
+                      <option value="100">100</option>
+                      <option value="200">200</option>
+                      <option value="300">300 Light</option>
+                      <option value="400" selected>400 Normal</option>
+                      <option value="500">500 Medium</option>
+                      <option value="600">600 Semibold</option>
+                      <option value="700">700 Bold</option>
+                      <option value="800">800 Extrabold</option>
+                      <option value="900">900 Black</option>
+                    </select>
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Line Height</span>
+                    <input class="props-input" id="prop-line-height" type="number" placeholder="1.5">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Letter Spacing</span>
+                    <input class="props-input" id="prop-letter-spacing" type="number" placeholder="0">
+                  </div>
+                </div>
+                <div class="props-row" style="margin-bottom:6px;">
+                  <span class="props-label" style="min-width:40px;">Align</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" id="ta-left" title="Left">⬅</button>
+                    <button class="icon-btn" id="ta-center" title="Center">↔</button>
+                    <button class="icon-btn" id="ta-right" title="Right">➡</button>
+                    <button class="icon-btn" id="ta-justify" title="Justify">☰</button>
+                  </div>
+                </div>
+                <div class="props-row" style="margin-bottom:6px;">
+                  <span class="props-label" style="min-width:40px;">Style</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" id="td-underline" title="Underline" style="text-decoration:underline;">U</button>
+                    <button class="icon-btn" id="td-italic" title="Italic" style="font-style:italic;">I</button>
+                    <button class="icon-btn" id="td-strike" title="Strikethrough" style="text-decoration:line-through;">S</button>
+                  </div>
+                </div>
+                <div class="props-field">
+                  <span class="props-label">Color</span>
+                  <div class="color-row">
+                    <div class="color-swatch" id="color-swatch-text">
+                      <input type="color" id="prop-color" value="#ffffff" title="Text Color">
+                    </div>
+                    <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family:monospace;">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fill / Background -->
+              <div class="props-section">
+                <div class="props-section-title">Fill</div>
+                <div class="props-row" style="margin-bottom:8px;">
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn active" id="fill-none" title="None">None</button>
+                    <button class="icon-btn" id="fill-solid" title="Solid">Solid</button>
+                    <button class="icon-btn" id="fill-gradient" title="Gradient">Grad</button>
+                  </div>
+                </div>
+                <div id="fill-solid-controls">
+                  <div class="color-row">
+                    <div class="color-swatch" id="color-swatch-bg">
+                      <input type="color" id="prop-bg-color" value="#000000" title="Background Color">
+                    </div>
+                    <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family:monospace;">
+                    <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="width:52px;" title="Opacity %">
+                    <span style="font-size:11px;color:var(--text-secondary);">%</span>
+                  </div>
+                </div>
+                <div id="fill-gradient-controls" style="display:none;">
+                  <div class="props-row">
+                    <span class="props-label" style="min-width:50px;">Type</span>
+                    <div class="icon-btn-group" style="flex:1;">
+                      <button class="icon-btn active" id="grad-linear">Linear</button>
+                      <button class="icon-btn" id="grad-radial">Radial</button>
+                    </div>
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">Angle (°)</span>
+                    <input class="props-input" id="prop-grad-angle" type="number" value="90">
+                  </div>
+                  <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
+                </div>
+              </div>
+
+              <!-- Border -->
+              <div class="props-section">
+                <div class="props-section-title">Border</div>
+                <div class="props-row" style="margin-bottom:6px;">
+                  <div class="color-swatch" id="color-swatch-border">
+                    <input type="color" id="prop-border-color" value="#374151" title="Border Color">
+                  </div>
+                  <input class="props-input" id="prop-border-width" type="number" placeholder="0" style="width:52px;" title="Width">
+                  <select class="props-select" id="prop-border-style" style="flex:1;">
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div class="props-section-title" style="margin-bottom:6px;">Radius</div>
+                <div class="props-grid-4">
+                  <div class="props-field">
+                    <span class="props-label">TL</span>
+                    <input class="props-input" id="prop-br-tl" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">TR</span>
+                    <input class="props-input" id="prop-br-tr" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">BR</span>
+                    <input class="props-input" id="prop-br-br" type="number" placeholder="0">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label">BL</span>
+                    <input class="props-input" id="prop-br-bl" type="number" placeholder="0">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Shadow -->
+              <div class="props-section">
+                <div class="props-section-title">Shadow</div>
+                <div id="shadows-list"></div>
+                <button class="add-btn" id="add-shadow-btn">+ Add Shadow</button>
+              </div>
+
+              <!-- Opacity -->
+              <div class="props-section">
+                <div class="props-section-title">Opacity</div>
+                <div class="opacity-row">
+                  <input type="range" class="opacity-slider" id="prop-opacity-slider" min="0" max="100" value="100">
+                  <input class="props-input" id="prop-opacity" type="number" min="0" max="100" value="100" style="width:52px;">
+                  <span style="font-size:11px;color:var(--text-secondary);">%</span>
+                </div>
+              </div>
+
+            </div><!-- end #props-content -->
           </div>
+
+        </div><!-- end .main-container -->
+
+        <!-- STATUS BAR -->
+        <div class="status-bar">
+          <div class="status-dot" id="ws-dot"></div>
+          <span id="ws-status">Connecting…</span>
+          <span style="margin-left:auto;" id="cursor-pos"></span>
+          <span id="shortcut-hint" style="color:var(--text-secondary)">V=Select H=Hand F=Frame R=Rect O=Ellipse T=Text C=Comment</span>
         </div>
 
         <script>
+          // ═══════════════════════════════════════════════════════════════
+          // STATE
+          // ═══════════════════════════════════════════════════════════════
           let socket = null;
+          let currentFile = null;
           let selectedElement = null;
-          let currentFile = '';
+          let currentTool = 'select';
+          let zoomLevel = 1.0;
+          let panX = 0, panY = 0;
+          let isPanning = false, panStart = {x:0,y:0};
+          let lockedIds = new Set();
+          let hiddenIds = new Set();
+          let shadowCount = 0;
 
-          function connectWebSocket() {
-            socket = new WebSocket('ws://localhost:${port}');
-            const dot = document.getElementById('status-dot');
-            const text = document.getElementById('status-text');
+          const iframeWidth = { current: 1440 };
+
+          // ═══════════════════════════════════════════════════════════════
+          // WEBSOCKET
+          // ═══════════════════════════════════════════════════════════════
+          function connectSocket() {
+            socket = new WebSocket('ws://localhost:7777');
+            const dot = document.getElementById('ws-dot');
+            const statusEl = document.getElementById('ws-status');
 
             socket.addEventListener('open', () => {
-              dot.className = 'status-dot connected';
-              text.textContent = 'Connected';
+              dot.classList.remove('error');
+              statusEl.textContent = 'Connected to Glide server';
+              setTimeout(() => { statusEl.textContent = 'Ready'; }, 2000);
             });
 
             socket.addEventListener('close', () => {
-              dot.className = 'status-dot';
-              text.textContent = 'Disconnected';
-              setTimeout(connectWebSocket, 2000);
+              dot.classList.add('error');
+              statusEl.textContent = 'Disconnected — retrying…';
+              setTimeout(connectSocket, 2000);
+            });
+
+            socket.addEventListener('error', () => {
+              dot.classList.add('error');
+              statusEl.textContent = 'Connection error';
             });
 
             socket.addEventListener('message', (event) => {
@@ -558,7 +936,6 @@ export function getEditorHTML(port: number): string {
                   renderLayersTree(message.tree);
                 } else if (message.type === 'status') {
                   if (message.success) {
-                    // After any successful file edit, re-request the tree so layers refresh
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
                     }
@@ -572,361 +949,401 @@ export function getEditorHTML(port: number): string {
             });
           }
 
-          function loadApp(url) {
-            const iframe = document.getElementById('app-iframe');
-            const loading = document.getElementById('canvas-loading');
-            const statusEl = document.getElementById('load-status');
-
-            // Show loading overlay
-            if (loading) loading.style.display = 'flex';
-            if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
-
-            iframe.onload = () => {
-              // Hide overlay once the page is in — give a tiny delay for paint
-              setTimeout(() => {
-                if (loading) loading.style.display = 'none';
-              }, 300);
-            };
-            iframe.onerror = () => {
-              if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
-            };
-
-            iframe.src = url;
-            document.getElementById('app-url').value = url;
+          function sendEdit(change) {
+            if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(selectedElement.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              viewportWidth: iframeWidth.current,
+              change
+            }));
           }
 
-          // Load Iframe — button click
-          document.getElementById('btn-load').addEventListener('click', () => {
-            const url = document.getElementById('app-url').value.trim();
-            if (url) loadApp(url);
-          });
-
-          // Also trigger on Enter key in the URL input
-          document.getElementById('app-url').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              const url = e.target.value.trim();
-              if (url) loadApp(url);
-            }
-          });
-
-          // Auto-load the default app URL when page opens
-          window.addEventListener('DOMContentLoaded', () => {
-            const defaultUrl = document.getElementById('app-url').value.trim();
-            if (defaultUrl && defaultUrl !== 'about:blank') {
-              loadApp(defaultUrl);
-            }
-          });
-
+          // ═══════════════════════════════════════════════════════════════
+          // SOURCE HELPERS
+          // ═══════════════════════════════════════════════════════════════
           function parseSource(source) {
             if (!source) return null;
             const match = source.match(/^(.*):(\\d+):(\\d+)$/);
             if (!match) return null;
-            return {
-              file: match[1],
-              line: parseInt(match[2], 10),
-              column: parseInt(match[3], 10)
-            };
+            return { file: match[1], line: parseInt(match[2], 10), column: parseInt(match[3], 10) };
           }
-
-          // Figma Tools State Management
-          let activeTool = 'move';
-          const tools = {
-            move: document.getElementById('tool-move'),
-            frame: document.getElementById('tool-frame'),
-            rectangle: document.getElementById('tool-rectangle'),
-            ellipse: document.getElementById('tool-ellipse'),
-            text: document.getElementById('tool-text'),
-            hand: document.getElementById('tool-hand'),
-            comment: document.getElementById('tool-comment')
-          };
-
-          function setTool(toolName) {
-            activeTool = toolName;
-            Object.keys(tools).forEach(name => {
-              if (tools[name]) {
-                if (name === toolName) {
-                  tools[name].classList.add('active');
-                } else {
-                  tools[name].classList.remove('active');
-                }
-              }
-            });
-
-            // Set cursor style for iframe & canvas-container
-            const iframe = document.getElementById('app-iframe');
-            const container = document.querySelector('.canvas-container');
-            
-            const cursorMap = {
-              move: 'default',
-              hand: 'grab',
-              text: 'text',
-              rectangle: 'crosshair',
-              ellipse: 'crosshair',
-              frame: 'crosshair',
-              comment: 'cell'
-            };
-            
-            const cursor = cursorMap[toolName] || 'default';
-            if (iframe) iframe.style.cursor = cursor;
-            if (container) container.style.cursor = cursor;
-          }
-
-          // Toolbar click events
-          Object.keys(tools).forEach(name => {
-            if (tools[name]) {
-              tools[name].addEventListener('click', () => setTool(name));
-            }
-          });
-
-          // Figma Keyboard Shortcuts
-          window.addEventListener('keydown', (e) => {
-            if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-            const key = e.key.toLowerCase();
-            if (key === 'v') setTool('move');
-            else if (key === 'f' || key === 'a') setTool('frame');
-            else if (key === 'r') setTool('rectangle');
-            else if (key === 'o') setTool('ellipse');
-            else if (key === 't') setTool('text');
-            else if (key === 'h') setTool('hand');
-            else if (key === 'c') setTool('comment');
-          });
-
-          // Hand tool canvas panning
-          const canvasContainer = document.querySelector('.canvas-container');
-          let isPanning = false;
-          let startX, startY, scrollLeft, scrollTop;
-
-          canvasContainer.addEventListener('mousedown', (e) => {
-            if (activeTool !== 'hand') return;
-            isPanning = true;
-            canvasContainer.style.cursor = 'grabbing';
-            startX = e.pageX - canvasContainer.offsetLeft;
-            startY = e.pageY - canvasContainer.offsetTop;
-            scrollLeft = canvasContainer.scrollLeft;
-            scrollTop = canvasContainer.scrollTop;
-          });
-
-          canvasContainer.addEventListener('mouseleave', () => {
-            isPanning = false;
-            if (activeTool === 'hand') canvasContainer.style.cursor = 'grab';
-          });
-
-          canvasContainer.addEventListener('mouseup', () => {
-            isPanning = false;
-            if (activeTool === 'hand') canvasContainer.style.cursor = 'grab';
-          });
-
-          canvasContainer.addEventListener('mousemove', (e) => {
-            if (!isPanning || activeTool !== 'hand') return;
-            e.preventDefault();
-            const x = e.pageX - canvasContainer.offsetLeft;
-            const y = e.pageY - canvasContainer.offsetTop;
-            const walkX = (x - startX) * 1.5;
-            const walkY = (y - startY) * 1.5;
-            canvasContainer.scrollLeft = scrollLeft - walkX;
-            canvasContainer.scrollTop = scrollTop - walkY;
-          });
-
-          // Comment tool pinning on canvas
-          canvasContainer.addEventListener('click', (e) => {
-            if (activeTool !== 'comment') return;
-            
-            // Drop a pin at click location relative to canvas-container
-            const rect = canvasContainer.getBoundingClientRect();
-            const x = e.clientX - rect.left + canvasContainer.scrollLeft;
-            const y = e.clientY - rect.top + canvasContainer.scrollTop;
-
-            const pin = document.createElement('div');
-            pin.className = 'comment-pin';
-            pin.style.left = (x - 12) + 'px';
-            pin.style.top = (y - 12) + 'px';
-            
-            pin.innerHTML = 
-              '<div class="pin-dot"><span>💬</span></div>' +
-              '<div class="pin-popover">' +
-              '  <textarea placeholder="Write a comment..." rows="2"></textarea>' +
-              '  <div style="display:flex;justify-content:flex-end;gap:4px;margin-top:4px;">' +
-              '    <button class="pin-btn pin-cancel">Cancel</button>' +
-              '    <button class="pin-btn pin-submit">Post</button>' +
-              '  </div>' +
-              '</div>';
-
-            canvasContainer.appendChild(pin);
-
-            const textarea = pin.querySelector('textarea');
-            textarea.focus();
-
-            pin.querySelector('.pin-cancel').addEventListener('click', (ev) => {
-              ev.stopPropagation();
-              pin.remove();
-            });
-
-            pin.querySelector('.pin-submit').addEventListener('click', (ev) => {
-              ev.stopPropagation();
-              const text = textarea.value.trim();
-              if (text) {
-                pin.querySelector('.pin-popover').innerHTML = 
-                  '<div style="font-weight:600;font-size:12px;color:var(--accent-color)">You</div>' +
-                  '<div style="font-size:12px;margin-top:2px;color:var(--text-primary)">' + text + '</div>';
-              } else {
-                pin.remove();
-              }
-            });
-            
-            pin.addEventListener('click', (ev) => ev.stopPropagation());
-          });
 
           function convertNodeIdToSource(nodeId, file) {
-            if (!nodeId) return '';
-            if (nodeId.startsWith('line:')) {
-              const match = nodeId.match(/^line:(\d+):col:(\d+)$/);
-              if (match) {
-                const line = match[1];
-                const col = parseInt(match[2], 10) + 1; // Convert 0-indexed column to 1-indexed
-                return file + ':' + line + ':' + col;
-              }
+            const match = nodeId.match(/^line:(\\d+):col:(\\d+)$/);
+            if (match) {
+              const line = parseInt(match[1], 10);
+              const col = parseInt(match[2], 10) + 1;
+              return file + ':' + line + ':' + col;
             }
             return nodeId;
           }
 
-          function highlightActiveLayerItem(source) {
-            const items = document.querySelectorAll('.layer-item');
-            items.forEach(item => {
-              if (item.dataset.source === source) {
-                item.classList.add('active');
-                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              } else {
-                item.classList.remove('active');
+          function findParentNodeInTree(tree, targetId) {
+            function search(nodes, id) {
+              for (const node of nodes) {
+                for (const child of node.children || []) {
+                  if (child.id === id) return node;
+                  const found = search(child.children || [], id);
+                  if (found) return found;
+                }
               }
-            });
+              return null;
+            }
+            return search(tree, targetId);
           }
 
-          // Handle message communication from GlideBridge running inside iframe
-          window.addEventListener('message', (event) => {
-            const data = event.data;
-            if (!data || typeof data !== 'object') return;
+          // ═══════════════════════════════════════════════════════════════
+          // DEVICE PREVIEW
+          // ═══════════════════════════════════════════════════════════════
+          document.querySelectorAll('.device-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const w = parseInt(btn.dataset.width, 10);
+              setIframeWidth(w);
+              document.querySelectorAll('.device-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              document.getElementById('custom-width').value = '';
+            });
+          });
 
-            if (data.type === 'glide:element-selected') {
-              if (activeTool !== 'move') {
-                // If a creation tool is active, insert the element into the clicked element as a parent!
-                const parsed = parseSource(data.source);
-                if (parsed && socket && socket.readyState === WebSocket.OPEN) {
-                  socket.send(JSON.stringify({
-                    type: 'insert',
-                    file: parsed.file,
-                    parentId: data.source,
-                    elementType: activeTool
-                  }));
-                  setTool('move'); // Reset to selection mode
-                }
-                return;
-              }
-              
-              selectedElement = data;
-              updatePropertiesPanel(data);
-              updateLayersPanel(data);
-              highlightActiveLayerItem(data.source);
-            }
-
-            if (data.type === 'glide:element-resized') {
-              const { source, rect, delta } = data;
-              const parsed = parseSource(source);
-              if (parsed && socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                  type: 'edit',
-                  file: parsed.file,
-                  line: parsed.line,
-                  column: parsed.column,
-                  change: {
-                    type: 'class',
-                    property: 'width',
-                    value: rect.width
-                  }
-                }));
-              }
+          document.getElementById('custom-width').addEventListener('change', (e) => {
+            const w = parseInt(e.target.value, 10);
+            if (w >= 100 && w <= 4000) {
+              setIframeWidth(w);
+              document.querySelectorAll('.device-btn').forEach(b => b.classList.remove('active'));
             }
           });
 
-          function updatePropertiesPanel(data) {
-            const { source, tagName, classNames, rect } = data;
-
-            // Show element info panel
-            const infoPanel = document.getElementById('element-info');
-            if (infoPanel) infoPanel.style.display = 'block';
-
-            const tagEl = document.getElementById('info-tag');
-            if (tagEl) tagEl.textContent = '<' + (tagName || '?') + '>';
-
-            const srcEl = document.getElementById('info-source');
-            if (srcEl) srcEl.textContent = source;
-
-            const clsEl = document.getElementById('info-classes');
-            if (clsEl) clsEl.textContent = classNames || '(none)';
-
-            document.getElementById('prop-width').value = Math.round(rect.width) + 'px';
-            document.getElementById('prop-height').value = Math.round(rect.height) + 'px';
+          function setIframeWidth(px) {
+            const frame = document.getElementById('app-iframe');
+            frame.style.width = px + 'px';
+            iframeWidth.current = px;
           }
+
+          // ═══════════════════════════════════════════════════════════════
+          // ZOOM & PAN
+          // ═══════════════════════════════════════════════════════════════
+          function applyTransform() {
+            const vp = document.getElementById('canvas-viewport');
+            vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
+            document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
+          }
+
+          document.getElementById('zoom-in').addEventListener('click', () => { zoomLevel = Math.min(4, zoomLevel + 0.1); applyTransform(); });
+          document.getElementById('zoom-out').addEventListener('click', () => { zoomLevel = Math.max(0.1, zoomLevel - 0.1); applyTransform(); });
+          document.getElementById('zoom-fit').addEventListener('click', fitToScreen);
+
+          function fitToScreen() {
+            const container = document.getElementById('canvas-container');
+            const frame = document.getElementById('app-iframe');
+            const cw = container.clientWidth - 80;
+            const ch = container.clientHeight - 80;
+            const fw = frame.clientWidth;
+            const fh = frame.clientHeight;
+            zoomLevel = Math.min(cw / fw, ch / fh, 1);
+            panX = 0; panY = 0;
+            applyTransform();
+          }
+
+          // Ctrl+Scroll zoom
+          document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              zoomLevel = Math.min(4, Math.max(0.1, zoomLevel - e.deltaY * 0.001));
+              applyTransform();
+            }
+          }, { passive: false });
+
+          // ═══════════════════════════════════════════════════════════════
+          // TOOL SWITCHER
+          // ═══════════════════════════════════════════════════════════════
+          function setTool(name) {
+            currentTool = name;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector('[data-tool="' + name + '"]');
+            if (btn) btn.classList.add('active');
+
+            const container = document.getElementById('canvas-container');
+            if (name === 'hand') {
+              container.style.cursor = 'grab';
+            } else {
+              container.style.cursor = 'default';
+            }
+          }
+
+          document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+            btn.addEventListener('click', () => setTool(btn.dataset.tool));
+          });
+
+          // ═══════════════════════════════════════════════════════════════
+          // KEYBOARD SHORTCUTS
+          // ═══════════════════════════════════════════════════════════════
+          document.addEventListener('keydown', (e) => {
+            // Don't fire if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            const key = e.key;
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            // Tool shortcuts
+            if (!ctrl && key === 'v') { setTool('select'); return; }
+            if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
+            if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
+            if (!ctrl && (key === 'r' || key === 'R')) { setTool('rect'); return; }
+            if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
+            if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
+            if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
+
+            // Escape = deselect
+            if (key === 'Escape') {
+              selectedElement = null;
+              clearOverlay();
+              showNoSelection();
+              return;
+            }
+
+            // Ctrl+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo
+            if (ctrl && key === 'z' && !e.shiftKey) {
+              e.preventDefault();
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'undo' }));
+              }
+              return;
+            }
+            if (ctrl && ((key === 'z' && e.shiftKey) || key === 'y')) {
+              e.preventDefault();
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'redo' }));
+              }
+              return;
+            }
+
+            // Ctrl+0 = fit, Ctrl+1 = 100%
+            if (ctrl && key === '0') { e.preventDefault(); fitToScreen(); return; }
+            if (ctrl && key === '1') { e.preventDefault(); zoomLevel = 1; panX = 0; panY = 0; applyTransform(); return; }
+
+            // Arrow nudge (needs selected element)
+            if (!selectedElement) return;
+            const nudge = e.shiftKey ? 10 : 1;
+            if (key === 'ArrowUp')    { e.preventDefault(); sendEdit({ type: 'class', property: 'marginTop', value: '-=' + nudge + 'px' }); return; }
+            if (key === 'ArrowDown')  { e.preventDefault(); sendEdit({ type: 'class', property: 'marginTop', value: '+=' + nudge + 'px' }); return; }
+            if (key === 'ArrowLeft')  { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '-=' + nudge + 'px' }); return; }
+            if (key === 'ArrowRight') { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '+=' + nudge + 'px' }); return; }
+          });
+
+          // ═══════════════════════════════════════════════════════════════
+          // CANVAS HAND-PANNING
+          // ═══════════════════════════════════════════════════════════════
+          const canvasContainer = document.getElementById('canvas-container');
+
+          canvasContainer.addEventListener('mousedown', (e) => {
+            if (currentTool === 'hand' || e.button === 1) {
+              isPanning = true;
+              panStart = { x: e.clientX - panX, y: e.clientY - panY };
+              canvasContainer.style.cursor = 'grabbing';
+              e.preventDefault();
+            }
+          });
+
+          document.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+              panX = e.clientX - panStart.x;
+              panY = e.clientY - panStart.y;
+              applyTransform();
+            }
+            // Update cursor coords in status bar
+            const rect = canvasContainer.getBoundingClientRect();
+            const cx = Math.round((e.clientX - rect.left - panX) / zoomLevel);
+            const cy = Math.round((e.clientY - rect.top - panY) / zoomLevel);
+            document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
+          });
+
+          document.addEventListener('mouseup', () => {
+            if (isPanning) {
+              isPanning = false;
+              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+            }
+          });
+
+          // Spacebar = temp hand tool
+          let spaceHeld = false;
+          document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !spaceHeld && document.activeElement.tagName !== 'INPUT') {
+              spaceHeld = true;
+              canvasContainer.style.cursor = 'grab';
+              e.preventDefault();
+            }
+          });
+          document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+              spaceHeld = false;
+              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+            }
+          });
+
+          // ═══════════════════════════════════════════════════════════════
+          // OVERLAY SVG — selection + hover
+          // ═══════════════════════════════════════════════════════════════
+          const svg = document.getElementById('overlay-svg');
+
+          function clearOverlay() {
+            while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+          }
+
+          function drawSelectionBox(rect, isHover) {
+            const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+            r.setAttribute('x', rect.x);
+            r.setAttribute('y', rect.y);
+            r.setAttribute('width', rect.width);
+            r.setAttribute('height', rect.height);
+            r.setAttribute('fill', 'none');
+            r.setAttribute('stroke', '#0d99ff');
+            r.setAttribute('stroke-width', '1');
+            if (isHover) {
+              r.setAttribute('stroke-dasharray', '4 2');
+              r.setAttribute('opacity', '0.5');
+            }
+            svg.appendChild(r);
+
+            if (!isHover) {
+              // Draw 8 resize handles
+              const handles = [
+                [rect.x, rect.y], [rect.x + rect.width/2, rect.y], [rect.x + rect.width, rect.y],
+                [rect.x + rect.width, rect.y + rect.height/2],
+                [rect.x + rect.width, rect.y + rect.height], [rect.x + rect.width/2, rect.y + rect.height],
+                [rect.x, rect.y + rect.height], [rect.x, rect.y + rect.height/2]
+              ];
+              handles.forEach(([hx, hy]) => {
+                const h = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                h.setAttribute('x', hx - 4);
+                h.setAttribute('y', hy - 4);
+                h.setAttribute('width', '8');
+                h.setAttribute('height', '8');
+                h.setAttribute('fill', 'white');
+                h.setAttribute('stroke', '#0d99ff');
+                h.setAttribute('stroke-width', '1');
+                svg.appendChild(h);
+              });
+            }
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // BRIDGE COMMUNICATION (postMessage from iframe)
+          // ═══════════════════════════════════════════════════════════════
+          window.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data || !data.type) return;
+
+            if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
+              updateLayersPanel(data);
+            }
+            if (data.type === 'glide:overlay') {
+              clearOverlay();
+              if (data.rect) {
+                drawSelectionBox(data.rect, data.isHover);
+              }
+              if (data.source) {
+                selectedElement = { source: data.source };
+                populatePropsFromComputed(data.computedStyles || {}, data.rect || {});
+              }
+            }
+            if (data.type === 'glide:element-selected-by-id') {
+              selectedElement = { source: data.source };
+            }
+          });
 
           function updateLayersPanel(data) {
+            if (!data.source || !socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(data.source);
-            if (parsed && socket && socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({
-                type: 'get-tree',
-                file: parsed.file
-              }));
-            }
+            if (!parsed) return;
+            socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
           }
 
-          function findParentNodeInTree(nodes, targetId) {
-            for (const node of nodes) {
-              if (node.children && node.children.some(child => child.id === targetId)) {
-                return node;
-              }
-              const found = findParentNodeInTree(node.children || [], targetId);
-              if (found) return found;
-            }
-            return null;
+          // ═══════════════════════════════════════════════════════════════
+          // LAYERS TREE RENDERING
+          // ═══════════════════════════════════════════════════════════════
+          function getLayerIcon(name) {
+            const n = name.toLowerCase();
+            if (n === 'svg') return '◈';
+            if (n === 'img') return '🖼';
+            if (n === 'button' || n === 'a') return '⬡';
+            if (['p','span','h1','h2','h3','h4','h5','h6','label','em','strong','small'].includes(n)) return '𝐓';
+            if (['input','textarea','select'].includes(n)) return '⬜';
+            if (['ul','ol','li'].includes(n)) return '≡';
+            // Component (uppercase)
+            if (name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) return '⬡';
+            return '▣'; // div/section/article/main/etc
           }
+
+          let layerTree = null;
 
           function renderLayersTree(tree) {
+            layerTree = tree;
             const list = document.getElementById('layers-list');
             list.innerHTML = '';
-            
+
+            let totalCount = 0;
             function renderNode(node, depth) {
+              totalCount++;
+              if (lockedIds.has(node.id)) return; // skip locked hidden children
+
               const item = document.createElement('div');
               item.className = 'layer-item';
-              
+              item.dataset.nodeId = node.id;
+
               const nodeSource = convertNodeIdToSource(node.id, currentFile);
               item.dataset.source = nodeSource;
-              
+
+              // Component root highlight
+              const isComponent = node.name.length > 0 && node.name[0].toUpperCase() === node.name[0] && node.name[0] !== node.name[0].toLowerCase();
+              if (isComponent) item.classList.add('component-root');
+
+              // Active state
               if (selectedElement && selectedElement.source === nodeSource) {
-                item.className += ' active';
-              }
-              item.style.paddingLeft = (12 + depth * 16) + 'px';
-              
-              // 1. Labeling: Generate rich descriptive HTML
-              const isComponent = node.name.length > 0 && node.name[0].toUpperCase() === node.name[0];
-              const badgeClass = isComponent ? 'layer-tag-badge component' : 'layer-tag-badge html';
-              const badgeText = isComponent ? 'Comp' : 'HTML';
-              
-              let detailsHTML = '';
-              if (node.className) {
-                const cleanClasses = node.className.split(' ').slice(0, 2).map(c => '.' + c).join('');
-                detailsHTML += ' <span class="layer-info-class">' + cleanClasses + '</span>';
-              }
-              if (node.text) {
-                detailsHTML += ' <span class="layer-info-text">"' + node.text + '"</span>';
+                item.classList.add('active');
               }
 
-              item.innerHTML = 
-                '<div class="layer-name">' +
-                '  <span class="' + badgeClass + '">' + badgeText + '</span>' +
-                '  <span class="layer-info-name">' + node.name + '</span>' +
-                detailsHTML +
+              // Hidden state
+              if (hiddenIds.has(node.id)) {
+                item.style.opacity = '0.35';
+              }
+
+              item.style.paddingLeft = (10 + depth * 14) + 'px';
+
+              const icon = getLayerIcon(node.name);
+              const badge = isComponent
+                ? '<span class="layer-tag-badge component">Comp</span>'
+                : '<span class="layer-tag-badge html">' + node.name + '</span>';
+
+              let extras = '';
+              if (node.className) {
+                const cls = node.className.split(' ').filter(Boolean).slice(0,2).map(c => '.' + c).join('');
+                extras += '<span class="layer-class">' + cls + '</span>';
+              }
+              if (node.text) {
+                extras += '<span class="layer-text-snippet">"' + node.text + '"</span>';
+              }
+
+              const eyeIcon = hiddenIds.has(node.id) ? '🚫' : '👁';
+              const lockIcon = lockedIds.has(node.id) ? '🔒' : '🔓';
+
+              item.innerHTML =
+                '<span class="layer-icon">' + icon + '</span>' +
+                badge +
+                '<span class="layer-name-text">' + node.name + extras + '</span>' +
+                '<div class="layer-actions">' +
+                  '<button class="layer-action-btn eye-btn" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeIcon + '</button>' +
+                  '<button class="layer-action-btn lock-btn" data-node-id="' + node.id + '" title="Toggle lock">' + lockIcon + '</button>' +
                 '</div>';
-              
-              // Select item on click
+
+              // Click → select
               item.addEventListener('click', (e) => {
+                if (e.target.closest('.layer-actions')) return;
+                if (lockedIds.has(node.id)) return;
                 const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
@@ -934,58 +1351,67 @@ export function getEditorHTML(port: number): string {
                     id: nodeSource
                   }, '*');
                 }
+                selectedElement = { source: nodeSource };
+                document.querySelectorAll('.layer-item').forEach(li => li.classList.remove('active'));
+                item.classList.add('active');
+                document.getElementById('selected-tag').textContent = '<' + node.name + '>';
               });
 
-              // 2. Movable: HTML5 Drag & Drop reordering
+              // Eye button
+              item.querySelector('.eye-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nid = e.currentTarget.dataset.nodeId;
+                if (hiddenIds.has(nid)) {
+                  hiddenIds.delete(nid);
+                  sendStyleChange(nodeSource, 'display', '');
+                } else {
+                  hiddenIds.add(nid);
+                  sendStyleChange(nodeSource, 'display', 'none');
+                }
+                renderLayersTree(layerTree);
+              });
+
+              // Lock button
+              item.querySelector('.lock-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nid = e.currentTarget.dataset.nodeId;
+                if (lockedIds.has(nid)) {
+                  lockedIds.delete(nid);
+                } else {
+                  lockedIds.add(nid);
+                }
+                renderLayersTree(layerTree);
+              });
+
+              // Drag-and-drop reorder
               item.setAttribute('draggable', 'true');
-              
               item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', nodeSource);
-                item.classList.add('dragging');
+                item.style.opacity = '0.4';
                 e.stopPropagation();
               });
-
-              item.addEventListener('dragend', () => {
-                item.classList.remove('dragging');
-              });
-
+              item.addEventListener('dragend', () => { item.style.opacity = ''; });
               item.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                e.stopPropagation();
-                
                 const rect = item.getBoundingClientRect();
-                const relativeY = e.clientY - rect.top;
-                
-                if (relativeY < rect.height / 2) {
-                  item.style.borderTop = '2px solid var(--accent-color)';
-                  item.style.borderBottom = '';
-                } else {
-                  item.style.borderBottom = '2px solid var(--accent-color)';
-                  item.style.borderTop = '';
-                }
+                const mid = (e.clientY - rect.top) < rect.height / 2;
+                item.style.borderTop = mid ? '2px solid var(--accent-color)' : '';
+                item.style.borderBottom = mid ? '' : '2px solid var(--accent-color)';
               });
-
               item.addEventListener('dragleave', () => {
                 item.style.borderTop = '';
                 item.style.borderBottom = '';
               });
-
               item.addEventListener('drop', (e) => {
                 e.preventDefault();
-                e.stopPropagation();
                 item.style.borderTop = '';
                 item.style.borderBottom = '';
-
                 const draggedSource = e.dataTransfer.getData('text/plain');
                 if (!draggedSource || draggedSource === nodeSource) return;
-
                 const rect = item.getBoundingClientRect();
-                const relativeY = e.clientY - rect.top;
-                const position = relativeY < rect.height / 2 ? 'before' : 'after';
-
-                // Find parent of the target node in tree
-                const parentNode = findParentNodeInTree(tree, node.id);
-                if (parentNode) {
+                const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after';
+                const parentNode = findParentNodeInTree(layerTree, node.id);
+                if (parentNode && socket && socket.readyState === WebSocket.OPEN) {
                   const parentSource = convertNodeIdToSource(parentNode.id, currentFile);
                   socket.send(JSON.stringify({
                     type: 'reorder',
@@ -993,89 +1419,373 @@ export function getEditorHTML(port: number): string {
                     targetId: draggedSource,
                     parentId: parentSource,
                     siblingId: nodeSource,
-                    position: position
+                    position
                   }));
                 }
               });
 
-              // 3. Editable: Double-click to edit name text
+              // Double-click → inline edit
               item.addEventListener('dblclick', (e) => {
-                e.stopPropagation();
-                
-                const currentVal = node.text || node.name;
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.value = currentVal;
-                input.style.width = '100%';
-                input.style.background = 'var(--bg-base)';
-                input.style.border = '1px solid var(--accent-color)';
-                input.style.color = 'var(--text-primary)';
-                input.style.borderRadius = '4px';
-                input.style.padding = '2px 4px';
-                input.style.fontSize = '12px';
-                input.style.outline = 'none';
-                
-                const nameContainer = item.querySelector('.layer-name');
-                const originalHTML = nameContainer.innerHTML;
-                nameContainer.innerHTML = '';
-                nameContainer.appendChild(input);
-                input.focus();
-                input.select();
-                
-                let finished = false;
-                const finishEdit = () => {
-                  if (finished) return;
-                  finished = true;
-                  const newVal = input.value.trim();
-                  if (newVal && newVal !== currentVal) {
-                    const parsed = parseSource(nodeSource);
-                    if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+                if (e.target.closest('.layer-actions')) return;
+                const nameSpan = item.querySelector('.layer-name-text');
+                const original = node.name + (node.text ? ': ' + node.text : '');
+                const inp = document.createElement('input');
+                inp.value = node.text || node.name;
+                inp.style.cssText = 'background:var(--bg-base);border:1px solid var(--accent-color);color:var(--text-primary);padding:2px 4px;border-radius:3px;font-size:12px;font-family:inherit;outline:none;width:100%;';
+                nameSpan.innerHTML = '';
+                nameSpan.appendChild(inp);
+                inp.focus();
+                inp.select();
+
+                const commit = () => {
+                  const newText = inp.value.trim();
+                  if (newText && newText !== (node.text || node.name) && node.text !== undefined) {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({
                         type: 'edit',
-                        file: parsed.file,
-                        line: parsed.line,
-                        column: parsed.column,
-                        change: {
-                          type: 'text',
-                          property: 'text',
-                          value: newVal
-                        }
+                        file: currentFile,
+                        line: parseInt((nodeSource.match(/:(\\d+):(\\d+)$/) || [])[1] || '0', 10),
+                        column: parseInt((nodeSource.match(/:(\\d+)$/) || [])[0].slice(1) || '0', 10),
+                        change: { type: 'text', value: newText }
                       }));
                     }
-                  } else {
-                    nameContainer.innerHTML = originalHTML;
                   }
+                  renderLayersTree(layerTree);
                 };
-                
-                input.addEventListener('keydown', (ev) => {
-                  if (ev.key === 'Enter') {
-                    finishEdit();
-                  } else if (ev.key === 'Escape') {
-                    finished = true;
-                    nameContainer.innerHTML = originalHTML;
-                  }
+
+                inp.addEventListener('keydown', (ev) => {
+                  if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                  if (ev.key === 'Escape') { renderLayersTree(layerTree); }
+                  ev.stopPropagation();
                 });
-                
-                input.addEventListener('blur', finishEdit);
+                inp.addEventListener('blur', commit);
               });
 
               list.appendChild(item);
-              
-              if (node.children) {
+
+              if (node.children && node.children.length > 0) {
                 node.children.forEach(child => renderNode(child, depth + 1));
               }
             }
 
-            tree.forEach(node => renderNode(node, 0));
-            
-            // If an element is already selected, highlight it in the newly rendered tree
-            if (selectedElement) {
-              highlightActiveLayerItem(selectedElement.source);
+            if (tree && tree.length > 0) {
+              tree.forEach(node => renderNode(node, 0));
+              document.getElementById('layer-count').textContent = totalCount + ' nodes';
+            } else {
+              list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No JSX elements found</div>';
             }
           }
 
-          // Initial load
-          connectWebSocket();
+          // ═══════════════════════════════════════════════════════════════
+          // LOAD APP IFRAME
+          // ═══════════════════════════════════════════════════════════════
+          function loadApp(url) {
+            const iframe = document.getElementById('app-iframe');
+            const loading = document.getElementById('canvas-loading');
+            const statusEl = document.getElementById('load-status');
+
+            if (loading) loading.style.display = 'flex';
+            if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
+
+            iframe.onload = () => {
+              setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
+            };
+            iframe.onerror = () => {
+              if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
+            };
+
+            iframe.src = url;
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // PROPERTIES PANEL
+          // ═══════════════════════════════════════════════════════════════
+          function showNoSelection() {
+            document.getElementById('no-selection-msg').style.display = 'flex';
+            document.getElementById('props-content').style.display = 'none';
+            document.getElementById('selected-tag').textContent = '';
+          }
+
+          function showPropsPanel(tagName) {
+            document.getElementById('no-selection-msg').style.display = 'none';
+            document.getElementById('props-content').style.display = 'block';
+            document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
+          }
+
+          function parsePixels(val) {
+            if (!val) return '';
+            return parseInt(val, 10) || 0;
+          }
+
+          function populatePropsFromComputed(styles, rect) {
+            showPropsPanel(styles.tagName);
+
+            // Position & Size
+            if (rect) {
+              document.getElementById('prop-x').value = Math.round(rect.x || 0);
+              document.getElementById('prop-y').value = Math.round(rect.y || 0);
+              document.getElementById('prop-w').value = Math.round(rect.width || 0);
+              document.getElementById('prop-h').value = Math.round(rect.height || 0);
+            }
+
+            // Rotation
+            const transform = styles.transform || '';
+            const rotMatch = transform.match(/rotate\\(([\\d.-]+)deg\\)/);
+            document.getElementById('prop-rotation').value = rotMatch ? parseFloat(rotMatch[1]) : 0;
+
+            // Flex section
+            const isFlexContainer = styles.display === 'flex' || styles.display === 'inline-flex';
+            document.getElementById('section-flex').style.display = isFlexContainer ? 'block' : 'none';
+            if (isFlexContainer) {
+              setActiveBtn(['flex-row','flex-col'], styles.flexDirection === 'column' ? 'flex-col' : 'flex-row');
+              const jcMap = {'flex-start':'jc-start','center':'jc-center','flex-end':'jc-end','space-between':'jc-between','space-around':'jc-around'};
+              setActiveBtn(Object.values(jcMap), jcMap[styles.justifyContent] || '');
+              const aiMap = {'flex-start':'ai-start','center':'ai-center','flex-end':'ai-end','stretch':'ai-stretch'};
+              setActiveBtn(Object.values(aiMap), aiMap[styles.alignItems] || '');
+              document.getElementById('prop-gap').value = parsePixels(styles.gap) || '';
+              document.getElementById('prop-row-gap').value = parsePixels(styles.rowGap) || '';
+            }
+
+            // Spacing
+            document.getElementById('prop-mt').value = parsePixels(styles.marginTop);
+            document.getElementById('prop-mb').value = parsePixels(styles.marginBottom);
+            document.getElementById('prop-ml').value = parsePixels(styles.marginLeft);
+            document.getElementById('prop-mr').value = parsePixels(styles.marginRight);
+            document.getElementById('prop-pt').value = parsePixels(styles.paddingTop);
+            document.getElementById('prop-pb').value = parsePixels(styles.paddingBottom);
+            document.getElementById('prop-pl').value = parsePixels(styles.paddingLeft);
+            document.getElementById('prop-pr').value = parsePixels(styles.paddingRight);
+
+            // Typography
+            if (styles.fontFamily) document.getElementById('prop-font-family').value = styles.fontFamily;
+            if (styles.fontSize)   document.getElementById('prop-font-size').value = parsePixels(styles.fontSize);
+            if (styles.fontWeight) document.getElementById('prop-font-weight').value = styles.fontWeight;
+            if (styles.lineHeight) document.getElementById('prop-line-height').value = parseFloat(styles.lineHeight) || '';
+            if (styles.letterSpacing) document.getElementById('prop-letter-spacing').value = parsePixels(styles.letterSpacing);
+
+            const taMap = {'left':'ta-left','center':'ta-center','right':'ta-right','justify':'ta-justify'};
+            setActiveBtn(Object.values(taMap), taMap[styles.textAlign] || 'ta-left');
+
+            if (styles.color) {
+              const hex = rgbToHex(styles.color);
+              document.getElementById('prop-color').value = hex;
+              document.getElementById('prop-color-hex').value = hex;
+              document.getElementById('color-swatch-text').style.background = hex;
+            }
+
+            // Fill
+            const bg = styles.backgroundColor;
+            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+              const hex = rgbToHex(bg);
+              document.getElementById('prop-bg-color').value = hex;
+              document.getElementById('prop-bg-hex').value = hex;
+              document.getElementById('color-swatch-bg').style.background = hex;
+              setFillMode('solid');
+            } else {
+              setFillMode('none');
+            }
+
+            // Border
+            if (styles.borderColor) {
+              const hex = rgbToHex(styles.borderColor);
+              document.getElementById('prop-border-color').value = hex;
+              document.getElementById('color-swatch-border').style.background = hex;
+            }
+            document.getElementById('prop-border-width').value = parsePixels(styles.borderWidth) || 0;
+            if (styles.borderStyle) document.getElementById('prop-border-style').value = styles.borderStyle;
+
+            // Radius
+            document.getElementById('prop-br-tl').value = parsePixels(styles.borderTopLeftRadius) || 0;
+            document.getElementById('prop-br-tr').value = parsePixels(styles.borderTopRightRadius) || 0;
+            document.getElementById('prop-br-br').value = parsePixels(styles.borderBottomRightRadius) || 0;
+            document.getElementById('prop-br-bl').value = parsePixels(styles.borderBottomLeftRadius) || 0;
+
+            // Opacity
+            const opacity = styles.opacity !== undefined ? Math.round(parseFloat(styles.opacity || 1) * 100) : 100;
+            document.getElementById('prop-opacity').value = opacity;
+            document.getElementById('prop-opacity-slider').value = opacity;
+          }
+
+          function setActiveBtn(ids, activeId) {
+            ids.forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.classList.toggle('active', id === activeId);
+            });
+          }
+
+          function setFillMode(mode) {
+            setActiveBtn(['fill-none','fill-solid','fill-gradient'], 'fill-' + mode);
+            document.getElementById('fill-solid-controls').style.display = mode === 'solid' ? 'block' : 'none';
+            document.getElementById('fill-gradient-controls').style.display = mode === 'gradient' ? 'block' : 'none';
+          }
+
+          function rgbToHex(rgb) {
+            if (!rgb) return '#000000';
+            if (rgb.startsWith('#')) return rgb;
+            const m = rgb.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+            if (!m) return '#000000';
+            return '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
+          }
+
+          // Fill mode buttons
+          ['fill-none','fill-solid','fill-gradient'].forEach(id => {
+            document.getElementById(id).addEventListener('click', () => setFillMode(id.replace('fill-','')) );
+          });
+
+          // Gradient type
+          document.getElementById('grad-linear').addEventListener('click', () => setActiveBtn(['grad-linear','grad-radial'],'grad-linear'));
+          document.getElementById('grad-radial').addEventListener('click', () => setActiveBtn(['grad-linear','grad-radial'],'grad-radial'));
+
+          // Color swatches sync
+          document.getElementById('prop-color').addEventListener('input', (e) => {
+            document.getElementById('prop-color-hex').value = e.target.value;
+            document.getElementById('color-swatch-text').style.background = e.target.value;
+            sendEdit({ type: 'class', property: 'color', value: e.target.value });
+          });
+          document.getElementById('prop-color-hex').addEventListener('change', (e) => {
+            document.getElementById('prop-color').value = e.target.value;
+            document.getElementById('color-swatch-text').style.background = e.target.value;
+            sendEdit({ type: 'class', property: 'color', value: e.target.value });
+          });
+
+          document.getElementById('prop-bg-color').addEventListener('input', (e) => {
+            document.getElementById('prop-bg-hex').value = e.target.value;
+            document.getElementById('color-swatch-bg').style.background = e.target.value;
+            sendEdit({ type: 'class', property: 'backgroundColor', value: e.target.value });
+          });
+          document.getElementById('prop-bg-hex').addEventListener('change', (e) => {
+            document.getElementById('prop-bg-color').value = e.target.value;
+            document.getElementById('color-swatch-bg').style.background = e.target.value;
+            sendEdit({ type: 'class', property: 'backgroundColor', value: e.target.value });
+          });
+
+          // Opacity sync
+          document.getElementById('prop-opacity-slider').addEventListener('input', (e) => {
+            document.getElementById('prop-opacity').value = e.target.value;
+            sendEdit({ type: 'class', property: 'opacity', value: (e.target.value / 100).toString() });
+          });
+          document.getElementById('prop-opacity').addEventListener('change', (e) => {
+            document.getElementById('prop-opacity-slider').value = e.target.value;
+            sendEdit({ type: 'class', property: 'opacity', value: (e.target.value / 100).toString() });
+          });
+
+          // Flex direction
+          document.getElementById('flex-row').addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-row'); sendEdit({type:'class',property:'flexDirection',value:'row'}); });
+          document.getElementById('flex-col').addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-col'); sendEdit({type:'class',property:'flexDirection',value:'column'}); });
+
+          // Justify content
+          const jcValues = {'jc-start':'flex-start','jc-center':'center','jc-end':'flex-end','jc-between':'space-between','jc-around':'space-around'};
+          Object.entries(jcValues).forEach(([id, val]) => {
+            document.getElementById(id).addEventListener('click', () => {
+              setActiveBtn(Object.keys(jcValues), id);
+              sendEdit({type:'class',property:'justifyContent',value:val});
+            });
+          });
+
+          // Align items
+          const aiValues = {'ai-start':'flex-start','ai-center':'center','ai-end':'flex-end','ai-stretch':'stretch'};
+          Object.entries(aiValues).forEach(([id, val]) => {
+            document.getElementById(id).addEventListener('click', () => {
+              setActiveBtn(Object.keys(aiValues), id);
+              sendEdit({type:'class',property:'alignItems',value:val});
+            });
+          });
+
+          // Text align
+          const taValues = {'ta-left':'left','ta-center':'center','ta-right':'right','ta-justify':'justify'};
+          Object.entries(taValues).forEach(([id, val]) => {
+            document.getElementById(id).addEventListener('click', () => {
+              setActiveBtn(Object.keys(taValues), id);
+              sendEdit({type:'class',property:'textAlign',value:val});
+            });
+          });
+
+          // Text decoration
+          document.getElementById('td-underline').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+          document.getElementById('td-italic').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+          document.getElementById('td-strike').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+
+          // Numeric inputs — send on change
+          const numericInputMap = {
+            'prop-font-size': 'fontSize',
+            'prop-line-height': 'lineHeight',
+            'prop-letter-spacing': 'letterSpacing',
+            'prop-gap': 'gap',
+            'prop-row-gap': 'rowGap',
+            'prop-w': 'width',
+            'prop-h': 'height',
+            'prop-border-width': 'borderWidth',
+            'prop-br-tl': 'borderTopLeftRadius',
+            'prop-br-tr': 'borderTopRightRadius',
+            'prop-br-br': 'borderBottomRightRadius',
+            'prop-br-bl': 'borderBottomLeftRadius',
+          };
+          Object.entries(numericInputMap).forEach(([id, prop]) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+          });
+
+          // Font family
+          document.getElementById('prop-font-family').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontFamily',value:e.target.value}); });
+          document.getElementById('prop-font-weight').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontWeight',value:e.target.value}); });
+
+          // Margin/Padding
+          const spacingMap = {
+            'prop-mt': 'marginTop', 'prop-mb': 'marginBottom', 'prop-ml': 'marginLeft', 'prop-mr': 'marginRight',
+            'prop-pt': 'paddingTop', 'prop-pb': 'paddingBottom', 'prop-pl': 'paddingLeft', 'prop-pr': 'paddingRight',
+          };
+          Object.entries(spacingMap).forEach(([id, prop]) => {
+            document.getElementById(id).addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+          });
+
+          // Rotation
+          document.getElementById('prop-rotation').addEventListener('change', (e) => { sendEdit({type:'class',property:'transform',value:'rotate('+e.target.value+'deg)'}); });
+
+          // Border style
+          document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
+          document.getElementById('prop-border-color').addEventListener('input', (e) => {
+            document.getElementById('color-swatch-border').style.background = e.target.value;
+            sendEdit({type:'class',property:'borderColor',value:e.target.value});
+          });
+
+          // Shadow management
+          document.getElementById('add-shadow-btn').addEventListener('click', () => {
+            shadowCount++;
+            const row = document.createElement('div');
+            row.className = 'shadow-row';
+            row.dataset.shadowId = shadowCount;
+            row.innerHTML =
+              '<input type="number" class="props-input" placeholder="X" style="width:36px;" title="X offset">' +
+              '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
+              '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
+              '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
+              '<div class="color-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;"><input type="color" value="#000000"></div>' +
+              '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
+            row.querySelector('button').addEventListener('click', () => row.remove());
+            document.getElementById('shadows-list').appendChild(row);
+          });
+
+          // Helper: send style change by source
+          function sendStyleChange(source, property, value) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'class', property, value }
+            }));
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // INIT
+          // ═══════════════════════════════════════════════════════════════
+          connectSocket();
+          loadApp('http://localhost:${port}');
+          applyTransform();
         </script>
       </body>
     </html>

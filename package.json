@@ -1,7 +1,7 @@
 {
-  "name": "@srivarsank/glide",
-  "version": "0.1.0",
-  "description": "A visual code-native design tool overlay",
+  "name": "glide-dev",
+  "version": "1.0.0",
+  "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte app visually and write back to source.",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },

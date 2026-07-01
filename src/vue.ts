@@ -11,7 +11,7 @@ export function updateVueSFCClass(
 
   const templateContent = template.content;
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-cf-source="${escapedId}"[^>]*)>`, 'i');
+  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
   const match = templateContent.match(tagRegex);
   if (!match) return sfcCode;
 

@@ -25,7 +25,7 @@ export function buildComponentTree(code: string): ComponentTreeNode[] {
       
       let id = '';
       openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-cf-source') {
+        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
           if (attr.value && attr.value.type === 'StringLiteral') {
             id = attr.value.value;
           }

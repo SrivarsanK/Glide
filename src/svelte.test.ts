@@ -7,7 +7,7 @@ describe('Svelte SFC Transformation Adapter', () => {
       <script>
         let count = 0;
       </script>
-      <button class="btn btn-red" data-cf-source="src/Button.svelte:4:7">
+      <button class="btn btn-red" data-gl-source="src/Button.svelte:4:7">
         Count: {count}
       </button>
       <style>
@@ -24,13 +24,13 @@ describe('Svelte SFC Transformation Adapter', () => {
 
   test('should inject class attribute if missing from element tag', () => {
     const svelte = `
-      <div data-cf-source="src/Card.svelte:2:7">
+      <div data-gl-source="src/Card.svelte:2:7">
         Card
       </div>
     `;
 
     const updated = updateSvelteClass(svelte, 'src/Card.svelte:2:7', 'card p-4 border');
 
-    expect(updated).toContain('<div data-cf-source="src/Card.svelte:2:7" class="card p-4 border">');
+    expect(updated).toContain('<div data-gl-source="src/Card.svelte:2:7" class="card p-4 border">');
   });
 });

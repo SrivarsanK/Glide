@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { glideSourceStamping } from './plugin.js';
 
 describe('glideSourceStamping Vite Plugin', () => {
-  test('injects data-cf-source attributes in dev mode', () => {
+  test('injects data-gl-source attributes in dev mode', () => {
     const plugin = glideSourceStamping();
     
     // Simulate configResolved for serve (dev mode)
@@ -50,14 +50,14 @@ describe('glideSourceStamping Vite Plugin', () => {
     if (plugin.transformIndexHtml && typeof plugin.transformIndexHtml === 'function') {
       const result = (plugin.transformIndexHtml as any)(html);
       expect(result).toContain('__glide_initialized__');
-      expect(result).toContain('data-cf-source');
+      expect(result).toContain('data-gl-source');
       expect(result).toContain('<script>');
     } else {
       throw new Error('transformIndexHtml not found on plugin');
     }
   });
 
-  test('does not inject data-cf-source in production build mode', () => {
+  test('does not inject data-gl-source in production build mode', () => {
     const plugin = glideSourceStamping();
     
     // Simulate configResolved for build (production mode)

@@ -52,19 +52,19 @@ describe('GlideBridge Client Bridge', () => {
     expect(mockDocument.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function), true);
   });
 
-  test('should dispatch message on mousemove over data-cf-source element', () => {
+  test('should dispatch message on mousemove over data-gl-source element', () => {
     const bridge = new GlideBridge(mockWindow);
     bridge.init();
 
     const mockElement: any = {
-      getAttribute: vi.fn((attr) => (attr === 'data-cf-source' ? 'src/App.tsx:10:5' : null)),
+      getAttribute: vi.fn((attr) => (attr === 'data-gl-source' ? 'src/App.tsx:10:5' : null)),
       getBoundingClientRect: vi.fn(() => ({
         left: 50,
         top: 100,
         width: 200,
         height: 80,
       } as any)),
-      closest: vi.fn((selector) => (selector === '[data-cf-source]' ? mockElement : null)),
+      closest: vi.fn((selector) => (selector === '[data-gl-source]' ? mockElement : null)),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
       tagName: 'DIV',
@@ -91,14 +91,14 @@ describe('GlideBridge Client Bridge', () => {
     );
   });
 
-  test('should dispatch hover-exit when moving off data-cf-source elements', () => {
+  test('should dispatch hover-exit when moving off data-gl-source elements', () => {
     const bridge = new GlideBridge(mockWindow);
     bridge.init();
 
     const mockElement: any = {
       getAttribute: () => 'src/App.tsx:10:5',
       getBoundingClientRect: () => ({ left: 50, top: 100, width: 200, height: 80 }),
-      closest: (sel: string) => (sel === '[data-cf-source]' ? mockElement : null),
+      closest: (sel: string) => (sel === '[data-gl-source]' ? mockElement : null),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
       tagName: 'SECTION',
@@ -122,7 +122,7 @@ describe('GlideBridge Client Bridge', () => {
     const mockElement: any = {
       getAttribute: () => 'src/App.tsx:10:5',
       getBoundingClientRect: () => ({ left: 50, top: 100, width: 200, height: 80 }),
-      closest: (sel: string) => (sel === '[data-cf-source]' ? mockElement : null),
+      closest: (sel: string) => (sel === '[data-gl-source]' ? mockElement : null),
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
       tagName: 'BUTTON',

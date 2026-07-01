@@ -30,7 +30,7 @@ const BRIDGE_SCRIPT = `
   var selected = null;
 
   function sendMsg(type, el) {
-    var src = el.getAttribute('data-cf-source') || '';
+    var src = el.getAttribute('data-gl-source') || '';
     var r = el.getBoundingClientRect();
     window.parent.postMessage({
       type: type,
@@ -47,7 +47,7 @@ const BRIDGE_SCRIPT = `
   }
 
   document.addEventListener('mousemove', function(e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-cf-source]');
+    var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
     if (el) {
       if (hovered !== el) {
         if (hovered) hovered.removeAttribute('data-glide-hover');
@@ -63,7 +63,7 @@ const BRIDGE_SCRIPT = `
   });
 
   document.addEventListener('click', function(e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-cf-source]');
+    var el = e.target && e.target.closest && e.target.closest('[data-gl-source]');
     if (el) {
       e.preventDefault();
       e.stopPropagation();
@@ -76,7 +76,7 @@ const BRIDGE_SCRIPT = `
 
   window.addEventListener('message', function(e) {
     if (!e.data || e.data.type !== 'glide:select-element-by-id') return;
-    var el = document.querySelector('[data-cf-source="' + e.data.id + '"]');
+    var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
     if (el) {
       if (selected) selected.removeAttribute('data-glide-selected');
       selected = el;
@@ -145,17 +145,17 @@ export function glideSourceStamping(): Plugin {
                 const absolutePath = filename.replace(/\\/g, '/');
                 const sourceVal = `${absolutePath}:${loc.start.line}:${loc.start.column + 1}`;
 
-                // Check if already has data-cf-source
+                // Check if already has data-gl-source
                 const hasSourceAttr = nodePath.node.attributes.some(
                   (attr: any) =>
                     attr.type === 'JSXAttribute' &&
-                    attr.name.name === 'data-cf-source'
+                    attr.name.name === 'data-gl-source'
                 );
 
                 if (!hasSourceAttr) {
                   const t = babel.types;
                   const attr = t.jsxAttribute(
-                    t.jsxIdentifier('data-cf-source'),
+                    t.jsxIdentifier('data-gl-source'),
                     t.stringLiteral(sourceVal)
                   );
                   nodePath.node.attributes.push(attr);

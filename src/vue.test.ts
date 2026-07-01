@@ -5,7 +5,7 @@ describe('Vue SFC Transformation Adapter', () => {
   test('should update existing class attribute in template block', () => {
     const sfc = `
       <template>
-        <div class="p-4 bg-red-500" data-cf-source="src/App.vue:3:9">
+        <div class="p-4 bg-red-500" data-gl-source="src/App.vue:3:9">
           <p>Hello</p>
         </div>
       </template>
@@ -23,7 +23,7 @@ describe('Vue SFC Transformation Adapter', () => {
   test('should create class attribute if missing from element tag', () => {
     const sfc = `
       <template>
-        <div data-cf-source="src/App.vue:3:9">
+        <div data-gl-source="src/App.vue:3:9">
           <p>Hello</p>
         </div>
       </template>
@@ -31,6 +31,6 @@ describe('Vue SFC Transformation Adapter', () => {
 
     const updated = updateVueSFCClass(sfc, 'src/App.vue:3:9', 'p-4 shadow');
 
-    expect(updated).toContain('<div data-cf-source="src/App.vue:3:9" class="p-4 shadow">');
+    expect(updated).toContain('<div data-gl-source="src/App.vue:3:9" class="p-4 shadow">');
   });
 });

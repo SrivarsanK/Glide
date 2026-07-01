@@ -4,7 +4,7 @@ export function updateSvelteClass(
   updatedClasses: string
 ): string {
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-cf-source="${escapedId}"[^>]*)>`, 'i');
+  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
   const match = svelteCode.match(tagRegex);
   if (!match) return svelteCode;
 

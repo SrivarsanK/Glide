@@ -28,7 +28,7 @@ export function reorderJSXElement(
       const openingEl = path.node.openingElement;
       let currentId = '';
       openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-cf-source') {
+        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
           if (attr.value && attr.value.type === 'StringLiteral') {
             currentId = attr.value.value;
           }
@@ -129,7 +129,7 @@ export function insertJSXElement(
       const openingEl = path.node.openingElement;
       let currentId = '';
       openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-cf-source') {
+        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
           if (attr.value && attr.value.type === 'StringLiteral') {
             currentId = attr.value.value;
           }
