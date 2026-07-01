@@ -495,6 +495,7 @@ export function getEditorHTML(port: number): string {
         <script>
           let socket = null;
           let selectedElement = null;
+          let currentFile = '';
 
           function connectWebSocket() {
             socket = new WebSocket('ws://localhost:${port}');
@@ -516,6 +517,7 @@ export function getEditorHTML(port: number): string {
               try {
                 const message = JSON.parse(event.data);
                 if (message.type === 'tree') {
+                  currentFile = message.file;
                   renderLayersTree(message.tree);
                 }
               } catch {}
@@ -726,6 +728,31 @@ export function getEditorHTML(port: number): string {
             pin.addEventListener('click', (ev) => ev.stopPropagation());
           });
 
+          function convertNodeIdToSource(nodeId, file) {
+            if (!nodeId) return '';
+            if (nodeId.startsWith('line:')) {
+              const match = nodeId.match(/^line:(\d+):col:(\d+)$/);
+              if (match) {
+                const line = match[1];
+                const col = parseInt(match[2], 10) + 1; // Convert 0-indexed column to 1-indexed
+                return file + ':' + line + ':' + col;
+              }
+            }
+            return nodeId;
+          }
+
+          function highlightActiveLayerItem(source) {
+            const items = document.querySelectorAll('.layer-item');
+            items.forEach(item => {
+              if (item.dataset.source === source) {
+                item.classList.add('active');
+                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              } else {
+                item.classList.remove('active');
+              }
+            });
+          }
+
           // Handle message communication from GlideBridge running inside iframe
           window.addEventListener('message', (event) => {
             const data = event.data;
@@ -750,6 +777,7 @@ export function getEditorHTML(port: number): string {
               selectedElement = data;
               updatePropertiesPanel(data);
               updateLayersPanel(data);
+              highlightActiveLayerItem(data.source);
             }
 
             if (data.type === 'glide:element-resized') {
@@ -808,7 +836,11 @@ export function getEditorHTML(port: number): string {
             function renderNode(node, depth) {
               const item = document.createElement('div');
               item.className = 'layer-item';
-              if (selectedElement && selectedElement.source === node.id) {
+              
+              const nodeSource = convertNodeIdToSource(node.id, currentFile);
+              item.dataset.source = nodeSource;
+              
+              if (selectedElement && selectedElement.source === nodeSource) {
                 item.className += ' active';
               }
               item.style.paddingLeft = (12 + depth * 16) + 'px';
@@ -823,7 +855,7 @@ export function getEditorHTML(port: number): string {
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
                     type: 'glide:select-element-by-id',
-                    id: node.id
+                    id: nodeSource
                   }, '*');
                 }
               });
@@ -836,6 +868,11 @@ export function getEditorHTML(port: number): string {
             }
 
             tree.forEach(node => renderNode(node, 0));
+            
+            // If an element is already selected, highlight it in the newly rendered tree
+            if (selectedElement) {
+              highlightActiveLayerItem(selectedElement.source);
+            }
           }
 
           // Initial load
