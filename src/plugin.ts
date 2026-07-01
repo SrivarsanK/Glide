@@ -78,5 +78,38 @@ export function glideSourceStamping(): Plugin {
         map: result.map,
       };
     },
+
+    transformIndexHtml(html) {
+      if (!isDev) return html;
+      return {
+        html,
+        tags: [
+          {
+            tag: 'script',
+            attrs: { type: 'module' },
+            children: `
+              import { GlideBridge, GlideOverlay } from '/node_modules/@srivarsank/glide/dist/index.js';
+              if (typeof window !== 'undefined') {
+                const bridge = new GlideBridge(window);
+                bridge.init();
+
+                const overlay = new GlideOverlay(window);
+                overlay.init();
+
+                overlay.onResize((source, rect, delta) => {
+                  window.parent.postMessage({
+                    type: 'glide:element-resized',
+                    source,
+                    rect,
+                    delta
+                  }, '*');
+                });
+              }
+            `,
+            injectTo: 'body',
+          }
+        ]
+      };
+    },
   };
 }

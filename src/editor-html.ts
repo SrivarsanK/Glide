@@ -354,6 +354,28 @@ export function getEditorHTML(port: number): string {
               updatePropertiesPanel(data);
               updateLayersPanel(data);
             }
+
+            if (data.type === 'glide:element-resized') {
+              const { source, rect, delta } = data;
+              const parts = source.split(':');
+              if (parts.length >= 3 && socket && socket.readyState === WebSocket.OPEN) {
+                const file = parts[0];
+                const line = parseInt(parts[1], 10);
+                const column = parseInt(parts[2], 10);
+
+                socket.send(JSON.stringify({
+                  type: 'edit',
+                  file,
+                  line,
+                  column,
+                  change: {
+                    type: 'class',
+                    property: 'width',
+                    value: rect.width
+                  }
+                }));
+              }
+            }
           });
 
           function updatePropertiesPanel(data) {
