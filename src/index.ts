@@ -12,3 +12,4 @@ export { GlideBridge } from './bridge.js';
 export { GlideOverlay } from './overlay.js';
 export { snapToGrid } from './snap.js';
 export { saveUploadedAsset } from './assets.js';
+export { reorderJSXElement, insertJSXElement } from './reorder.js';

@@ -141,8 +141,8 @@ export function glideSourceStamping(): Plugin {
                 const loc = nodePath.node.loc;
                 if (!loc) return;
 
-                const relativePath = normalizePath(filename, rootDir);
-                const sourceVal = `${relativePath}:${loc.start.line}:${loc.start.column + 1}`;
+                const absolutePath = filename.replace(/\\/g, '/');
+                const sourceVal = `${absolutePath}:${loc.start.line}:${loc.start.column + 1}`;
 
                 // Check if already has data-cf-source
                 const hasSourceAttr = nodePath.node.attributes.some(

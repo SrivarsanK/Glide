@@ -28,9 +28,9 @@ describe('glideSourceStamping Vite Plugin', () => {
       expect(result).not.toBeNull();
       
       const transformedCode = (result as any).code;
-      expect(transformedCode).toContain('data-cf-source="src/App.tsx:4:11"');
-      expect(transformedCode).toContain('data-cf-source="src/App.tsx:5:13"');
-      expect(transformedCode).toContain('data-cf-source="src/App.tsx:6:13"');
+      expect(transformedCode).toContain('project/src/App.tsx:4:11"');
+      expect(transformedCode).toContain('project/src/App.tsx:5:13"');
+      expect(transformedCode).toContain('project/src/App.tsx:6:13"');
       // Bridge is injected via transformIndexHtml, NOT as a module import
       expect(transformedCode).not.toContain("import { GlideBridge");
     } else {

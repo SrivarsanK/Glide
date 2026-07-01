@@ -3,7 +3,7 @@ import { createServer, Server } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from './editor-html.js';
 import { buildComponentTree } from './tree.js';
-import { reorderJSXElement } from './reorder.js';
+import { reorderJSXElement, insertJSXElement } from './reorder.js';
 
 export interface EditChange {
   type: 'style' | 'class';
@@ -61,6 +61,37 @@ export class GlideServer {
                     file,
                     tree
                   }));
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'insert') {
+                const { file, parentId, elementType } = message;
+                if (fs.existsSync(file)) {
+                  try {
+                    const code = fs.readFileSync(file, 'utf-8');
+                    const updated = insertJSXElement(code, parentId, elementType);
+                    fs.writeFileSync(file, updated, 'utf-8');
+                    // Automatically send updated tree back
+                    const tree = buildComponentTree(updated);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file,
+                      tree
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
                 } else {
                   ws.send(JSON.stringify({
                     type: 'status',

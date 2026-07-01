@@ -91,6 +91,109 @@ export function getEditorHTML(port: number): string {
           .btn:hover {
             background: var(--accent-hover);
           }
+          
+          /* Figma-style Toolbar styles */
+          .figma-toolbar {
+            display: flex;
+            align-items: center;
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 2px;
+            gap: 2px;
+          }
+          .tool-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+          }
+          .tool-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+          }
+          .tool-btn.active {
+            color: var(--accent-color);
+            background: rgba(56, 189, 248, 0.15);
+          }
+          
+          /* Comment Pin styles */
+          .comment-pin {
+            position: absolute;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: default;
+          }
+          .pin-dot {
+            width: 24px;
+            height: 24px;
+            background: var(--accent-color);
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-size: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 2px solid var(--text-primary);
+          }
+          .pin-dot span {
+            transform: rotate(45deg);
+            display: inline-block;
+          }
+          .pin-popover {
+            position: absolute;
+            top: 30px;
+            left: 12px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px;
+            width: 200px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 1001;
+          }
+          .pin-popover textarea {
+            background: var(--bg-base);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            padding: 6px;
+            font-size: 12px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+          }
+          .pin-btn {
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+          .pin-cancel {
+            background: transparent;
+            color: var(--text-secondary);
+          }
+          .pin-submit {
+            background: var(--accent-color);
+            color: var(--bg-base);
+          }
           .main-container {
             display: flex;
             flex: 1;
@@ -237,24 +340,71 @@ export function getEditorHTML(port: number): string {
       </head>
       <body>
         <header>
-          <div class="logo">
+          <div class="logo" style="width:200px;">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             Glide <span>Canvas</span>
           </div>
 
+          <!-- Figma Tools in the Center -->
+          <div class="figma-toolbar">
+            <button class="tool-btn active" id="tool-move" title="Move Tool (V)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="3 3 10.07 19.97 12.58 12.58 19.97 10.07 3 3"/>
+                <line x1="13" y1="13" x2="19" y2="19"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-frame" title="Frame Tool (F)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-rectangle" title="Rectangle Tool (R)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-ellipse" title="Ellipse Tool (O)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-text" title="Text Tool (T)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 7 4 4 20 4 20 7"/>
+                <line x1="9" y1="20" x2="15" y2="20"/>
+                <line x1="12" y1="4" x2="12" y2="20"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-hand" title="Hand Tool (H)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/>
+                <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6"/>
+                <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8.5"/>
+                <path d="M6 14v-1.5a1.5 1.5 0 0 0-3 0V18a6 6 0 0 0 6 6h4a8 8 0 0 0 8-8v-3a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2"/>
+              </svg>
+            </button>
+            <button class="tool-btn" id="tool-comment" title="Comment Tool (C)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+          </div>
+
           <div class="toolbar">
             <div class="toolbar-input-group">
               <label for="app-url">App Url</label>
-              <input type="text" id="app-url" value="http://localhost:4321">
+              <input type="text" id="app-url" value="http://localhost:5173/">
             </div>
             <button class="btn" id="btn-load">Connect App</button>
-          </div>
-
-          <div class="status-badge">
-            <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">Disconnected</span>
+            <div class="status-badge" style="display:flex;align-items:center;gap:8px;margin-left:8px;">
+              <div class="status-dot" id="status-dot"></div>
+              <span id="status-text" style="font-size:12px;color:var(--text-secondary)">Disconnected</span>
+            </div>
           </div>
         </header>
 
@@ -417,12 +567,186 @@ export function getEditorHTML(port: number): string {
             }
           });
 
+          function parseSource(source) {
+            if (!source) return null;
+            const match = source.match(/^(.*):(\d+):(\d+)$/);
+            if (!match) return null;
+            return {
+              file: match[1],
+              line: parseInt(match[2], 10),
+              column: parseInt(match[3], 10)
+            };
+          }
+
+          // Figma Tools State Management
+          let activeTool = 'move';
+          const tools = {
+            move: document.getElementById('tool-move'),
+            frame: document.getElementById('tool-frame'),
+            rectangle: document.getElementById('tool-rectangle'),
+            ellipse: document.getElementById('tool-ellipse'),
+            text: document.getElementById('tool-text'),
+            hand: document.getElementById('tool-hand'),
+            comment: document.getElementById('tool-comment')
+          };
+
+          function setTool(toolName) {
+            activeTool = toolName;
+            Object.keys(tools).forEach(name => {
+              if (tools[name]) {
+                if (name === toolName) {
+                  tools[name].classList.add('active');
+                } else {
+                  tools[name].classList.remove('active');
+                }
+              }
+            });
+
+            // Set cursor style for iframe & canvas-container
+            const iframe = document.getElementById('app-iframe');
+            const container = document.querySelector('.canvas-container');
+            
+            const cursorMap = {
+              move: 'default',
+              hand: 'grab',
+              text: 'text',
+              rectangle: 'crosshair',
+              ellipse: 'crosshair',
+              frame: 'crosshair',
+              comment: 'cell'
+            };
+            
+            const cursor = cursorMap[toolName] || 'default';
+            if (iframe) iframe.style.cursor = cursor;
+            if (container) container.style.cursor = cursor;
+          }
+
+          // Toolbar click events
+          Object.keys(tools).forEach(name => {
+            if (tools[name]) {
+              tools[name].addEventListener('click', () => setTool(name));
+            }
+          });
+
+          // Figma Keyboard Shortcuts
+          window.addEventListener('keydown', (e) => {
+            if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+            const key = e.key.toLowerCase();
+            if (key === 'v') setTool('move');
+            else if (key === 'f' || key === 'a') setTool('frame');
+            else if (key === 'r') setTool('rectangle');
+            else if (key === 'o') setTool('ellipse');
+            else if (key === 't') setTool('text');
+            else if (key === 'h') setTool('hand');
+            else if (key === 'c') setTool('comment');
+          });
+
+          // Hand tool canvas panning
+          const canvasContainer = document.querySelector('.canvas-container');
+          let isPanning = false;
+          let startX, startY, scrollLeft, scrollTop;
+
+          canvasContainer.addEventListener('mousedown', (e) => {
+            if (activeTool !== 'hand') return;
+            isPanning = true;
+            canvasContainer.style.cursor = 'grabbing';
+            startX = e.pageX - canvasContainer.offsetLeft;
+            startY = e.pageY - canvasContainer.offsetTop;
+            scrollLeft = canvasContainer.scrollLeft;
+            scrollTop = canvasContainer.scrollTop;
+          });
+
+          canvasContainer.addEventListener('mouseleave', () => {
+            isPanning = false;
+            if (activeTool === 'hand') canvasContainer.style.cursor = 'grab';
+          });
+
+          canvasContainer.addEventListener('mouseup', () => {
+            isPanning = false;
+            if (activeTool === 'hand') canvasContainer.style.cursor = 'grab';
+          });
+
+          canvasContainer.addEventListener('mousemove', (e) => {
+            if (!isPanning || activeTool !== 'hand') return;
+            e.preventDefault();
+            const x = e.pageX - canvasContainer.offsetLeft;
+            const y = e.pageY - canvasContainer.offsetTop;
+            const walkX = (x - startX) * 1.5;
+            const walkY = (y - startY) * 1.5;
+            canvasContainer.scrollLeft = scrollLeft - walkX;
+            canvasContainer.scrollTop = scrollTop - walkY;
+          });
+
+          // Comment tool pinning on canvas
+          canvasContainer.addEventListener('click', (e) => {
+            if (activeTool !== 'comment') return;
+            
+            // Drop a pin at click location relative to canvas-container
+            const rect = canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left + canvasContainer.scrollLeft;
+            const y = e.clientY - rect.top + canvasContainer.scrollTop;
+
+            const pin = document.createElement('div');
+            pin.className = 'comment-pin';
+            pin.style.left = (x - 12) + 'px';
+            pin.style.top = (y - 12) + 'px';
+            
+            pin.innerHTML = 
+              '<div class="pin-dot"><span>💬</span></div>' +
+              '<div class="pin-popover">' +
+              '  <textarea placeholder="Write a comment..." rows="2"></textarea>' +
+              '  <div style="display:flex;justify-content:flex-end;gap:4px;margin-top:4px;">' +
+              '    <button class="pin-btn pin-cancel">Cancel</button>' +
+              '    <button class="pin-btn pin-submit">Post</button>' +
+              '  </div>' +
+              '</div>';
+
+            canvasContainer.appendChild(pin);
+
+            const textarea = pin.querySelector('textarea');
+            textarea.focus();
+
+            pin.querySelector('.pin-cancel').addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              pin.remove();
+            });
+
+            pin.querySelector('.pin-submit').addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const text = textarea.value.trim();
+              if (text) {
+                pin.querySelector('.pin-popover').innerHTML = 
+                  '<div style="font-weight:600;font-size:12px;color:var(--accent-color)">You</div>' +
+                  '<div style="font-size:12px;margin-top:2px;color:var(--text-primary)">' + text + '</div>';
+              } else {
+                pin.remove();
+              }
+            });
+            
+            pin.addEventListener('click', (ev) => ev.stopPropagation());
+          });
+
           // Handle message communication from GlideBridge running inside iframe
           window.addEventListener('message', (event) => {
             const data = event.data;
             if (!data || typeof data !== 'object') return;
 
             if (data.type === 'glide:element-selected') {
+              if (activeTool !== 'move') {
+                // If a creation tool is active, insert the element into the clicked element as a parent!
+                const parsed = parseSource(data.source);
+                if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: 'insert',
+                    file: parsed.file,
+                    parentId: data.source,
+                    elementType: activeTool
+                  }));
+                  setTool('move'); // Reset to selection mode
+                }
+                return;
+              }
+              
               selectedElement = data;
               updatePropertiesPanel(data);
               updateLayersPanel(data);
@@ -430,17 +754,13 @@ export function getEditorHTML(port: number): string {
 
             if (data.type === 'glide:element-resized') {
               const { source, rect, delta } = data;
-              const parts = source.split(':');
-              if (parts.length >= 3 && socket && socket.readyState === WebSocket.OPEN) {
-                const file = parts[0];
-                const line = parseInt(parts[1], 10);
-                const column = parseInt(parts[2], 10);
-
+              const parsed = parseSource(source);
+              if (parsed && socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({
                   type: 'edit',
-                  file,
-                  line,
-                  column,
+                  file: parsed.file,
+                  line: parsed.line,
+                  column: parsed.column,
                   change: {
                     type: 'class',
                     property: 'width',
@@ -453,7 +773,6 @@ export function getEditorHTML(port: number): string {
 
           function updatePropertiesPanel(data) {
             const { source, tagName, classNames, rect } = data;
-            const parts = source.split(':');
 
             // Show element info panel
             const infoPanel = document.getElementById('element-info');
@@ -473,13 +792,11 @@ export function getEditorHTML(port: number): string {
           }
 
           function updateLayersPanel(data) {
-            const source = data.source;
-            const parts = source.split(':');
-            if (parts.length >= 3 && socket && socket.readyState === WebSocket.OPEN) {
-              const file = parts[0];
+            const parsed = parseSource(data.source);
+            if (parsed && socket && socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: 'get-tree',
-                file
+                file: parsed.file
               }));
             }
           }
@@ -495,12 +812,11 @@ export function getEditorHTML(port: number): string {
                 item.className += ' active';
               }
               item.style.paddingLeft = (12 + depth * 16) + 'px';
-              item.innerHTML = \`
-                <div class="layer-name">
-                  <span class="layer-tag">\${node.name[0].toUpperCase() === node.name[0] ? 'Component' : 'HTML'}</span>
-                  \${node.name}
-                </div>
-              \`;
+              item.innerHTML = 
+                '<div class="layer-name">' +
+                '  <span class="layer-tag">' + (node.name[0].toUpperCase() === node.name[0] ? 'Component' : 'HTML') + '</span> ' +
+                node.name +
+                '</div>';
               
               item.addEventListener('click', () => {
                 const iframe = document.getElementById('app-iframe');
