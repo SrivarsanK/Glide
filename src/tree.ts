@@ -5,6 +5,8 @@ const traverse = (_traverse as any).default || _traverse;
 export interface ComponentTreeNode {
   id: string;
   name: string;
+  className?: string;
+  text?: string;
   children: ComponentTreeNode[];
 }
 
@@ -50,10 +52,36 @@ export function buildComponentTree(code: string): ComponentTreeNode[] {
         name = parts.join('.');
       }
 
+      let className = '';
+      openingEl.attributes.forEach((attr: any) => {
+        if (attr.type === 'JSXAttribute' && attr.name.name === 'className') {
+          if (attr.value && attr.value.type === 'StringLiteral') {
+            className = attr.value.value;
+          }
+        }
+      });
+
+      let text = '';
+      if (path.node.children) {
+        path.node.children.forEach((child: any) => {
+          if (child.type === 'JSXText') {
+            const val = child.value.trim();
+            if (val) text = val;
+          } else if (child.type === 'JSXExpressionContainer' && child.expression.type === 'StringLiteral') {
+            text = child.expression.value;
+          }
+        });
+      }
+      if (text && text.length > 25) {
+        text = text.substring(0, 22) + '...';
+      }
+
       const treeNode: ComponentTreeNode = {
         id,
         name,
         children: [],
+        ...(className ? { className } : {}),
+        ...(text ? { text } : {}),
       };
 
       nodeMap.set(path.node, treeNode);

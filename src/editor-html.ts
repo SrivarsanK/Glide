@@ -227,32 +227,69 @@ export function getEditorHTML(port: number): string {
             padding: 10px;
           }
           .layer-item {
-            padding: 8px 12px;
+            padding: 6px 12px;
             border-radius: 4px;
             font-size: 13px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 4px;
-            transition: background 0.15s;
+            margin-bottom: 2px;
+            transition: background 0.15s, opacity 0.15s, border 0.1s;
+            user-select: none;
           }
           .layer-item:hover {
             background: var(--bg-element);
           }
           .layer-item.active {
-            background: #0284c7;
-            color: #ffffff;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-color);
+            border-left: 2px solid var(--accent-color);
+          }
+          .layer-item.dragging {
+            opacity: 0.4;
+            background: rgba(255, 255, 255, 0.05);
           }
           .layer-name {
             display: flex;
             align-items: center;
             gap: 6px;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
-          .layer-tag {
-            color: var(--accent-color);
-            font-size: 11px;
+          .layer-tag-badge {
+            font-size: 9px;
+            padding: 2px 4px;
+            border-radius: 4px;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .layer-tag-badge.component {
+            background: rgba(167, 139, 250, 0.15);
+            color: #c084fc;
+          }
+          .layer-tag-badge.html {
+            background: rgba(156, 163, 175, 0.12);
+            color: #9ca3af;
+          }
+          .layer-info-name {
+            font-weight: 500;
+            color: var(--text-primary);
+          }
+          .layer-info-class {
+            color: #a78bfa;
+            font-size: 11px;
+            font-family: monospace;
+            opacity: 0.85;
+          }
+          .layer-info-text {
+            color: #fbbf24;
+            font-size: 11px;
+            font-style: italic;
+            opacity: 0.85;
           }
           .canvas-container {
             flex: 1;
@@ -829,6 +866,17 @@ export function getEditorHTML(port: number): string {
             }
           }
 
+          function findParentNodeInTree(nodes, targetId) {
+            for (const node of nodes) {
+              if (node.children && node.children.some(child => child.id === targetId)) {
+                return node;
+              }
+              const found = findParentNodeInTree(node.children || [], targetId);
+              if (found) return found;
+            }
+            return null;
+          }
+
           function renderLayersTree(tree) {
             const list = document.getElementById('layers-list');
             list.innerHTML = '';
@@ -844,13 +892,30 @@ export function getEditorHTML(port: number): string {
                 item.className += ' active';
               }
               item.style.paddingLeft = (12 + depth * 16) + 'px';
+              
+              // 1. Labeling: Generate rich descriptive HTML
+              const isComponent = node.name[0].toUpperCase() === node.name[0];
+              const badgeClass = isComponent ? 'layer-tag-badge component' : 'layer-tag-badge html';
+              const badgeText = isComponent ? 'Comp' : 'HTML';
+              
+              let detailsHTML = '';
+              if (node.className) {
+                const cleanClasses = node.className.split(' ').slice(0, 2).map(c => '.' + c).join('');
+                detailsHTML += ' <span class="layer-info-class">' + cleanClasses + '</span>';
+              }
+              if (node.text) {
+                detailsHTML += ' <span class="layer-info-text">"' + node.text + '"</span>';
+              }
+
               item.innerHTML = 
                 '<div class="layer-name">' +
-                '  <span class="layer-tag">' + (node.name[0].toUpperCase() === node.name[0] ? 'Component' : 'HTML') + '</span> ' +
-                node.name +
+                '  <span class="' + badgeClass + '">' + badgeText + '</span>' +
+                '  <span class="layer-info-name">' + node.name + '</span>' +
+                detailsHTML +
                 '</div>';
               
-              item.addEventListener('click', () => {
+              // Select item on click
+              item.addEventListener('click', (e) => {
                 const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
@@ -858,6 +923,129 @@ export function getEditorHTML(port: number): string {
                     id: nodeSource
                   }, '*');
                 }
+              });
+
+              // 2. Movable: HTML5 Drag & Drop reordering
+              item.setAttribute('draggable', 'true');
+              
+              item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', nodeSource);
+                item.classList.add('dragging');
+                e.stopPropagation();
+              });
+
+              item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+              });
+
+              item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const rect = item.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                
+                if (relativeY < rect.height / 2) {
+                  item.style.borderTop = '2px solid var(--accent-color)';
+                  item.style.borderBottom = '';
+                } else {
+                  item.style.borderBottom = '2px solid var(--accent-color)';
+                  item.style.borderTop = '';
+                }
+              });
+
+              item.addEventListener('dragleave', () => {
+                item.style.borderTop = '';
+                item.style.borderBottom = '';
+              });
+
+              item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                item.style.borderTop = '';
+                item.style.borderBottom = '';
+
+                const draggedSource = e.dataTransfer.getData('text/plain');
+                if (!draggedSource || draggedSource === nodeSource) return;
+
+                const rect = item.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                const position = relativeY < rect.height / 2 ? 'before' : 'after';
+
+                // Find parent of the target node in tree
+                const parentNode = findParentNodeInTree(tree, node.id);
+                if (parentNode) {
+                  const parentSource = convertNodeIdToSource(parentNode.id, currentFile);
+                  socket.send(JSON.stringify({
+                    type: 'reorder',
+                    file: currentFile,
+                    targetId: draggedSource,
+                    parentId: parentSource,
+                    siblingId: nodeSource,
+                    position: position
+                  }));
+                }
+              });
+
+              // 3. Editable: Double-click to edit name text
+              item.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                
+                const currentVal = node.text || node.name;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = currentVal;
+                input.style.width = '100%';
+                input.style.background = 'var(--bg-base)';
+                input.style.border = '1px solid var(--accent-color)';
+                input.style.color = 'var(--text-primary)';
+                input.style.borderRadius = '4px';
+                input.style.padding = '2px 4px';
+                input.style.fontSize = '12px';
+                input.style.outline = 'none';
+                
+                const nameContainer = item.querySelector('.layer-name');
+                const originalHTML = nameContainer.innerHTML;
+                nameContainer.innerHTML = '';
+                nameContainer.appendChild(input);
+                input.focus();
+                input.select();
+                
+                let finished = false;
+                const finishEdit = () => {
+                  if (finished) return;
+                  finished = true;
+                  const newVal = input.value.trim();
+                  if (newVal && newVal !== currentVal) {
+                    const parsed = parseSource(nodeSource);
+                    if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({
+                        type: 'edit',
+                        file: parsed.file,
+                        line: parsed.line,
+                        column: parsed.column,
+                        change: {
+                          type: 'text',
+                          property: 'text',
+                          value: newVal
+                        }
+                      }));
+                    }
+                  } else {
+                    nameContainer.innerHTML = originalHTML;
+                  }
+                };
+                
+                input.addEventListener('keydown', (ev) => {
+                  if (ev.key === 'Enter') {
+                    finishEdit();
+                  } else if (ev.key === 'Escape') {
+                    finished = true;
+                    nameContainer.innerHTML = originalHTML;
+                  }
+                });
+                
+                input.addEventListener('blur', finishEdit);
               });
 
               list.appendChild(item);

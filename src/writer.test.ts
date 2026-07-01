@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findJSXElementAt, updateClassName } from './writer.js';
+import { findJSXElementAt, updateClassName, updateJSXText } from './writer.js';
 
 describe('AST Write-back Engine', () => {
   test('should find a JSX opening element by coordinates', () => {
@@ -109,5 +109,21 @@ describe('AST Write-back Engine', () => {
 
     // sm:ml-4 should be added; ml-2 should be untouched
     expect(result).toContain('className="bg-white ml-2 sm:ml-4"');
+  });
+
+  test('should modify the inner text child of a JSX element', () => {
+    const code = `
+      export function Heading() {
+        return (
+          <h1>
+            Original Title
+          </h1>
+        );
+      }
+    `;
+
+    // Coordinates for <h1> (line 4, column 11)
+    const result = updateJSXText(code, 4, 11, 'Updated Title');
+    expect(result).toContain('<h1>Updated Title</h1>');
   });
 });

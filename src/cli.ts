@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { GlideServer } from './index.js';
-import { updateClassName } from './writer.js';
+import { updateClassName, updateJSXText } from './writer.js';
 import * as fs from 'fs';
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 7777;
@@ -12,6 +12,11 @@ server.onEdit((file, line, column, change) => {
     const updated = updateClassName(code, line, column, change.property, change.value);
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
+  } else if (change.type === 'text') {
+    const code = fs.readFileSync(file, 'utf-8');
+    const updated = updateJSXText(code, line, column, change.value);
+    fs.writeFileSync(file, updated, 'utf-8');
+    console.log(`[Glide] Updated text content in ${file}:${line}:${column}`);
   }
 });
 

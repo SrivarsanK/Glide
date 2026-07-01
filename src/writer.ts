@@ -1,6 +1,10 @@
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
+import * as t from '@babel/types';
+import _generate from '@babel/generator';
+
 const traverse = (traverseModule as any).default || traverseModule;
+const generate = (_generate as any).default || _generate;
 
 export function findJSXElementAt(
   sourceCode: string,
@@ -120,4 +124,60 @@ export function updateClassName(
       sourceCode.slice(insertIndex)
     );
   }
+}
+
+export function updateJSXText(
+  sourceCode: string,
+  line: number,
+  column: number,
+  newText: string
+): string {
+  const ast = parse(sourceCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+
+  let targetElementPath: any = null;
+
+  traverse(ast, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        targetElementPath = path;
+        path.stop();
+      }
+    },
+  });
+
+  if (!targetElementPath) {
+    throw new Error(`JSX element not found at line ${line}, column ${column}`);
+  }
+
+  // Replace children of target element with new text node
+  targetElementPath.node.children = [t.jsxText(newText)];
+
+  // Generate code for root JSX element
+  let rootJSXPath = targetElementPath;
+  while (rootJSXPath.parentPath) {
+    if (rootJSXPath.parentPath.isJSXElement()) {
+      rootJSXPath = rootJSXPath.parentPath;
+    } else {
+      break;
+    }
+  }
+
+  const start = rootJSXPath.node.start;
+  const end = rootJSXPath.node.end;
+
+  if (start === undefined || end === undefined || start === null || end === null) {
+    throw new Error('AST node position ranges are missing.');
+  }
+
+  const { code: newJSXCode } = generate(rootJSXPath.node, {
+    retainLines: false,
+    compact: false,
+    comments: true,
+  });
+
+  return sourceCode.substring(0, start) + newJSXCode + sourceCode.substring(end);
 }
