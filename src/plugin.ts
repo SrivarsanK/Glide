@@ -610,14 +610,20 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
     var el = document.getElementById('__glide_positions__');
     if (el) el.textContent = data.css;
     
-    // Clear temporary inline styles now that they are persisted in the stylesheet
-    var elements = document.querySelectorAll('[data-gl-source]');
-    for (var i = 0; i < elements.length; i++) {
-      var item = elements[i];
-      item.style.removeProperty('left');
-      item.style.removeProperty('top');
-      item.style.removeProperty('position');
-    }
+    // Defer clearing inline styles by 2 frames to ensure the browser has parsed the new CSS and rendered it.
+    // This eliminates the visual snap-back/flashing caused by removing inline styles before style recalculation completes.
+    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
+    raf(function() {
+      raf(function() {
+        var elements = document.querySelectorAll('[data-gl-source]');
+        for (var i = 0; i < elements.length; i++) {
+          var item = elements[i];
+          item.style.removeProperty('left');
+          item.style.removeProperty('top');
+          item.style.removeProperty('position');
+        }
+      });
+    });
 
     if (typeof window.__glide_refresh_selection__ === 'function') {
       setTimeout(window.__glide_refresh_selection__, 0);
