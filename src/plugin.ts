@@ -353,6 +353,18 @@ const BRIDGE_SCRIPT = `
       // Disconnect observer to avoid recursion from our own DOM mutations
       observer.disconnect();
 
+      // If we are actively dragging, skip sending style and layout updates to the parent editor
+      // to prevent layout thrashing, lagging, and screen flashing.
+      if (isDragging) {
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true
+        });
+        return;
+      }
+
       // Re-query selection/hover elements if they got replaced in the DOM by HMR
       if (selected) {
         var src = selected.getAttribute('data-gl-source');
