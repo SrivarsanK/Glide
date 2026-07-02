@@ -531,6 +531,16 @@ if (import.meta.hot) {
   import.meta.hot.on('glide:positions-updated', function(data) {
     var el = document.getElementById('__glide_positions__');
     if (el) el.textContent = data.css;
+    
+    // Clear temporary inline styles now that they are persisted in the stylesheet
+    var elements = document.querySelectorAll('[data-gl-source]');
+    for (var i = 0; i < elements.length; i++) {
+      var item = elements[i];
+      item.style.removeProperty('left');
+      item.style.removeProperty('top');
+      item.style.removeProperty('position');
+    }
+
     if (typeof window.__glide_refresh_selection__ === 'function') {
       // Defer slightly to ensure browser applies style repaint before querying rect coordinates
       setTimeout(window.__glide_refresh_selection__, 0);
