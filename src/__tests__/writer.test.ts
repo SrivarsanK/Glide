@@ -146,5 +146,41 @@ describe('AST Write-back Engine', () => {
     // ml-4 (16px) - 4px = 12px -> ml-3
     expect(result).toContain('className="bg-white ml-3"');
   });
+
+  test('should verify correct content hash and succeed', () => {
+    const code = `
+      export function Box() {
+        return (
+          <div className="bg-white ml-4">
+            Box
+          </div>
+        );
+      }
+    `.trim();
+
+    // The node slice starts at `<div ...>` and ends at `</div>`
+    const nodeSlice = `<div className="bg-white ml-4">\n            Box\n          </div>`;
+    const hash = computeNodeHash(nodeSlice);
+
+    const result = updateClassName(code, 3, 11, 'className', 'bg-blue', undefined, hash);
+    expect(result).toContain('className="bg-blue"');
+  });
+
+  test('should throw STALE_NODE error when hash does not match', () => {
+    const code = `
+      export function Box() {
+        return (
+          <div className="bg-white ml-4">
+            Box
+          </div>
+        );
+      }
+    `.trim();
+
+    expect(() => {
+      updateClassName(code, 3, 11, 'className', 'bg-blue', undefined, 'incorrecthash');
+    }).toThrow('STALE_NODE: Reference is stale');
+  });
 });
+import { computeNodeHash } from '../writer.js';
 

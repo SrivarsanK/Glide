@@ -995,6 +995,7 @@ export function getEditorHTML(port: number): string {
           let selectedRect = null;
           let selectedComputedStyles = null;
           const componentRootSources = new Set();
+          let currentGeneration = 0;
           let selectedSources = [];
           let selectedRects = [];
           let hoveredElement = null;
@@ -1063,6 +1064,7 @@ export function getEditorHTML(port: number): string {
                 const message = JSON.parse(event.data);
                 if (message.type === 'tree') {
                   currentFile = message.file;
+                  currentGeneration = message.generation || 0;
                   renderLayersTree(message.tree);
                 } else if (message.type === 'status') {
                   if (message.success) {
@@ -1088,6 +1090,8 @@ export function getEditorHTML(port: number): string {
               file: parsed.file,
               line: parsed.line,
               column: parsed.column,
+              hash: parsed.hash,
+              generation: currentGeneration,
               viewportWidth: iframeWidth.current,
               change
             }));
@@ -1098,17 +1102,23 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           function parseSource(source) {
             if (!source) return null;
-            const match = source.match(/^(.*):(\\d+):(\\d+)$/);
+            const match = source.match(/^(.*):(\\d+):(\\d+)(?::([a-f0-9]+))?$/);
             if (!match) return null;
-            return { file: match[1], line: parseInt(match[2], 10), column: parseInt(match[3], 10) };
+            return {
+              file: match[1],
+              line: parseInt(match[2], 10),
+              column: parseInt(match[3], 10),
+              hash: match[4] || null
+            };
           }
 
           function convertNodeIdToSource(nodeId, file) {
-            const match = nodeId.match(/^line:(\\d+):col:(\\d+)$/);
+            const match = nodeId.match(/^line:(\\d+):col:(\\d+)(?::([a-f0-9]+))?$/);
             if (match) {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
-              return file + ':' + line + ':' + col;
+              const hash = match[3] || 'nohash';
+              return file + ':' + line + ':' + col + ':' + hash;
             }
             return nodeId;
           }
@@ -2258,6 +2268,8 @@ export function getEditorHTML(port: number): string {
               file: parsed.file,
               line: parsed.line,
               column: parsed.column,
+              hash: parsed.hash,
+              generation: currentGeneration,
               viewportWidth: iframeWidth.current,
               change: { type: 'multi-class', value: styles }
             }));
@@ -2274,6 +2286,8 @@ export function getEditorHTML(port: number): string {
               file: parsed.file,
               line: parsed.line,
               column: parsed.column,
+              hash: parsed.hash,
+              generation: currentGeneration,
               viewportWidth: iframeWidth.current,
               change: { type: 'position', value: styles }
             }));

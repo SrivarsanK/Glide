@@ -1,5 +1,7 @@
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
+import { computeNodeHash } from './writer.js';
+
 const traverse = (_traverse as any).default || _traverse;
 
 export interface ComponentTreeNode {
@@ -34,7 +36,18 @@ export function buildComponentTree(code: string): ComponentTreeNode[] {
 
       if (!id) {
         const loc = path.node.loc;
-        id = loc ? `line:${loc.start.line}:col:${loc.start.column}` : Math.random().toString(36).substring(7);
+        if (loc) {
+          const start = path.node.start;
+          const end = path.node.end;
+          let hash = 'nohash';
+          if (start != null && end != null) {
+            const slice = code.slice(start, end);
+            hash = computeNodeHash(slice);
+          }
+          id = `line:${loc.start.line}:col:${loc.start.column}:${hash}`;
+        } else {
+          id = Math.random().toString(36).substring(7);
+        }
       }
 
       let name = '';

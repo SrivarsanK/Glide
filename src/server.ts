@@ -3,6 +3,8 @@ import { createServer, Server } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from './editor-html.js';
 import { buildComponentTree } from './tree.js';
+import * as path from 'path';
+import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from './reorder.js';
 
 export interface EditChange {
@@ -23,7 +25,8 @@ export type EditCallback = (
   file: string,
   line: number,
   column: number,
-  change: EditChange
+  change: EditChange,
+  hash?: string
 ) => void | Promise<void>;
 
 export class GlideServer {
@@ -32,6 +35,8 @@ export class GlideServer {
   private port: number;
   private targetPort: number;
   private editCallbacks: EditCallback[] = [];
+  private fileGenerations = new Map<string, number>();
+  private watcher: any = null;
 
   constructor(port = 7777, targetPort = 5173) {
     this.port = port;
@@ -46,6 +51,15 @@ export class GlideServer {
           res.end(getEditorHTML(this.targetPort));
         });
 
+        // Start file watcher for drift detection
+        const srcPath = path.resolve(process.cwd(), 'src');
+        this.watcher = chokidar.watch(srcPath, { persistent: true });
+        this.watcher.on('change', (filePath: string) => {
+          const normPath = filePath.replace(/\\/g, '/');
+          this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
+          console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
+        });
+
         this.wss = new WebSocketServer({ server: this.server });
 
         this.wss.on('connection', (ws: WebSocket) => {
@@ -58,10 +72,12 @@ export class GlideServer {
                 if (fs.existsSync(file)) {
                   const code = fs.readFileSync(file, 'utf-8');
                   const tree = buildComponentTree(code);
+                  const normPath = path.resolve(file).replace(/\\/g, '/');
                   ws.send(JSON.stringify({
                     type: 'tree',
                     file,
-                    tree
+                    tree,
+                    generation: this.fileGenerations.get(normPath) || 0
                   }));
                 } else {
                   ws.send(JSON.stringify({
@@ -223,8 +239,8 @@ export class GlideServer {
               }
 
               if (message.type === 'edit') {
-                const { file, line, column, change } = message as EditMessage;
-                console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column}`);
+                const { file, line, column, change, hash, generation } = message as any;
+                console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
 
                 // Validate parameters
                 if (!file || typeof line !== 'number' || typeof column !== 'number' || !change) {
@@ -238,17 +254,31 @@ export class GlideServer {
                   return;
                 }
 
+                // Invalidate on drift check
+                const normPath = path.resolve(file).replace(/\\/g, '/');
+                const currentGen = this.fileGenerations.get(normPath) || 0;
+                if (generation !== undefined && generation !== currentGen) {
+                  ws.send(
+                    JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: `STALE_GENERATION: File has drifted since selection (expected generation ${generation}, current is ${currentGen})`,
+                    })
+                  );
+                  return;
+                }
+
                 // Call registered edit callbacks
                 for (const callback of this.editCallbacks) {
                   try {
-                    await callback(file, line, column, change);
+                    await callback(file, line, column, change, hash);
                   } catch (err: any) {
                     console.error(`[Glide] Edit handler error:`, err.message);
                     ws.send(
                       JSON.stringify({
                         type: 'status',
                         success: false,
-                        error: `Handler error: ${err.message}`,
+                        error: err.message,
                       })
                     );
                     return;

@@ -25,7 +25,7 @@ function getPositionsFile(file: string): string {
   return path.join(path.dirname(file), 'glide-positions.json');
 }
 
-server.onEdit((file, line, column, change) => {
+server.onEdit((file, line, column, change, hash) => {
   const targetId = `${file}:${line}:${column}`;
 
   if (change.type === 'position') {
@@ -63,14 +63,14 @@ server.onEdit((file, line, column, change) => {
         const newClasses = updateClassString(existing, property, value);
         updated = updateHTMLClass(updated, targetId, newClasses);
       } else {
-        updated = updateClassName(updated, line, column, property, value);
+        updated = updateClassName(updated, line, column, property, value, hash);
       }
     }
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated multi style class in ${file}:${line}:${column}`);
   } else if (change.type === 'style') {
     // Write inline style prop directly to JSX — works with any CSS setup
-    const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>);
+    const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>, hash);
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
   } else if (change.type === 'class') {
@@ -88,7 +88,7 @@ server.onEdit((file, line, column, change) => {
       const newClasses = updateClassString(existing, change.property, change.value);
       updated = updateHTMLClass(code, targetId, newClasses);
     } else {
-      updated = updateClassName(code, line, column, change.property, change.value);
+      updated = updateClassName(code, line, column, change.property, change.value, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
@@ -97,7 +97,7 @@ server.onEdit((file, line, column, change) => {
     if (file.endsWith('.html')) {
       updated = updateHTMLText(code, targetId, change.value);
     } else {
-      updated = updateJSXText(code, line, column, change.value);
+      updated = updateJSXText(code, line, column, change.value, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated text content in ${file}:${line}:${column}`);

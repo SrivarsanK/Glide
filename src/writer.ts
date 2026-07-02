@@ -1,7 +1,25 @@
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
+import _generate from '@babel/generator';
+import * as t from '@babel/types';
+import * as crypto from 'crypto';
+import ts from 'typescript';
 
 const traverse = (traverseModule as any).default || traverseModule;
+const generate = (_generate as any).default || _generate;
+
+export function computeNodeHash(sourceCodeSlice: string): string {
+  return crypto.createHash('sha1').update(sourceCodeSlice.trim()).digest('hex').substring(0, 8);
+}
+
+function validateTypeScript(code: string) {
+  const result = ts.createSourceFile('temp.tsx', code, ts.ScriptTarget.Latest, true);
+  const diagnostics = (result as any).parseDiagnostics;
+  if (diagnostics && diagnostics.length > 0) {
+    const msg = diagnostics[0].messageText;
+    throw new Error(`TypeScript syntax validation failed: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+  }
+}
 
 export function findJSXElementAt(
   sourceCode: string,
@@ -91,7 +109,6 @@ function getNewClass(property: string, value: any): string {
     case 'borderStyle':
       return `border-${clean}`;
     case 'position':
-      // Tailwind position utilities: static, relative, absolute, fixed, sticky
       return ['static','relative','absolute','fixed','sticky'].includes(clean) ? clean : 'relative';
     case 'left': {
       let v = clean;
@@ -175,13 +192,11 @@ function getExistingValue(existingClasses: string, property: string): number {
       const parts = c.split(':');
       const name = parts[parts.length - 1];
 
-      // JIT matches e.g. ml-[-16px] or ml-[16px]
       const jitMatch = name.match(/-\[([-\d]+)(?:px)?\]$/);
       if (jitMatch) {
         return Number(jitMatch[1]);
       }
 
-      // Standard Tailwind matches e.g. ml-4
       let prefix = '';
       if (property.startsWith('margin') || property.startsWith('padding')) {
         const char = property.includes('Left') ? 'l' : property.includes('Right') ? 'r' : property.includes('Top') ? 't' : 'b';
@@ -254,156 +269,273 @@ export function updateClassName(
   column: number,
   property: string,
   value: any,
-  breakpoint?: string
-): string {
-  const node = findJSXElementAt(sourceCode, line, column);
-  if (!node) {
-    throw new Error(`JSX element not found at line ${line}, column ${column}`);
-  }
-
-  // Find className attribute
-  const classAttr = node.attributes.find(
-    (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
-  );
-
-  if (classAttr) {
-    // Modify existing className
-    if (!classAttr.value || classAttr.value.type !== 'StringLiteral') {
-      throw new Error(`className attribute value is not a string literal`);
-    }
-
-    const start = classAttr.value.start;
-    const end = classAttr.value.end;
-    const existingVal = classAttr.value.value;
-
-    const newVal = updateClassString(existingVal, property, value, breakpoint);
-
-    return sourceCode.slice(0, start) + `"${newVal}"` + sourceCode.slice(end);
-  } else {
-    // Inject new className attribute
-    const insertIndex = node.name.end;
-    const newVal = updateClassString('', property, value, breakpoint);
-
-    return (
-      sourceCode.slice(0, insertIndex) +
-      ` className="${newVal}"` +
-      sourceCode.slice(insertIndex)
-    );
-  }
-}
-
-export function updateJSXText(
-  sourceCode: string,
-  line: number,
-  column: number,
-  newText: string
+  breakpoint?: string,
+  expectedHash?: string
 ): string {
   const ast = parse(sourceCode, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
 
-  let targetNode: any = null;
+  let targetPath: any = null;
 
   traverse(ast, {
     JSXElement(path: any) {
       const loc = path.node.openingElement.loc;
       if (loc && loc.start.line === line && loc.start.column === column - 1) {
-        targetNode = path.node;
+        targetPath = path;
         path.stop();
       }
     },
   });
 
-  if (!targetNode) {
-    throw new Error(`JSX element not found at line ${line}, column ${column}`);
+  if (!targetPath) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
   }
 
-  // Find the first JSXText child and replace just its content
-  const children: any[] = targetNode.children || [];
-  
-  const textChild = children.find((c: any) => c.type === 'JSXText');
-  
-  if (textChild && textChild.start != null && textChild.end != null) {
-    // Preserve surrounding whitespace/indentation inside the element
-    const existingRaw = sourceCode.slice(textChild.start, textChild.end);
-    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
-    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
-    const replacement = leadingWs + newText + trailingWs;
-    return sourceCode.slice(0, textChild.start) + replacement + sourceCode.slice(textChild.end);
+  const nodeStart = targetPath.node.start;
+  const nodeEnd = targetPath.node.end;
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
   }
 
-  // No existing text child — insert text between opening and closing tags
-  const openEnd = targetNode.openingElement.end;
-  const closeStart = targetNode.closingElement
-    ? targetNode.closingElement.start
-    : openEnd;
-
-  if (openEnd == null || closeStart == null) {
-    throw new Error('Cannot determine insertion point for text.');
-  }
-
-  return (
-    sourceCode.slice(0, openEnd) +
-    newText +
-    sourceCode.slice(closeStart)
+  const openingEl = targetPath.node.openingElement;
+  let classAttr = openingEl.attributes.find(
+    (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
   );
+
+  let existingVal = '';
+  if (classAttr) {
+    if (classAttr.value && classAttr.value.type === 'StringLiteral') {
+      existingVal = classAttr.value.value;
+    }
+  }
+
+  const newVal = updateClassString(existingVal, property, value, breakpoint);
+
+  if (classAttr) {
+    classAttr.value = t.stringLiteral(newVal);
+  } else {
+    openingEl.attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier('className'),
+        t.stringLiteral(newVal)
+      )
+    );
+  }
+
+  const { code: newJSXCode } = generate(targetPath.node, {
+    retainLines: false,
+    compact: false,
+    comments: true,
+  });
+
+  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+
+  validateTypeScript(updatedSourceCode);
+
+  const confirmAst = parse(newJSXCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+  let hasExpectedValue = false;
+  traverse(confirmAst, {
+    JSXOpeningElement(path: any) {
+      const attr = path.node.attributes.find(
+        (a: any) => a.type === 'JSXAttribute' && a.name.name === 'className'
+      );
+      if (attr && attr.value && attr.value.type === 'StringLiteral' && attr.value.value === newVal) {
+        hasExpectedValue = true;
+      }
+    }
+  });
+  if (!hasExpectedValue) {
+    throw new Error('Round-trip validation failed: Target node attribute was not updated as expected.');
+  }
+
+  return updatedSourceCode;
 }
 
-/**
- * Sets or merges CSS properties into the JSX `style` prop of an element.
- * Framework-agnostic — works without Tailwind.
- *
- * Before: <div className="foo">
- * After:  <div className="foo" style={{position:'relative',left:'200px',top:'100px'}}>
- *
- * If a style prop already exists, keys are merged (unknown keys are preserved).
- */
+export function updateJSXText(
+  sourceCode: string,
+  line: number,
+  column: number,
+  newText: string,
+  expectedHash?: string
+): string {
+  const ast = parse(sourceCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+
+  let targetPath: any = null;
+
+  traverse(ast, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        targetPath = path;
+        path.stop();
+      }
+    },
+  });
+
+  if (!targetPath) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
+  }
+
+  const nodeStart = targetPath.node.start;
+  const nodeEnd = targetPath.node.end;
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
+  }
+
+  const children: any[] = targetPath.node.children || [];
+  const textChildIdx = children.findIndex((c: any) => c.type === 'JSXText');
+  if (textChildIdx !== -1) {
+    const existingRaw = children[textChildIdx].value;
+    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
+    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
+    children[textChildIdx] = t.jsxText(leadingWs + newText + trailingWs);
+  } else {
+    targetPath.node.children = [t.jsxText(newText)];
+  }
+
+  const { code: newJSXCode } = generate(targetPath.node, {
+    retainLines: false,
+    compact: false,
+    comments: true,
+  });
+
+  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+
+  validateTypeScript(updatedSourceCode);
+
+  const confirmAst = parse(newJSXCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+  let hasExpectedValue = false;
+  traverse(confirmAst, {
+    JSXText(path: any) {
+      if (path.node.value.trim() === newText.trim()) {
+        hasExpectedValue = true;
+      }
+    }
+  });
+  if (!hasExpectedValue) {
+    throw new Error('Round-trip validation failed: Target text content was not updated as expected.');
+  }
+
+  return updatedSourceCode;
+}
+
 export function updateJSXStyleProp(
   sourceCode: string,
   line: number,
   column: number,
-  styles: Record<string, string>
+  styles: Record<string, string>,
+  expectedHash?: string
 ): string {
-  const node = findJSXElementAt(sourceCode, line, column);
-  if (!node) {
-    throw new Error(`JSX element not found at line ${line}, column ${column}`);
+  const ast = parse(sourceCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+
+  let targetPath: any = null;
+
+  traverse(ast, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        targetPath = path;
+        path.stop();
+      }
+    },
+  });
+
+  if (!targetPath) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
   }
 
-  // Find existing style attribute
-  const styleAttr = node.attributes.find(
+  const nodeStart = targetPath.node.start;
+  const nodeEnd = targetPath.node.end;
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
+  }
+
+  const openingEl = targetPath.node.openingElement;
+  let styleAttr = openingEl.attributes.find(
     (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'style'
   );
 
+  const newProperties = Object.entries(styles).map(([key, val]) => {
+    return t.objectProperty(t.identifier(key), t.stringLiteral(val));
+  });
+
   if (styleAttr) {
-    // Parse existing key:value pairs (handles both single and double quotes)
-    const existingRaw = sourceCode.slice(styleAttr.start, styleAttr.end);
-    const existing: Record<string, string> = {};
-    const kvRe = /(\w+)\s*:\s*['"]([^'"]*)['"]/g;
-    let m: RegExpExecArray | null;
-    while ((m = kvRe.exec(existingRaw)) !== null) {
-      existing[m[1]] = m[2];
+    if (styleAttr.value && styleAttr.value.type === 'JSXExpressionContainer' && styleAttr.value.expression.type === 'ObjectExpression') {
+      const existingProperties = styleAttr.value.expression.properties as any[];
+      const mergedProperties = [...existingProperties];
+      newProperties.forEach(newProp => {
+        const keyName = (newProp.key as any).name;
+        const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' && (p.key as any).name === keyName);
+        if (idx !== -1) {
+          mergedProperties[idx] = newProp;
+        } else {
+          mergedProperties.push(newProp);
+        }
+      });
+      styleAttr.value.expression.properties = mergedProperties;
+    } else {
+      styleAttr.value = t.jsxExpressionContainer(t.objectExpression(newProperties));
     }
-    // Merge — new styles overwrite matching keys
-    const merged = { ...existing, ...styles };
-    const styleStr = Object.entries(merged)
-      .map(([k, v]) => `${k}:'${v}'`)
-      .join(',');
-    return (
-      sourceCode.slice(0, styleAttr.start) +
-      `style={{${styleStr}}}` +
-      sourceCode.slice(styleAttr.end)
-    );
   } else {
-    // Inject new style prop right after the element name
-    const styleStr = Object.entries(styles)
-      .map(([k, v]) => `${k}:'${v}'`)
-      .join(',');
-    const insertIndex = node.name.end;
-    return (
-      sourceCode.slice(0, insertIndex) +
-      ` style={{${styleStr}}}` +
-      sourceCode.slice(insertIndex)
+    openingEl.attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier('style'),
+        t.jsxExpressionContainer(t.objectExpression(newProperties))
+      )
     );
   }
+
+  const { code: newJSXCode } = generate(targetPath.node, {
+    retainLines: false,
+    compact: false,
+    comments: true,
+  });
+
+  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+
+  validateTypeScript(updatedSourceCode);
+
+  const confirmAst = parse(newJSXCode, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+  let hasExpectedValue = false;
+  traverse(confirmAst, {
+    JSXAttribute(path: any) {
+      if (path.node.name.name === 'style' && path.node.value.type === 'JSXExpressionContainer' && path.node.value.expression.type === 'ObjectExpression') {
+        hasExpectedValue = true;
+      }
+    }
+  });
+  if (!hasExpectedValue) {
+    throw new Error('Round-trip validation failed: Target style prop was not updated as expected.');
+  }
+
+  return updatedSourceCode;
 }
