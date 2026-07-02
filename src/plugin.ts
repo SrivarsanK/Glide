@@ -35,6 +35,12 @@ const BRIDGE_SCRIPT = `
   var hovered = null;
   var selected = null;
 
+  window.__glide_refresh_selection__ = function() {
+    if (selected) {
+      sendMsg('glide:element-selected', selected);
+    }
+  };
+
   function sendMsg(type, el, isShift) {
     var src = el.getAttribute('data-gl-source') || '';
     var r = el.getBoundingClientRect();
@@ -158,9 +164,9 @@ const BRIDGE_SCRIPT = `
       initialLeft = parseInt(el.style.left) || 0;
       initialTop = parseInt(el.style.top) || 0;
 
-      // Temporarily disable CSS transitions to prevent lagging when dragging elements with transitions (e.g. .btn-primary)
-      el.style.transition = 'none';
-      el.style.transitionProperty = 'none';
+      // Temporarily disable CSS transitions with !important to prevent lagging when dragging elements with transitions (e.g. .btn-primary)
+      el.style.setProperty('transition', 'none', 'important');
+      el.style.setProperty('transition-property', 'none', 'important');
 
       // Capture rect BEFORE pointer capture so it's accurate
       var r = el.getBoundingClientRect();
@@ -233,8 +239,8 @@ const BRIDGE_SCRIPT = `
       dragEl.style.top = finalTop + 'px';
 
       // Restore original transition properties
-      dragEl.style.transition = '';
-      dragEl.style.transitionProperty = '';
+      dragEl.style.removeProperty('transition');
+      dragEl.style.removeProperty('transition-property');
 
       // Now safe to clear transform and zIndex
       dragEl.style.transform = '';
@@ -503,6 +509,10 @@ if (import.meta.hot) {
   import.meta.hot.on('glide:positions-updated', function(data) {
     var el = document.getElementById('__glide_positions__');
     if (el) el.textContent = data.css;
+    if (typeof window.__glide_refresh_selection__ === 'function') {
+      // Defer slightly to ensure browser applies style repaint before querying rect coordinates
+      setTimeout(window.__glide_refresh_selection__, 0);
+    }
   });
 }
 </script>`;
