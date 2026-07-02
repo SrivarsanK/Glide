@@ -1,6 +1,7 @@
 import { Plugin } from 'vite';
 import * as babel from '@babel/core';
 import * as path from 'path';
+import * as fs from 'fs';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
@@ -410,6 +411,35 @@ export function glideSourceStamping(): Plugin {
   let isDev = false;
   let rootDir = process.cwd();
   let mainEntryInjected = false;
+  let viteServer: any = null;
+
+  /**
+   * Build CSS rules from glide-positions.json for the current root.
+   * Each entry maps a data-gl-source value to position styles.
+   */
+  function buildPositionCSS(): string {
+    const posFile = path.join(rootDir, 'glide-positions.json');
+    if (!fs.existsSync(posFile)) return '';
+    try {
+      const positions: Record<string, Record<string, string>> = JSON.parse(
+        fs.readFileSync(posFile, 'utf-8')
+      );
+      return Object.entries(positions)
+        .map(([sourceId, styles]) => {
+          const escapedId = sourceId.replace(/\\/g, '/').replace(/"/g, '\\"');
+          const styleStr = Object.entries(styles)
+            .map(([k, v]) => {
+              const prop = k.replace(/([A-Z])/g, '-$1').toLowerCase();
+              return `${prop}:${v}!important`;
+            })
+            .join(';');
+          return `[data-gl-source="${escapedId}"]{${styleStr}}`;
+        })
+        .join('\n');
+    } catch {
+      return '';
+    }
+  }
 
   return {
     name: 'vite-plugin-glide-source-stamping',
@@ -421,15 +451,65 @@ export function glideSourceStamping(): Plugin {
       mainEntryInjected = false;
     },
 
+    configureServer(server) {
+      viteServer = server;
+      // Watch glide-positions.json for changes
+      const posFile = path.join(rootDir, 'glide-positions.json');
+      // Use chokidar (available from Vite) to watch the file
+      server.watcher.add(posFile);
+      
+      const handlePositionsChange = (changedFile: string) => {
+        if (changedFile === posFile || changedFile.replace(/\\/g, '/') === posFile.replace(/\\/g, '/')) {
+          // Send a custom HMR event with the updated CSS — no React reload needed
+          const css = buildPositionCSS();
+          server.ws.send({
+            type: 'custom',
+            event: 'glide:positions-updated',
+            data: { css }
+          });
+        }
+      };
+
+      server.watcher.on('add', handlePositionsChange);
+      server.watcher.on('change', handlePositionsChange);
+    },
+
     /**
-     * Inject the bridge script as an inline <script> tag into index.html.
+     * Inject the bridge script and position CSS injector as inline script tags into index.html.
      * This runs entirely in the browser with no Node.js imports.
      */
     transformIndexHtml(html) {
       if (!isDev) return html;
+      const initialCSS = buildPositionCSS();
+      const positionInjector = `<script>
+(function() {
+  var styleEl = document.createElement('style');
+  styleEl.id = '__glide_positions__';
+  styleEl.textContent = ${JSON.stringify(initialCSS)};
+  document.head.appendChild(styleEl);
+
+  // Listen for position updates from the Vite HMR websocket
+  if (import.meta && import.meta.hot) {
+    import.meta.hot.on('glide:positions-updated', function(data) {
+      var el = document.getElementById('__glide_positions__');
+      if (el) el.textContent = data.css;
+    });
+  }
+})();
+</script>`;
+      // Use a simpler approach — inject via window.addEventListener for Vite HMR events
+      const positionInjectorScript = `<script type="module">
+if (import.meta.hot) {
+  import.meta.hot.on('glide:positions-updated', function(data) {
+    var el = document.getElementById('__glide_positions__');
+    if (el) el.textContent = data.css;
+  });
+}
+</script>`;
+      const initialStyle = `<style id="__glide_positions__">${initialCSS}</style>`;
       return html.replace(
         '<head>',
-        `<head><script>${BRIDGE_SCRIPT}<\/script>`
+        `<head>${initialStyle}${positionInjectorScript}<script>${BRIDGE_SCRIPT}<\/script>`
       );
     },
 

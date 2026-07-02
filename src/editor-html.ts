@@ -1557,7 +1557,7 @@ export function getEditorHTML(port: number): string {
               }
             }
             if (data.type === 'glide:element-drag-end') {
-              sendStylePropsChange(data.source, {
+              sendPositionChange(data.source, {
                 position: 'relative',
                 left: data.dx + 'px',
                 top: data.dy + 'px'
@@ -2151,6 +2151,22 @@ export function getEditorHTML(port: number): string {
               column: parsed.column,
               viewportWidth: iframeWidth.current,
               change: { type: 'multi-class', value: styles }
+            }));
+          }
+
+          function sendPositionChange(source, styles) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(source);
+            if (!parsed) return;
+            // Sends 'position' type — server writes to glide-positions.json, NOT App.tsx.
+            // The Vite plugin injects CSS overrides via HMR event — zero flicker, zero reload.
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'position', value: styles }
             }));
           }
 

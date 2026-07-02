@@ -6,7 +6,7 @@ import { buildComponentTree } from './tree.js';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from './reorder.js';
 
 export interface EditChange {
-  type: 'style' | 'class' | 'text' | 'multi-class';
+  type: 'style' | 'class' | 'text' | 'multi-class' | 'position';
   property: string;
   value: any;
 }
