@@ -1545,33 +1545,16 @@ export function getEditorHTML(port: number): string {
 
               if (w > 3 || h > 3) {
                 const iframe = document.getElementById('app-iframe');
-                if (iframe) {
-                  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                  const elements = iframeDoc.querySelectorAll('[data-gl-source]');
-                  
-                  const newSelections = [];
-                  elements.forEach(el => {
-                    const elRect = el.getBoundingClientRect();
-                    if (isRightToLeft) {
-                      const overlaps = !(elRect.left > x + w || elRect.right < x || elRect.top > y + h || elRect.bottom < y);
-                      if (overlaps) {
-                        newSelections.push(el.getAttribute('data-gl-source'));
-                      }
-                    } else {
-                      const enclosed = (elRect.left >= x && elRect.right <= x + w && elRect.top >= y && elRect.bottom <= y + h);
-                      if (enclosed) {
-                        newSelections.push(el.getAttribute('data-gl-source'));
-                      }
-                    }
-                  });
-
-                  if (iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({
-                      type: 'glide:select-elements-batch',
-                      sources: newSelections,
-                      isShift: isShift
-                    }, '*');
-                  }
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:select-marquee',
+                    x: x,
+                    y: y,
+                    w: w,
+                    h: h,
+                    isRightToLeft: isRightToLeft,
+                    isShift: isShift
+                  }, '*');
                 }
               }
             }

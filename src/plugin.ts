@@ -32,7 +32,7 @@ const BRIDGE_SCRIPT = `
     'span[data-gl-source], strong[data-gl-source], em[data-gl-source], a[data-gl-source], label[data-gl-source] { display: inline-block !important; }',
     '.highlight[style*="transform"], .highlight[style*="position"], .highlight[data-glide-selected], .highlight[data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
     '[class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
-  ].join('\n');
+  ].join(' ');
   document.head.appendChild(style);
 
   var hovered = null;
@@ -388,6 +388,52 @@ const BRIDGE_SCRIPT = `
     if (!e.data) return;
     if (e.data.type === 'glide:update-component-roots') {
       componentRoots = new Set(e.data.roots || []);
+    }
+    if (e.data.type === 'glide:select-marquee') {
+      var x = e.data.x;
+      var y = e.data.y;
+      var w = e.data.w;
+      var h = e.data.h;
+      var isRightToLeft = e.data.isRightToLeft;
+      var isShift = e.data.isShift;
+      var elements = document.querySelectorAll('[data-gl-source]');
+      var newSelections = [];
+      for (var i = 0; i < elements.length; i++) {
+        var el = elements[i];
+        var elRect = el.getBoundingClientRect();
+        if (isRightToLeft) {
+          var overlaps = !(elRect.left > x + w || elRect.right < x || elRect.top > y + h || elRect.bottom < y);
+          if (overlaps) {
+            newSelections.push(el.getAttribute('data-gl-source'));
+          }
+        } else {
+          var enclosed = (elRect.left >= x && elRect.right <= x + w && elRect.top >= y && elRect.bottom <= y + h);
+          if (enclosed) {
+            newSelections.push(el.getAttribute('data-gl-source'));
+          }
+        }
+      }
+      if (!isShift) {
+        var old = document.querySelectorAll('[data-glide-selected]');
+        for (var i = 0; i < old.length; i++) {
+          old[i].removeAttribute('data-glide-selected');
+        }
+      }
+      newSelections.forEach(function(src) {
+        var el = document.querySelector('[data-gl-source="' + src + '"]');
+        if (el) {
+          el.setAttribute('data-glide-selected', '');
+        }
+      });
+      var allSelected = document.querySelectorAll('[data-glide-selected]');
+      if (allSelected.length > 0) {
+        window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+        for (var i = 0; i < allSelected.length; i++) {
+          sendMsg('glide:element-selected', allSelected[i], true);
+        }
+      } else if (!isShift) {
+        window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+      }
     }
     if (e.data.type === 'glide:select-elements-batch') {
       var sources = e.data.sources || [];
