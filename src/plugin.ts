@@ -152,6 +152,117 @@ const BRIDGE_SCRIPT = `
   var marqueeStartY = 0;
   var componentRoots = new Set();
 
+  // ── Snap state ─────────────────────────────────────────────────────────
+  // OUR threshold — not Figma's. Figma does not publish its capture radius.
+  var OUR_SNAP_THRESHOLD_PX = 4;
+  var snapObjectEnabled = true;   // toggled by editor (postMessage)
+  var snapPixelEnabled  = true;   // toggled by editor (postMessage)
+  var snapDisabledForDrag = false; // true while Ctrl/Cmd is held during a drag
+  var dragStartRect = null;        // live rect captured fresh on drag start
+  var siblingRects  = [];          // fresh rects of siblings, captured on drag start
+
+  // Compute six snap candidates (left/right/hCenter, top/bottom/vCenter) from a rect.
+  function xCandidates(r) {
+    return [
+      { pos: r.left,                isCenter: false },
+      { pos: r.right,               isCenter: false },
+      { pos: r.left + r.width / 2,  isCenter: true  },
+    ];
+  }
+  function yCandidates(r) {
+    return [
+      { pos: r.top,                  isCenter: false },
+      { pos: r.bottom,               isCenter: false },
+      { pos: r.top + r.height / 2,   isCenter: true  },
+    ];
+  }
+  // Drag element's own snap anchors at the current offset.
+  function dragXAnchors(r, dx) {
+    return [
+      { anchor: r.left  + dx,            isCenter: false },
+      { anchor: r.right + dx,            isCenter: false },
+      { anchor: r.left  + dx + r.width / 2, isCenter: true },
+    ];
+  }
+  function dragYAnchors(r, dy) {
+    return [
+      { anchor: r.top    + dy,             isCenter: false },
+      { anchor: r.bottom + dy,             isCenter: false },
+      { anchor: r.top    + dy + r.height / 2, isCenter: true },
+    ];
+  }
+
+  // Resolve snap on one axis. Returns { snappedOffset, guidePosition }.
+  // No snap fires if no candidate is within threshold (constraint #6).
+  function resolveSnapAxis(rawOffset, dragAnchors, sibCands, threshold) {
+    var bestDelta = Infinity;
+    var bestGuide = null;
+    var bestIsCenter = true;
+    var bestAnchorOffset = 0;
+    for (var i = 0; i < dragAnchors.length; i++) {
+      var da = dragAnchors[i];
+      for (var j = 0; j < sibCands.length; j++) {
+        var cp = sibCands[j];
+        var delta = Math.abs(da.anchor - cp.pos);
+        if (delta > threshold) continue;
+        var currentIsCenter = cp.isCenter; // tie-break by candidate type
+        var currentIsEdge   = !currentIsCenter;
+        var isBetter = false;
+        if (delta < bestDelta) {
+          isBetter = true;
+        } else if (delta === bestDelta) {
+          isBetter = currentIsEdge && bestIsCenter; // edge upgrades center only
+        }
+        if (isBetter) {
+          bestDelta        = delta;
+          bestGuide        = cp.pos;
+          bestIsCenter     = currentIsCenter;
+          bestAnchorOffset = cp.pos - da.anchor;
+        }
+      }
+    }
+    return { snappedOffset: bestGuide === null ? rawOffset : rawOffset + bestAnchorOffset, guidePosition: bestGuide };
+  }
+
+  // Full object-snap: resolve X and Y independently, return guides.
+  function resolveObjectSnap(dragRect, dx, dy, siblings) {
+    if (!snapObjectEnabled || snapDisabledForDrag) {
+      return { dx: dx, dy: dy, guides: [] };
+    }
+    var xCands = [];
+    var yCands = [];
+    for (var i = 0; i < siblings.length; i++) {
+      var s = siblings[i];
+      xCands = xCands.concat(xCandidates(s));
+      yCands = yCands.concat(yCandidates(s));
+    }
+    var xr = resolveSnapAxis(dx, dragXAnchors(dragRect, dx), xCands, OUR_SNAP_THRESHOLD_PX);
+    var yr = resolveSnapAxis(dy, dragYAnchors(dragRect, dy), yCands, OUR_SNAP_THRESHOLD_PX);
+    var guides = [];
+    if (xr.guidePosition !== null) guides.push({ axis: 'x', position: xr.guidePosition });
+    if (yr.guidePosition !== null) guides.push({ axis: 'y', position: yr.guidePosition });
+    return { dx: xr.snappedOffset, dy: yr.snappedOffset, guides: guides };
+  }
+
+  // Pixel-grid snap — separate final pass (spec constraint #5).
+  function resolvePixelGridSnap(x, y) {
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+
+  // Collect fresh sibling rects from the same parent. Called on drag start.
+  function collectSiblingRects(el) {
+    var parent = el.parentNode;
+    if (!parent) return [];
+    var rects = [];
+    var children = parent.querySelectorAll('[data-gl-source]');
+    for (var i = 0; i < children.length; i++) {
+      if (children[i] === el) continue; // skip the dragged element itself
+      // Fresh getBoundingClientRect — never cached.
+      rects.push(children[i].getBoundingClientRect());
+    }
+    return rects;
+  }
+
   function resolveSelectTarget(el, isCmdClick) {
     if (isCmdClick) return el;
     var ancestors = [];
@@ -178,9 +289,14 @@ const BRIDGE_SCRIPT = `
 
   function rafDragLoop() {
     if (!isDragging || !dragEl) { rafId = null; return; }
-    dragEl.style.transform = 'translate(' + currentDx + 'px, ' + currentDy + 'px)';
+    // Compute snap every frame using FRESH rect from dragStartRect (captured on pointerdown).
+    // siblingRects are also captured fresh on pointerdown — do not reuse across drags.
+    var snap = resolveObjectSnap(dragStartRect, currentDx, currentDy, siblingRects);
+    var snappedDx = snap.dx;
+    var snappedDy = snap.dy;
+    dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)';
     dragEl.style.zIndex = '9999';
-    window.parent.postMessage({ type: 'glide:drag-delta', dx: currentDx, dy: currentDy }, '*');
+    window.parent.postMessage({ type: 'glide:drag-delta', dx: snappedDx, dy: snappedDy, guides: snap.guides }, '*');
     rafId = requestAnimationFrame(rafDragLoop);
   }
 
@@ -227,7 +343,11 @@ const BRIDGE_SCRIPT = `
 
       selectTarget.style.setProperty('transition', 'none', 'important');
       selectTarget.style.setProperty('transition-property', 'none', 'important');
+      // Capture fresh drag rect and sibling rects on drag start — never reused across drags.
       var r = selectTarget.getBoundingClientRect();
+      dragStartRect = { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      siblingRects  = collectSiblingRects(selectTarget);
+      snapDisabledForDrag = false; // reset; Ctrl/Cmd on pointermove will set this
       selectTarget.setPointerCapture(e.pointerId);
 
       if (!rafId) rafId = requestAnimationFrame(rafDragLoop);
@@ -265,6 +385,12 @@ const BRIDGE_SCRIPT = `
 
   document.addEventListener('pointermove', function(e) {
     if (isDragging && dragEl) {
+      // Ctrl/Cmd held during drag disables object-snap for this entire drag operation
+      // (mirrors Figma's documented Ctrl/Cmd override behavior).
+      if (e.ctrlKey || e.metaKey) {
+        snapDisabledForDrag = true;
+      }
+
       currentDx = e.clientX - startX;
       currentDy = e.clientY - startY;
 
@@ -315,8 +441,23 @@ const BRIDGE_SCRIPT = `
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
       dragEl.releasePointerCapture(e.pointerId);
 
-      var finalLeft = initialLeft + currentDx;
-      var finalTop = initialTop + currentDy;
+      // Apply snap to get the final snapped deltas.
+      var snapResult = resolveObjectSnap(dragStartRect, currentDx, currentDy, siblingRects);
+      var finalDx = snapResult.dx;
+      var finalDy = snapResult.dy;
+
+      // Pixel-grid snap: separate final pass after object-snap (spec constraint #5).
+      if (snapPixelEnabled) {
+        var pg = resolvePixelGridSnap(finalDx, finalDy);
+        finalDx = pg.x;
+        finalDy = pg.y;
+      }
+
+      var finalLeft = initialLeft + finalDx;
+      var finalTop  = initialTop  + finalDy;
+
+      // Clear guide lines on drag end.
+      window.parent.postMessage({ type: 'glide:snap-guides-clear' }, '*');
 
       dragEl.style.setProperty('position', 'relative', 'important');
       dragEl.style.setProperty('left', finalLeft + 'px', 'important');
@@ -397,6 +538,12 @@ const BRIDGE_SCRIPT = `
     if (!e.data) return;
     if (e.data.type === 'glide:update-component-roots') {
       componentRoots = new Set(e.data.roots || []);
+    }
+    if (e.data.type === 'glide:set-snap-object') {
+      snapObjectEnabled = !!e.data.enabled;
+    }
+    if (e.data.type === 'glide:set-snap-pixel') {
+      snapPixelEnabled = !!e.data.enabled;
     }
     if (e.data.type === 'glide:select-marquee') {
       var x = e.data.x;

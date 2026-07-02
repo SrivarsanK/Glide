@@ -725,6 +725,12 @@ export function getEditorHTML(port: number): string {
             <input class="device-custom-input" id="custom-width" type="number" placeholder="Custom" title="Custom width (px)">
           </div>
 
+          <!-- Snapping controls -->
+          <div class="device-bar" style="margin-right: 8px;">
+            <button class="device-btn active" id="btn-snap-object" title="Snap to Sibling Objects">🎯 Snap Obj</button>
+            <button class="device-btn active" id="btn-snap-pixel" title="Snap to Pixel Grid">🔢 Snap Pixel</button>
+          </div>
+
           <!-- Zoom controls -->
           <div class="zoom-control">
             <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
@@ -1328,6 +1334,41 @@ export function getEditorHTML(port: number): string {
             }
           }, { passive: false });
 
+          // Snapping state
+          let snapObjectEnabled = true;
+          let snapPixelEnabled = true;
+
+          const btnSnapObject = document.getElementById('btn-snap-object');
+          const btnSnapPixel = document.getElementById('btn-snap-pixel');
+
+          if (btnSnapObject) {
+            btnSnapObject.addEventListener('click', () => {
+              snapObjectEnabled = !snapObjectEnabled;
+              btnSnapObject.classList.toggle('active', snapObjectEnabled);
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:set-snap-object',
+                  enabled: snapObjectEnabled
+                }, '*');
+              }
+            });
+          }
+
+          if (btnSnapPixel) {
+            btnSnapPixel.addEventListener('click', () => {
+              snapPixelEnabled = !snapPixelEnabled;
+              btnSnapPixel.classList.toggle('active', snapPixelEnabled);
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:set-snap-pixel',
+                  enabled: snapPixelEnabled
+                }, '*');
+              }
+            });
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // TOOL SWITCHER
           // ═══════════════════════════════════════════════════════════════
@@ -1546,6 +1587,11 @@ export function getEditorHTML(port: number): string {
             }
             const hoverRects = Array.from(svg.querySelectorAll('svg > rect'));
             hoverRects.forEach(r => svg.removeChild(r));
+            
+            const gGroup = document.getElementById('snap-guides-group');
+            if (gGroup) {
+              gGroup.innerHTML = '';
+            }
           }
 
           function createSelectionGroup() {
@@ -1624,6 +1670,34 @@ export function getEditorHTML(port: number): string {
             if (hoveredRect && (!hoveredElement || !selectedSources.includes(hoveredElement.source))) {
               drawSelectionBox(hoveredRect, true);
             }
+          }
+
+          function renderSnapGuides(guides) {
+            let gGroup = document.getElementById('snap-guides-group');
+            if (!gGroup) {
+              gGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+              gGroup.id = 'snap-guides-group';
+              svg.appendChild(gGroup);
+            }
+            gGroup.innerHTML = '';
+            
+            guides.forEach(guide => {
+              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              if (guide.axis === 'x') {
+                line.setAttribute('x1', guide.position);
+                line.setAttribute('y1', '0');
+                line.setAttribute('x2', guide.position);
+                line.setAttribute('y2', '100%');
+              } else {
+                line.setAttribute('x1', '0');
+                line.setAttribute('y1', guide.position);
+                line.setAttribute('x2', '100%');
+                line.setAttribute('y2', guide.position);
+              }
+              line.setAttribute('stroke', '#38bdf8'); // Accent color
+              line.setAttribute('stroke-width', '1');
+              gGroup.appendChild(line);
+            });
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -1791,6 +1865,7 @@ export function getEditorHTML(port: number): string {
               if (g) {
                 g.setAttribute('transform', 'translate(' + data.dx + ', ' + data.dy + ')');
               }
+              renderSnapGuides(data.guides || []);
             }
             if (data.type === 'glide:element-drag-end') {
               sendPositionChange(data.source, {
@@ -1800,6 +1875,10 @@ export function getEditorHTML(port: number): string {
               });
               selectedRect = null;
               clearOverlay();
+              renderSnapGuides([]);
+            }
+            if (data.type === 'glide:snap-guides-clear') {
+              renderSnapGuides([]);
             }
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };
@@ -2117,11 +2196,19 @@ export function getEditorHTML(port: number): string {
 
             iframe.onload = () => {
               setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
-              // Send the component roots on load
+              // Send the component roots and snap settings on load
               if (iframe.contentWindow) {
                 iframe.contentWindow.postMessage({
                   type: 'glide:update-component-roots',
                   roots: Array.from(componentRootSources)
+                }, '*');
+                iframe.contentWindow.postMessage({
+                  type: 'glide:set-snap-object',
+                  enabled: snapObjectEnabled
+                }, '*');
+                iframe.contentWindow.postMessage({
+                  type: 'glide:set-snap-pixel',
+                  enabled: snapPixelEnabled
                 }, '*');
               }
             };
