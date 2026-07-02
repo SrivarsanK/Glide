@@ -1,4 +1,4 @@
-﻿export function getEditorHTML(port: number): string {
+export function getEditorHTML(port: number): string {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -1013,7 +1013,24 @@
            let lastPointerX = 0;
            let lastPointerY = 0;
 
-          const iframeWidth = { current: 1440 };
+            let leftSidebar = null;
+            let rightSidebar = null;
+            let btnLeft = null;
+            let btnRight = null;
+
+            function toggleLeft() {
+              if (!leftSidebar) return;
+              const isCollapsed = leftSidebar.classList.toggle('collapsed');
+              btnLeft.textContent = isCollapsed ? '▶' : '◀';
+            }
+
+            function toggleRight() {
+              if (!rightSidebar) return;
+              const isCollapsed = rightSidebar.classList.toggle('collapsed');
+              btnRight.textContent = isCollapsed ? '◀' : '▶';
+            }
+
+           const iframeWidth = { current: 1440 };
 
           // ═══════════════════════════════════════════════════════════════
           // WEBSOCKET
@@ -1260,8 +1277,8 @@
               }
               return;
             }
-            // Toggle both sidebars \\
-            if (key === '\\') {
+            // Toggle both sidebars \\\\
+            if (key === '\\\\') {
               e.preventDefault();
               const leftState = leftSidebar.classList.contains('collapsed');
               const rightState = rightSidebar.classList.contains('collapsed');
@@ -2119,6 +2136,14 @@
               if (url) loadApp(url);
             }
           });
+
+          leftSidebar = document.getElementById('glide-layers');
+          rightSidebar = document.getElementById('glide-properties');
+          btnLeft = document.getElementById('toggle-left-sidebar');
+          btnRight = document.getElementById('toggle-right-sidebar');
+
+          if (btnLeft) btnLeft.addEventListener('click', toggleLeft);
+          if (btnRight) btnRight.addEventListener('click', toggleRight);
 
           connectSocket();
           // Load default url on start
