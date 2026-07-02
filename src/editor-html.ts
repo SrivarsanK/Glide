@@ -680,13 +680,38 @@ export function getEditorHTML(port: number): string {
           ::-webkit-scrollbar { width: 4px; height: 4px; }
           ::-webkit-scrollbar-track { background: transparent; }
           ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+
+          /* ── UTILITY RAIL & PAGES ── */
+          .utility-rail .rail-btn {
+            opacity: 0.6;
+            transition: opacity 0.15s, color 0.15s;
+          }
+          .utility-rail .rail-btn:hover {
+            opacity: 1;
+            color: var(--text-primary) !important;
+          }
+          .utility-rail .rail-btn.active {
+            opacity: 1;
+            color: var(--accent-color) !important;
+          }
+          .page-item {
+            transition: background 0.15s;
+          }
+          .page-item:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+          }
         </style>
       </head>
       <body>
         <!-- ═══════════════════════════════════ HEADER ═══════════════════════════════════ -->
         <header>
-          <div class="logo">
-            ⚡ <span>Glide</span>
+          <!-- Left top panel status -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="logo" style="margin-right: 16px;">⚡ <span>Glide</span></div>
+            <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2;">
+              <span id="header-file-name" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Untitled</span>
+              <span style="font-size: 10px; color: var(--text-secondary);">Team project</span>
+            </div>
           </div>
 
           <!-- App URL input -->
@@ -696,21 +721,6 @@ export function getEditorHTML(port: number): string {
               <input type="text" id="app-url" value="http://localhost:5173/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
             <button class="device-btn" id="btn-load" style="height: 30px; padding: 0 10px;">Connect</button>
-          </div>
-
-          <!-- Figma-style tool switcher -->
-          <div class="figma-toolbar" id="figma-toolbar">
-            <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 1l5.5 12 1.5-5 5-1.5L1 1z"/></svg>
-            </button>
-            <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">✋</button>
-            <div class="tool-btn-sep"></div>
-            <button class="tool-btn" id="tool-frame" data-tool="frame" title="Frame (F/A)">⬜</button>
-            <button class="tool-btn" id="tool-rect" data-tool="rect" title="Rectangle (R)">▬</button>
-            <button class="tool-btn" id="tool-ellipse" data-tool="ellipse" title="Ellipse (O)">⬤</button>
-            <button class="tool-btn" id="tool-text" data-tool="text" title="Text (T)">T</button>
-            <div class="tool-btn-sep"></div>
-            <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">💬</button>
           </div>
 
           <!-- Device preview -->
@@ -731,35 +741,78 @@ export function getEditorHTML(port: number): string {
             <button class="device-btn active" id="btn-snap-pixel" title="Snap to Pixel Grid">🔢 Snap Pixel</button>
           </div>
 
-          <!-- Zoom controls -->
-          <div class="zoom-control">
-            <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
-            <span id="zoom-label">100%</span>
-            <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
-            <button class="zoom-btn" id="zoom-fit" title="Fit (Ctrl+0)" style="font-size:10px;width:auto;padding:0 4px;">Fit</button>
+          <!-- Present, Share & Zoom controls -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="device-btn" style="border: none; background: transparent; font-size: 14px; cursor: pointer; color: var(--text-secondary);" title="Present">▷</button>
+            <button class="device-btn" style="background: #0d99ff; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer;" title="Share">Share</button>
+
+            <div class="zoom-control">
+              <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+              <span id="zoom-label">100%</span>
+              <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+              <button class="zoom-btn" id="zoom-fit" title="Fit (Ctrl+0)" style="font-size:10px;width:auto;padding:0 4px;">Fit</button>
+            </div>
           </div>
         </header>
 
         <!-- ═══════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════ -->
         <div class="main-container">
 
+          <!-- LEFT UTILITY RAIL -->
+          <div class="utility-rail" style="width: 50px; background: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 20px; flex-shrink: 0; z-index: 11;">
+            <button class="rail-btn active" id="rail-file" title="File" style="background: transparent; border: none; color: var(--accent-color); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>File</span>
+            </button>
+            <button class="rail-btn" id="rail-assets" title="Assets" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Assets</span>
+            </button>
+            <button class="rail-btn" id="rail-tools" title="Tools" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span>Tools</span>
+            </button>
+            <button class="rail-btn" id="rail-variables" title="Variables" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+              <span>Variables</span>
+            </button>
+          </div>
+
           <!-- LEFT SIDEBAR — LAYERS -->
           <div class="sidebar" id="glide-layers">
-            <div class="sidebar-header">
-              <span>Layers</span>
-              <span id="layer-count" style="font-size:10px;color:var(--text-secondary);font-weight:400"></span>
+            <!-- Pages Subsection -->
+            <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+              <div class="sidebar-header" style="border-bottom: none;">
+                <span>Pages</span>
+                <div style="display:flex;gap:8px;color:var(--text-secondary);">
+                  <span style="cursor:pointer;" title="Search">🔍</span>
+                  <span style="cursor:pointer;" title="Add Page">+</span>
+                </div>
+              </div>
+              <div class="page-item" style="padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; font-weight: 500;">
+                📄 <span id="active-page-name">Page 1</span>
+              </div>
             </div>
-            <div class="layers-scroll" id="layers-list">
-              <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">
-                Click an element<br>on the canvas to<br>see layers.
+
+            <!-- Layers Subsection -->
+            <div style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+              <div class="sidebar-header">
+                <span>Layers</span>
+                <span id="layer-count" style="font-size:10px;color:var(--text-secondary);font-weight:400"></span>
+              </div>
+              <div class="layers-scroll" id="layers-list">
+                <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                  Click an element<br>on the canvas to<br>see layers.
+                </div>
               </div>
             </div>
           </div>
 
           <!-- CANVAS -->
-          <div class="canvas-container" id="canvas-container">
+          <div class="canvas-container" id="canvas-container" style="position: relative;">
             <button id="toggle-left-sidebar" class="sidebar-toggle-btn left-toggle" title="Toggle Layers Sidebar ( [ )">◀</button>
             <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )">▶</button>
+            
             <div class="canvas-viewport" id="canvas-viewport">
               <div class="preview-frame-wrapper" id="frame-wrapper">
                 <div class="canvas-loading" id="canvas-loading">
@@ -776,6 +829,20 @@ export function getEditorHTML(port: number): string {
                   <!-- selection/hover drawn dynamically -->
                 </svg>
               </div>
+            </div>
+
+            <!-- Floating Bottom Toolbar -->
+            <div class="figma-toolbar" id="figma-toolbar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px; gap: 1px;">
+              <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 1l5.5 12 1.5-5 5-1.5L1 1z"/></svg>
+              </button>
+              <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">✋</button>
+              <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
+              <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">💬</button>
+              <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
+              <button class="tool-btn" id="tool-dev" title="Dev Mode" style="opacity: 0.6;">
+                <span style="font-size: 11px; font-weight: bold; font-family: monospace; color: var(--text-secondary);">&lt;/&gt;</span>
+              </button>
             </div>
           </div>
 
@@ -1167,6 +1234,12 @@ export function getEditorHTML(port: number): string {
                   currentFile = message.file;
                   currentGeneration = message.generation || 0;
                   layerTree = message.tree;
+
+                  const baseName = currentFile ? currentFile.split('/').pop() : 'Page 1';
+                  const activePageName = document.getElementById('active-page-name');
+                  if (activePageName) activePageName.textContent = baseName;
+                  const headerFileName = document.getElementById('header-file-name');
+                  if (headerFileName) headerFileName.textContent = baseName;
                   
                   // Pre-expand roots and depth-0 children on first load
                   if (expandedNodeIds.size === 0 && layerTree) {
