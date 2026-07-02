@@ -121,3 +121,8 @@ Thumbs.db
 .agents/skills/gsd-*
 **/gsd-*
 **/.gsd-*
+
+# Local agent skills and lock files
+.agents/skills/
+skills-lock.json
+
