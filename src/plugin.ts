@@ -638,6 +638,13 @@ const BRIDGE_SCRIPT = `
         }
       }
     }
+    if (e.data.type === 'glide:clear-selection') {
+      var old = document.querySelectorAll('[data-glide-selected]');
+      for (var i = 0; i < old.length; i++) {
+        old[i].removeAttribute('data-glide-selected');
+      }
+      selected = null;
+    }
   });
   document.addEventListener('dragstart', function(e) {
     // Prevent native dragging of buttons, links, images, etc. inside the iframe
