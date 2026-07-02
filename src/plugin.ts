@@ -267,10 +267,12 @@ const BRIDGE_SCRIPT = `
       var finalLeft = initialLeft + currentDx;
       var finalTop = initialTop + currentDy;
 
-      // Apply position inline BEFORE clearing transform so element stays at dropped position.
-      dragEl.style.position = 'relative';
-      dragEl.style.left = finalLeft + 'px';
-      dragEl.style.top = finalTop + 'px';
+      // Apply position inline with !important BEFORE clearing transform so element stays at dropped position.
+      // Must use !important because the __glide_positions__ stylesheet also uses !important,
+      // and without it the inline style cannot override the stylesheet's old position values.
+      dragEl.style.setProperty('position', 'relative', 'important');
+      dragEl.style.setProperty('left', finalLeft + 'px', 'important');
+      dragEl.style.setProperty('top', finalTop + 'px', 'important');
 
       // Restore original transition properties
       dragEl.style.removeProperty('transition');
