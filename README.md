@@ -1,129 +1,100 @@
-# ⚡ Glide
+# Glide
 
-**Code-native visual design tool for React, Vue, and Svelte.**
+Glide is a code-native visual design tool that runs a web editor inside a local development environment and writes changes directly back to React, Vue, or Svelte source files using AST transformations.
 
-Glide lets you visually design your web app in a Figma-like editor while writing changes directly back to your source files — no export, no copy-paste, no sync issues.
+## Status
 
----
+Glide is functional for local development.
 
-## Features
+### What works:
+* **Visual Canvas:** Figma-like workspace supporting element selection, zoom/pan, and drag/resize.
+* **Figma-Style Snapping:** Automatically aligns dragged elements to sibling edges (left, right, center, top, bottom, vertical center) and the pixel grid with visual line guides. Can be toggled on/off.
+* **AST Write-back:** Inline edits are written back to React (JSX/TSX), Vue SFC, Svelte, or HTML source files.
+* **Zero-Flicker Dragging:** Element positions are saved to a local `glide-positions.json` file to bypass full framework HMR page refreshes.
+* **Tighter Layers Panel:** Figma-style hierarchical tree structure with type-specific monochrome SVG icons, element labels, and hover-only visibility controls.
+* **Properties Control:** Direct styling for geometry (X, Y, W, H), margin, padding, border, radius, shadow, background/fills (solid, gradient), and typography.
+* **Device Preview:** Predefined breakpoints (320px to 4K) and custom width inputs.
+* **Undo/Redo History:** Stack-based undo/redo operations preserved across the server session.
 
-- 🎨 **Visual Editor** — Figma-style canvas with layers panel, properties panel, and toolbar
-- 🔍 **Element Selection** — Click any element in your live app to select it
-- 📐 **Full Properties Panel** — Position, size, flex layout, spacing, typography, fill, border, shadow, opacity
-- 🏷️ **Smart Layers Panel** — Hierarchical tree with icons, eye/lock toggles, drag-to-reorder
-- 📱 **Device Preview** — Switch between Mobile S (320px) → 4K (2560px) + custom width
-- ⌨️ **Keyboard Shortcuts** — Arrow nudge, Ctrl+Z undo, Ctrl+0 fit, tool hotkeys (V/H/F/R/O/T/C)
-- ✏️ **Live Write-Back** — Edits are written back to your source files via AST, preserving formatting
-- ↩️ **Undo/Redo** — Full undo stack, server-side, across all edits
-- 🔌 **Zero Runtime** — The overlay and source stamping are dev-only; zero impact in production
+### In progress / Planned:
+* **Vector Path Snapping:** Direct snap-to-vector geometry is not supported.
+* **Layout Grid Snapping:** Snapping to layout grid overlays is not implemented.
+* **Astro Framework Support:** Astro integration is not yet functional.
 
----
+## Prerequisites
 
-## Installation
+* **Node.js:** v18.0.0 or higher.
+* **TypeScript:** v5.0.0 or higher.
+* **Vite:** v5.0.0 or higher (for dev-time plugin and HMR).
 
-```bash
-npm install --save-dev glide-dev
-```
+## Setup
 
----
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/srivarsank/glide.git
+   cd glide
+   ```
 
-## Quick Start
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-### 1. Add the Vite plugin
+3. **Build the compiler and server:**
+   ```bash
+   npm run build
+   ```
 
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { glideSourceStamping } from 'glide-dev'
+## Usage
 
-export default defineConfig({
-  plugins: [glideSourceStamping(), react()],
-})
-```
+### Running the Visual Designer Locally
 
-### 2. Start your dev server
+1. **Start your client application** (e.g., on port 5173).
+2. **Start the Glide designer server** in a separate terminal from the root of the Glide workspace:
+   ```bash
+   node dist/cli.js 5173
+   ```
+   This launches the WebSocket server on port 7777 and exposes the visual editor.
+3. **Open the editor:** Navigate to `http://localhost:7777` in your browser.
+4. **Connect:** Click the **Connect** button in the header to synchronize the visual designer canvas with your running client application.
 
-```bash
-npm run dev
-```
+## Project Structure
 
-### 3. Start Glide
+* **.agents/** — Local agent settings, hooks, and execution profiles.
+* **.planning/** — Project requirements and agent memory states.
+* **dist/** — Compiled JavaScript build output.
+* **docs/** — Visual designer documentation and specifications.
+* **scratch/** — Temporary scratch files and experiment logs.
+* **src/** — Core source code.
+  * **__tests__/** — Vitest unit test suites.
+  * **assets.ts** — Local asset upload and management pipelines.
+  * **bridge.ts** — Injected client script for editor iframe synchronization.
+  * **cli.ts** — Command-line interface entry point.
+  * **css.ts** — CSS parser and class helper.
+  * **editor-html.ts** — Main editor page layout and frontend logic.
+  * **history.ts** — Undo/redo stack management.
+  * **html.ts** — HTML parser and AST modifier.
+  * **index.ts** — Main module exports.
+  * **meta.ts** — HTML metadata and responsive parser.
+  * **overlay.ts** — Selection outline overlay calculations.
+  * **plugin.ts** — Vite plugin for dev-time AST source stamping.
+  * **properties.ts** — Property controls and CSS translators.
+  * **reorder.ts** — JSX/TSX hierarchy reordering.
+  * **server.ts** — HTTP server and WebSocket communication.
+  * **snap.ts** — Canvas element and pixel grid snapping logic.
+  * **svelte.ts** — Svelte template class modifier.
+  * **text.ts** — JSX text node writer.
+  * **tree.ts** — JSX parent-child component tree parser.
+  * **viewport.ts** — Viewport responsive breakpoint resolver.
+  * **vue.ts** — Vue SFC template class modifier.
+  * **writer.ts** — Babel AST writer engine for JSX/TSX.
 
-In a separate terminal, from your project root:
+## Known Limitations
 
-```bash
-npx glide
-```
-
-This starts the Glide workspace server at `ws://localhost:7777` and opens the visual editor at `http://localhost:7777`.
-
-> **Note:** Point the editor's URL bar to your dev server (e.g. `http://localhost:5173`).
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `V` | Select tool |
-| `H` | Hand (pan) tool |
-| `F` / `A` | Frame tool |
-| `R` | Rectangle tool |
-| `O` | Ellipse tool |
-| `T` | Text tool |
-| `C` | Comment tool |
-| `Arrow` | Nudge 1px |
-| `Shift+Arrow` | Nudge 10px |
-| `Escape` | Deselect |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` | Redo |
-| `Ctrl+0` | Fit canvas |
-| `Ctrl+1` | 100% zoom |
-| `Ctrl+Scroll` | Zoom in/out |
-| `Space+Drag` | Pan canvas |
-
----
-
-## Config
-
-Create `glide.config.ts` in your project root (optional):
-
-```typescript
-export default {
-  port: 7777,        // Glide UI server port
-  wsPort: 7777,      // WebSocket server port  
-  devPort: 5173,     // Your dev server port
-  adapter: 'auto',   // 'react' | 'vue' | 'svelte' | 'auto'
-  styling: 'auto',   // 'tailwind' | 'cssmodules' | 'css' | 'auto'
-  snapGrid: 8,       // Snap grid size in px
-}
-```
-
----
-
-## Supported Frameworks
-
-| Framework | Status |
-|---|---|
-| React / TSX | ✅ Full support |
-| Vue SFC | ✅ Full support |
-| Svelte | ✅ Full support |
-| HTML | ✅ Basic support |
-| Astro | 🚧 Planned |
-
----
-
-## How It Works
-
-1. **Source Stamping** — The Vite plugin adds `data-gl-source` attributes to every JSX element at dev-build time (in-memory, never written to disk)
-2. **Bridge** — A script injected into your app's iframe reads element positions and reports them to the editor via `postMessage`
-3. **WebSocket Server** — Receives edit commands from the editor
-4. **AST Write-Back** — Edits are applied to your source files using Babel AST — format-preserving, no reformatting
-
----
+* **Stamping Requirement:** Snapping and editing only apply to elements tagged with `data-gl-source` attributes.
+* **Non-React Editing:** CSS adjustments for Vue and Svelte template blocks are limited to className string replacements.
+* **Positional Dragging:** Absolute coordinate dragging depends on writing layout offsets to a local `glide-positions.json` file in the project.
 
 ## License
 
-MIT © Srivarsan K
+This project is licensed under the Apache License, Version 2.0. See the `LICENSE` file for details.
