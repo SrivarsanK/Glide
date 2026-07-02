@@ -499,7 +499,9 @@ export function glideSourceStamping(): Plugin {
       server.watcher.add(posFile);
       
       const handlePositionsChange = (changedFile: string) => {
-        if (changedFile === posFile || changedFile.replace(/\\/g, '/') === posFile.replace(/\\/g, '/')) {
+        const normChanged = changedFile.replace(/\\/g, '/').toLowerCase();
+        const normPosFile = posFile.replace(/\\/g, '/').toLowerCase();
+        if (normChanged === normPosFile) {
           // Send a custom HMR event with the updated CSS — no React reload needed
           const css = buildPositionCSS();
           server.ws.send({
