@@ -681,19 +681,7 @@ export function getEditorHTML(port: number): string {
           ::-webkit-scrollbar-track { background: transparent; }
           ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
 
-          /* ── UTILITY RAIL & PAGES ── */
-          .utility-rail .rail-btn {
-            opacity: 0.6;
-            transition: opacity 0.15s, color 0.15s;
-          }
-          .utility-rail .rail-btn:hover {
-            opacity: 1;
-            color: var(--text-primary) !important;
-          }
-          .utility-rail .rail-btn.active {
-            opacity: 1;
-            color: var(--accent-color) !important;
-          }
+          /* ── PAGES ── */
           .page-item {
             transition: background 0.15s;
           }
@@ -757,26 +745,6 @@ export function getEditorHTML(port: number): string {
 
         <!-- ═══════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════ -->
         <div class="main-container">
-
-          <!-- LEFT UTILITY RAIL -->
-          <div class="utility-rail" style="width: 50px; background: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 20px; flex-shrink: 0; z-index: 11;">
-            <button class="rail-btn active" id="rail-file" title="File" style="background: transparent; border: none; color: var(--accent-color); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span>File</span>
-            </button>
-            <button class="rail-btn" id="rail-assets" title="Assets" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-              <span>Assets</span>
-            </button>
-            <button class="rail-btn" id="rail-tools" title="Tools" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-              <span>Tools</span>
-            </button>
-            <button class="rail-btn" id="rail-variables" title="Variables" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500; opacity: 0.6;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-              <span>Variables</span>
-            </button>
-          </div>
 
           <!-- LEFT SIDEBAR — LAYERS -->
           <div class="sidebar" id="glide-layers">
