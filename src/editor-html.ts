@@ -1548,7 +1548,7 @@ export function getEditorHTML(port: number): string {
               drawOverlay();
             }
 
-            if (data.type === 'glide:element-dragging') {
+            if (data.type === 'glide:drag-delta') {
               const g = document.getElementById('selection-group');
               if (g) {
                 g.setAttribute('transform', 'translate(' + data.dx + ', ' + data.dy + ')');
