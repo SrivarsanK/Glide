@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { glideSourceStamping } from './plugin.js';
+import { glideSourceStamping } from '../plugin.js';
 
 describe('glideSourceStamping Vite Plugin', () => {
   test('injects data-gl-source attributes in dev mode', () => {

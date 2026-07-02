@@ -1,5 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { HistoryManager } from './history.js';
+import { HistoryManager } from '../history.js';
 
 describe('HistoryManager Undo/Redo System', () => {
   let history: HistoryManager;

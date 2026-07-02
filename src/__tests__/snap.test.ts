@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { snapToGrid } from './snap.js';
+import { snapToGrid } from '../snap.js';
 
 describe('Canvas Grid Snapping Helper', () => {
   test('should snap layout coordinate values to nearest grid step size', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findJSXElementAt, updateClassName, updateJSXText } from './writer.js';
+import { findJSXElementAt, updateClassName, updateJSXText } from '../writer.js';
 
 describe('AST Write-back Engine', () => {
   test('should find a JSX opening element by coordinates', () => {

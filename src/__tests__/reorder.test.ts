@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { reorderJSXElement } from './reorder.js';
+import { reorderJSXElement } from '../reorder.js';
 
 describe('AST Layer Reordering', () => {
   test('should reorder sibling elements within the same parent', () => {

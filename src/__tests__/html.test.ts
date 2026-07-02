@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { updateHTMLClass, updateHTMLText, parseHTMLToReact } from './html.js';
+import { updateHTMLClass, updateHTMLText, parseHTMLToReact } from '../html.js';
 import * as React from 'react';
 
 describe('HTML DOM Parsing and Modification Engine', () => {

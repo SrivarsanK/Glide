@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { updateVueSFCClass } from './vue.js';
+import { updateVueSFCClass } from '../vue.js';
 
 describe('Vue SFC Transformation Adapter', () => {
   test('should update existing class attribute in template block', () => {

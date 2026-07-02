@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildComponentTree, getNestingPath } from './tree.js';
+import { buildComponentTree, getNestingPath } from '../tree.js';
 
 describe('JSX Component Tree Parser', () => {
   test('should parse nested JSX elements into tree structures', () => {
