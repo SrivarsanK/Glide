@@ -537,33 +537,10 @@ export function glideSourceStamping(): Plugin {
   }
 })();
 </script>`;
-      // Use a simpler approach — inject via window.addEventListener for Vite HMR events
-      const positionInjectorScript = `<script type="module">
-if (import.meta.hot) {
-  import.meta.hot.on('glide:positions-updated', function(data) {
-    var el = document.getElementById('__glide_positions__');
-    if (el) el.textContent = data.css;
-    
-    // Clear temporary inline styles now that they are persisted in the stylesheet
-    var elements = document.querySelectorAll('[data-gl-source]');
-    for (var i = 0; i < elements.length; i++) {
-      var item = elements[i];
-      item.style.removeProperty('left');
-      item.style.removeProperty('top');
-      item.style.removeProperty('position');
-    }
-
-    if (typeof window.__glide_refresh_selection__ === 'function') {
-      // Defer slightly to ensure browser applies style repaint before querying rect coordinates
-      setTimeout(window.__glide_refresh_selection__, 0);
-    }
-  });
-}
-</script>`;
       const initialStyle = `<style id="__glide_positions__">${initialCSS}</style>`;
       return html.replace(
         '<head>',
-        `<head>${initialStyle}${positionInjectorScript}<script>${BRIDGE_SCRIPT}<\/script>`
+        `<head>${initialStyle}<script>${BRIDGE_SCRIPT}<\/script>`
       );
     },
 
@@ -622,8 +599,30 @@ if (import.meta.hot) {
       if (!result) return null;
 
       // Only return the stamped code — bridge is injected via transformIndexHtml
+      const hmrInjection = `
+if (import.meta.hot && !window.__glide_hmr_registered__) {
+  window.__glide_hmr_registered__ = true;
+  import.meta.hot.on('glide:positions-updated', function(data) {
+    var el = document.getElementById('__glide_positions__');
+    if (el) el.textContent = data.css;
+    
+    // Clear temporary inline styles now that they are persisted in the stylesheet
+    var elements = document.querySelectorAll('[data-gl-source]');
+    for (var i = 0; i < elements.length; i++) {
+      var item = elements[i];
+      item.style.removeProperty('left');
+      item.style.removeProperty('top');
+      item.style.removeProperty('position');
+    }
+
+    if (typeof window.__glide_refresh_selection__ === 'function') {
+      setTimeout(window.__glide_refresh_selection__, 0);
+    }
+  });
+}
+`;
       return {
-        code: result.code ?? code,
+        code: (result.code ?? code) + hmrInjection,
         map: result.map,
       };
     },
