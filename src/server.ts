@@ -3,7 +3,7 @@ import { createServer, Server } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from './editor-html.js';
 import { buildComponentTree } from './tree.js';
-import { reorderJSXElement, insertJSXElement } from './reorder.js';
+import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from './reorder.js';
 
 export interface EditChange {
   type: 'style' | 'class' | 'text';
@@ -30,10 +30,12 @@ export class GlideServer {
   private wss: WebSocketServer | null = null;
   private server: Server | null = null;
   private port: number;
+  private targetPort: number;
   private editCallbacks: EditCallback[] = [];
 
-  constructor(port = 7777) {
+  constructor(port = 7777, targetPort = 5173) {
     this.port = port;
+    this.targetPort = targetPort;
   }
 
   public start(): Promise<void> {
@@ -41,7 +43,7 @@ export class GlideServer {
       try {
         this.server = createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(getEditorHTML(this.port));
+          res.end(getEditorHTML(this.targetPort));
         });
 
         this.wss = new WebSocketServer({ server: this.server });
@@ -112,6 +114,96 @@ export class GlideServer {
                     ws.send(JSON.stringify({
                       type: 'status',
                       success: true
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'group') {
+                const { file, selectedIds } = message;
+                if (fs.existsSync(file)) {
+                  try {
+                    const code = fs.readFileSync(file, 'utf-8');
+                    const updated = groupJSXElements(code, selectedIds);
+                    fs.writeFileSync(file, updated, 'utf-8');
+                    const tree = buildComponentTree(updated);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file,
+                      tree
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'ungroup') {
+                const { file, groupId } = message;
+                if (fs.existsSync(file)) {
+                  try {
+                    const code = fs.readFileSync(file, 'utf-8');
+                    const updated = ungroupJSXElement(code, groupId);
+                    fs.writeFileSync(file, updated, 'utf-8');
+                    const tree = buildComponentTree(updated);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file,
+                      tree
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'arrange') {
+                const { file, targetId, action } = message;
+                if (fs.existsSync(file)) {
+                  try {
+                    const code = fs.readFileSync(file, 'utf-8');
+                    const updated = arrangeJSXElement(code, targetId, action);
+                    fs.writeFileSync(file, updated, 'utf-8');
+                    const tree = buildComponentTree(updated);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file,
+                      tree
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({

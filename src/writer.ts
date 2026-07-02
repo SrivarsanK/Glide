@@ -66,6 +66,11 @@ function matchesProperty(c: string, property: string): boolean {
       return name.startsWith('border-') && !matchesProperty(c, 'borderWidth') && !matchesProperty(c, 'borderStyle');
     case 'borderWidth':
       return name.startsWith('border-') && (/^border-\[\d+px\]$/.test(name) || /^border-\d+$/.test(name) || name === 'border');
+    case 'position': return ['static','relative','absolute','fixed','sticky'].includes(name);
+    case 'left': return name.startsWith('left-');
+    case 'top': return name.startsWith('top-');
+    case 'right': return name.startsWith('right-');
+    case 'bottom': return name.startsWith('bottom-');
     default:
       return false;
   }
@@ -85,6 +90,29 @@ function getNewClass(property: string, value: any): string {
       return `text-${clean}`;
     case 'borderStyle':
       return `border-${clean}`;
+    case 'position':
+      // Tailwind position utilities: static, relative, absolute, fixed, sticky
+      return ['static','relative','absolute','fixed','sticky'].includes(clean) ? clean : 'relative';
+    case 'left': {
+      let v = clean;
+      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
+      return `left-[${v}px]`;
+    }
+    case 'top': {
+      let v = clean;
+      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
+      return `top-[${v}px]`;
+    }
+    case 'right': {
+      let v = clean;
+      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
+      return `right-[${v}px]`;
+    }
+    case 'bottom': {
+      let v = clean;
+      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
+      return `bottom-[${v}px]`;
+    }
     default:
       let prefix = '';
       switch (property) {
@@ -320,4 +348,62 @@ export function updateJSXText(
     newText +
     sourceCode.slice(closeStart)
   );
+}
+
+/**
+ * Sets or merges CSS properties into the JSX `style` prop of an element.
+ * Framework-agnostic — works without Tailwind.
+ *
+ * Before: <div className="foo">
+ * After:  <div className="foo" style={{position:'relative',left:'200px',top:'100px'}}>
+ *
+ * If a style prop already exists, keys are merged (unknown keys are preserved).
+ */
+export function updateJSXStyleProp(
+  sourceCode: string,
+  line: number,
+  column: number,
+  styles: Record<string, string>
+): string {
+  const node = findJSXElementAt(sourceCode, line, column);
+  if (!node) {
+    throw new Error(`JSX element not found at line ${line}, column ${column}`);
+  }
+
+  // Find existing style attribute
+  const styleAttr = node.attributes.find(
+    (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'style'
+  );
+
+  if (styleAttr) {
+    // Parse existing key:value pairs (handles both single and double quotes)
+    const existingRaw = sourceCode.slice(styleAttr.start, styleAttr.end);
+    const existing: Record<string, string> = {};
+    const kvRe = /(\w+)\s*:\s*['"]([^'"]*)['"]/g;
+    let m: RegExpExecArray | null;
+    while ((m = kvRe.exec(existingRaw)) !== null) {
+      existing[m[1]] = m[2];
+    }
+    // Merge — new styles overwrite matching keys
+    const merged = { ...existing, ...styles };
+    const styleStr = Object.entries(merged)
+      .map(([k, v]) => `${k}:'${v}'`)
+      .join(',');
+    return (
+      sourceCode.slice(0, styleAttr.start) +
+      `style={{${styleStr}}}` +
+      sourceCode.slice(styleAttr.end)
+    );
+  } else {
+    // Inject new style prop right after the element name
+    const styleStr = Object.entries(styles)
+      .map(([k, v]) => `${k}:'${v}'`)
+      .join(',');
+    const insertIndex = node.name.end;
+    return (
+      sourceCode.slice(0, insertIndex) +
+      ` style={{${styleStr}}}` +
+      sourceCode.slice(insertIndex)
+    );
+  }
 }

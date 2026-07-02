@@ -282,6 +282,83 @@
           }
           @keyframes spin { to { transform: rotate(360deg); } }
 
+          /* ── COLLAPSIBLE SIDEBARS ── */
+          .sidebar.collapsed {
+            display: none !important;
+          }
+          .sidebar-toggle-btn {
+            position: absolute;
+            top: 20px;
+            width: 28px;
+            height: 28px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            font-size: 10px;
+          }
+          .sidebar-toggle-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--accent-color);
+            background: var(--bg-element);
+            transform: scale(1.05);
+          }
+          .left-toggle {
+            left: 20px;
+          }
+          .right-toggle {
+            right: 20px;
+          }
+
+          /* ── CONTEXT MENU ── */
+          .context-menu {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+            padding: 4px;
+            width: 220px;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--text-primary);
+          }
+          .context-menu-item {
+            padding: 6px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.15s;
+          }
+          .context-menu-item:hover {
+            background: var(--accent-color);
+            color: #000;
+          }
+          .context-menu-item.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+          }
+          .context-menu-item .shortcut {
+            font-size: 10px;
+            color: var(--text-secondary);
+          }
+          .context-menu-item:hover .shortcut {
+            color: #000;
+          }
+          .context-menu-separator {
+            height: 1px;
+            background: var(--border-color);
+            margin: 4px 0;
+          }
+
           /* ── SELECTION OVERLAY SVG ── */
           #overlay-svg {
             position: absolute;
@@ -606,13 +683,15 @@
 
           <!-- CANVAS -->
           <div class="canvas-container" id="canvas-container">
+            <button id="toggle-left-sidebar" class="sidebar-toggle-btn left-toggle" title="Toggle Layers Sidebar ( [ )">◀</button>
+            <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )">▶</button>
             <div class="canvas-viewport" id="canvas-viewport">
               <div class="preview-frame-wrapper" id="frame-wrapper">
                 <div class="canvas-loading" id="canvas-loading">
                   <div class="spinner"></div>
                   <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
                 </div>
-                <iframe id="app-iframe" src="http://localhost:${port}" title="App Preview"></iframe>
+                <iframe id="app-iframe" title="App Preview"></iframe>
                 <svg id="overlay-svg" style="position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:10;">
                   <defs>
                     <filter id="shadow-filter">
@@ -887,6 +966,17 @@
 
         </div><!-- end .main-container -->
 
+        <!-- CONTEXT MENU -->
+        <div id="glide-context-menu" class="context-menu" style="display:none; position:fixed; z-index:10000;">
+          <div class="context-menu-item" id="menu-group">Group Selection <span class="shortcut">Ctrl+G</span></div>
+          <div class="context-menu-item" id="menu-ungroup">Ungroup Selection <span class="shortcut">Ctrl+Shift+G</span></div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" id="menu-front">Bring to Front <span class="shortcut">]</span></div>
+          <div class="context-menu-item" id="menu-back">Send to Back <span class="shortcut">[</span></div>
+          <div class="context-menu-item" id="menu-forward">Bring Forward <span class="shortcut">Ctrl+]</span></div>
+          <div class="context-menu-item" id="menu-backward">Send Backward <span class="shortcut">Ctrl+[</span></div>
+        </div>
+
         <!-- STATUS BAR -->
         <div class="status-bar">
           <div class="status-dot" id="ws-dot"></div>
@@ -904,6 +994,8 @@
           let selectedElement = null;
           let selectedRect = null;
           let selectedComputedStyles = null;
+          let selectedSources = [];
+          let selectedRects = [];
           let hoveredElement = null;
           let hoveredRect = null;
           let currentTool = 'select';
@@ -1123,10 +1215,79 @@
               selectedElement = null;
               selectedRect = null;
               selectedComputedStyles = null;
+              selectedSources = [];
+              selectedRects = [];
               hoveredElement = null;
               hoveredRect = null;
               clearOverlay();
               showNoSelection();
+              return;
+            }
+
+            // Toggle left sidebar [ / Send to Back
+            if (!ctrl && key === '[') {
+              e.preventDefault();
+              if (selectedSources.length > 0) {
+                triggerArrange('back');
+              } else {
+                toggleLeft();
+              }
+              return;
+            }
+            // Toggle right sidebar ] / Bring to Front
+            if (!ctrl && key === ']') {
+              e.preventDefault();
+              if (selectedSources.length > 0) {
+                triggerArrange('front');
+              } else {
+                toggleRight();
+              }
+              return;
+            }
+            // Bring Forward Ctrl+]
+            if (ctrl && key === ']') {
+              e.preventDefault();
+              if (selectedSources.length > 0) {
+                triggerArrange('forward');
+              }
+              return;
+            }
+            // Send Backward Ctrl+[
+            if (ctrl && key === '[') {
+              e.preventDefault();
+              if (selectedSources.length > 0) {
+                triggerArrange('backward');
+              }
+              return;
+            }
+            // Toggle both sidebars \\
+            if (key === '\\') {
+              e.preventDefault();
+              const leftState = leftSidebar.classList.contains('collapsed');
+              const rightState = rightSidebar.classList.contains('collapsed');
+              if (leftState && rightState) {
+                leftSidebar.classList.remove('collapsed');
+                rightSidebar.classList.remove('collapsed');
+                btnLeft.textContent = '◀';
+                btnRight.textContent = '▶';
+              } else {
+                leftSidebar.classList.add('collapsed');
+                rightSidebar.classList.add('collapsed');
+                btnLeft.textContent = '▶';
+                btnRight.textContent = '◀';
+              }
+              return;
+            }
+
+            // Ctrl+G = Group, Ctrl+Shift+G = Ungroup
+            if (ctrl && (key === 'g' || key === 'G') && !e.shiftKey) {
+              e.preventDefault();
+              triggerGroup();
+              return;
+            }
+            if (ctrl && (key === 'g' || key === 'G') && e.shiftKey) {
+              e.preventDefault();
+              triggerUngroup();
               return;
             }
 
@@ -1236,9 +1397,6 @@
 
           function drawSelectionBox(rect, isHover) {
             const container = isHover ? svg : (document.getElementById('selection-group') || createSelectionGroup());
-            if (!isHover) {
-              container.innerHTML = '';
-            }
 
             const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
             r.setAttribute('x', rect.x);
@@ -1277,10 +1435,12 @@
 
           function drawOverlay() {
             clearOverlay();
-            if (selectedRect) {
-              drawSelectionBox(selectedRect, false);
+            if (selectedRects && selectedRects.length > 0) {
+              selectedRects.forEach(r => {
+                if (r) drawSelectionBox(r, false);
+              });
             }
-            if (hoveredRect && (!selectedElement || hoveredElement.source !== selectedElement.source)) {
+            if (hoveredRect && (!hoveredElement || !selectedSources.includes(hoveredElement.source))) {
               drawSelectionBox(hoveredRect, true);
             }
           }
@@ -1300,12 +1460,70 @@
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
               } else {
-                selectedElement = { source: data.source };
-                selectedRect = data.rect;
+                const isShift = data.isShift;
+                const source = data.source;
+                const rect = data.rect;
+                
+                if (!isShift) {
+                  selectedSources = [source];
+                  selectedRects = [rect];
+                } else {
+                  if (!selectedSources.includes(source)) {
+                    selectedSources.push(source);
+                    selectedRects.push(rect);
+                  }
+                }
+                
+                selectedElement = { source: source };
+                selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
-                populatePropsFromComputed(data.computedStyles || {}, data.rect || {});
+                populatePropsFromComputed(data.computedStyles || {}, rect || {});
+                
+                // Highlight selected items in layers tree
+                document.querySelectorAll('.layer-item').forEach(item => {
+                  if (selectedSources.includes(item.dataset.source)) {
+                    item.classList.add('active');
+                  } else {
+                    item.classList.remove('active');
+                  }
+                });
               }
               drawOverlay();
+            }
+            if (data.type === 'glide:element-deselected') {
+              const source = data.source;
+              const idx = selectedSources.indexOf(source);
+              if (idx !== -1) {
+                selectedSources.splice(idx, 1);
+                selectedRects.splice(idx, 1);
+              }
+              if (selectedSources.length > 0) {
+                selectedElement = { source: selectedSources[selectedSources.length - 1] };
+                selectedRect = selectedRects[selectedRects.length - 1];
+              } else {
+                selectedElement = null;
+                selectedRect = null;
+                showNoSelection();
+              }
+              drawOverlay();
+              
+              // Update highlights in layers tree
+              document.querySelectorAll('.layer-item').forEach(item => {
+                if (selectedSources.includes(item.dataset.source)) {
+                  item.classList.add('active');
+                } else {
+                  item.classList.remove('active');
+                }
+              });
+            }
+            if (data.type === 'glide:clear-selection') {
+              selectedSources = [];
+              selectedRects = [];
+              selectedElement = null;
+              selectedRect = null;
+              clearOverlay();
+              showNoSelection();
+              document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
             }
             if (data.type === 'glide:element-hover-exit') {
               hoveredElement = null;
@@ -1377,7 +1595,7 @@
               if (isComponent) item.classList.add('component-root');
 
               // Active state
-              if (selectedElement && selectedElement.source === nodeSource) {
+              if (selectedSources.includes(nodeSource)) {
                 item.classList.add('active');
               }
 
@@ -1414,21 +1632,19 @@
                   '<button class="layer-action-btn lock-btn" data-node-id="' + node.id + '" title="Toggle lock">' + lockIcon + '</button>' +
                 '</div>';
 
-              // Click → select
+              // Click → select (with multi-select modifier)
               item.addEventListener('click', (e) => {
                 if (e.target.closest('.layer-actions')) return;
                 if (lockedIds.has(node.id)) return;
+                const isShift = e.shiftKey || e.ctrlKey || e.metaKey;
                 const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
                     type: 'glide:select-element-by-id',
-                    id: nodeSource
+                    id: nodeSource,
+                    isShift: isShift
                   }, '*');
                 }
-                selectedElement = { source: nodeSource };
-                document.querySelectorAll('.layer-item').forEach(li => li.classList.remove('active'));
-                item.classList.add('active');
-                document.getElementById('selected-tag').textContent = '<' + node.name + '>';
               });
 
               // Eye button
@@ -1483,7 +1699,11 @@
                 const draggedSource = e.dataTransfer.getData('text/plain');
                 if (!draggedSource || draggedSource === nodeSource) return;
                 const rect = item.getBoundingClientRect();
-                const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after';
+                
+                // Inverted drop position check because Layers tree rendering is reversed to match Figma
+                const mid = (e.clientY - rect.top) < rect.height / 2;
+                const position = mid ? 'after' : 'before';
+                
                 const parentNode = findParentNodeInTree(layerTree, node.id);
                 if (parentNode && socket && socket.readyState === WebSocket.OPEN) {
                   const parentSource = convertNodeIdToSource(parentNode.id, currentFile);
@@ -1544,8 +1764,8 @@
                       socket.send(JSON.stringify({
                         type: 'edit',
                         file: currentFile,
-                        line: parseInt((nodeSource.match(/:(\\d+):(\\d+)$/) || [])[1] || '0', 10),
-                        column: parseInt((nodeSource.match(/:(\\d+)$/) || [])[0].slice(1) || '0', 10),
+                        line: parseInt((nodeSource.match(/:(\d+):(\d+)$/) || [])[1] || '0', 10),
+                        column: parseInt((nodeSource.match(/:(\d+)$/) || [])[0].slice(1) || '0', 10),
                         change: { type: 'text', value: newText }
                       }));
                     }
@@ -1564,12 +1784,16 @@
               list.appendChild(item);
 
               if (node.children && node.children.length > 0) {
-                node.children.forEach(child => renderNode(child, depth + 1));
+                // Reversed child iteration to arrange layers like Figma (frontmost on top)
+                const reversedChildren = [...node.children].reverse();
+                reversedChildren.forEach(child => renderNode(child, depth + 1));
               }
             }
 
             if (tree && tree.length > 0) {
-              tree.forEach(node => renderNode(node, 0));
+              // Reversed root iteration to arrange layers like Figma (frontmost on top)
+              const reversedTree = [...tree].reverse();
+              reversedTree.forEach(node => renderNode(node, 0));
               document.getElementById('layer-count').textContent = totalCount + ' nodes';
             } else {
               list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No JSX elements found</div>';

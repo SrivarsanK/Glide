@@ -1,19 +1,24 @@
-#!/usr/bin/env node
 import { GlideServer } from './index.js';
-import { updateClassName, updateJSXText, updateClassString } from './writer.js';
+import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from './writer.js';
 import { updateVueSFCClass } from './vue.js';
 import { updateSvelteClass } from './svelte.js';
 import { updateHTMLClass, updateHTMLText, getElementClass } from './html.js';
 import * as fs from 'fs';
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 7777;
-const server = new GlideServer(port);
+const targetPort = process.argv[2] ? parseInt(process.argv[2], 10) : 5173;
+const server = new GlideServer(port, targetPort);
 
 server.onEdit((file, line, column, change) => {
   const targetId = `${file}:${line}:${column}`;
   const code = fs.readFileSync(file, 'utf-8');
 
-  if (change.type === 'class') {
+  if (change.type === 'style') {
+    // Write inline style prop directly to JSX — works with any CSS setup
+    const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>);
+    fs.writeFileSync(file, updated, 'utf-8');
+    console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
+  } else if (change.type === 'class') {
     let updated = '';
     if (file.endsWith('.vue')) {
       const existing = getElementClass(code, targetId);
