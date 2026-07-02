@@ -160,9 +160,11 @@ const BRIDGE_SCRIPT = `
       initialMarginLeft = parseInt(cs.marginLeft) || 0;
       initialMarginTop = parseInt(cs.marginTop) || 0;
 
-      // Extract existing left/top styles from the element directly to accumulate position correctly
-      initialLeft = parseInt(el.style.left) || 0;
-      initialTop = parseInt(el.style.top) || 0;
+      // Extract existing left/top styles from computed style (which picks up stylesheet/position-map overrides) to accumulate position correctly
+      var styleLeft = cs.left;
+      var styleTop = cs.top;
+      initialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft) || 0);
+      initialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop) || 0);
 
       // Temporarily disable CSS transitions with !important to prevent lagging when dragging elements with transitions (e.g. .btn-primary)
       el.style.setProperty('transition', 'none', 'important');
