@@ -1557,7 +1557,7 @@ export function getEditorHTML(port: number): string {
               }
             }
             if (data.type === 'glide:element-drag-end') {
-              sendMultiClassChange(data.source, {
+              sendStylePropsChange(data.source, {
                 position: 'relative',
                 left: data.dx + 'px',
                 top: data.dy + 'px'
