@@ -222,6 +222,18 @@ const BRIDGE_SCRIPT = `
     if (isDragging && dragEl) {
       currentDx = e.clientX - startX;
       currentDy = e.clientY - startY;
+
+      // Force select the dragged element if it isn't already selected (implementing user requested drag-select fix)
+      if (selected !== dragEl) {
+        var old = document.querySelectorAll('[data-glide-selected]');
+        for (var i = 0; i < old.length; i++) {
+          old[i].removeAttribute('data-glide-selected');
+        }
+        selected = dragEl;
+        dragEl.setAttribute('data-glide-selected', '');
+        sendMsg('glide:element-selected', dragEl, false);
+      }
+
       // rAF loop is already running — just update the shared state
       e.preventDefault();
       e.stopPropagation();
