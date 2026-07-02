@@ -30,9 +30,17 @@ const BRIDGE_SCRIPT = `
     '[data-glide-hover]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
     'html, body { overflow: hidden !important; height: auto !important; }',
+    
+    /* ── Type Classes Standardized Behaviors ── */
+    /* Ensure all inline elements with typography type classes flow as inline-block for precise boundaries & dragging */
     'span[data-gl-source], strong[data-gl-source], em[data-gl-source], a[data-gl-source], label[data-gl-source] { display: inline-block !important; }',
-    '.highlight[style*="transform"], .highlight[style*="position"], .highlight[data-glide-selected], .highlight[data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
-    '[class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
+    'span.highlight, span.stat-value, span.stat-label, span.brand-name, span.brand-icon, span.section-label, span.feature-tag, span.member-tag, a.nav-link { display: inline-block !important; }',
+    
+    /* ── Stacking Context Bug Bypass ── */
+    /* Override background clip when gradient text element (or any of its ancestors) is hovered, selected, positioned, or dragged */
+    '.highlight[data-glide-selected], .highlight[data-glide-hover], .highlight[style*="transform"], .highlight[style*="position"], [data-glide-selected] .highlight, [data-glide-hover] .highlight, [style*="transform"] .highlight, [style*="position"] .highlight { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
+    '[class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover], [class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [data-glide-selected] [class*="highlight"], [data-glide-hover] [class*="highlight"], [style*="transform"] [class*="highlight"], [style*="position"] [class*="highlight"] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
+    '[class*="gradient"][data-glide-selected], [class*="gradient"][data-glide-hover], [class*="gradient"][style*="transform"], [class*="gradient"][style*="position"], [data-glide-selected] [class*="gradient"], [data-glide-hover] [class*="gradient"], [style*="transform"] [class*="gradient"], [style*="position"] [class*="gradient"] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
   ].join(' ');
   document.head.appendChild(style);
 
