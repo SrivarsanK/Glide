@@ -179,71 +179,125 @@ export function getEditorHTML(port: number): string {
           }
 
           /* ── LAYERS PANEL ── */
-          .layers-scroll { flex: 1; overflow-y: auto; padding: 6px; }
+          .layers-scroll { flex: 1; overflow-y: auto; padding: 4px 2px; }
           .layer-item {
-            padding: 5px 10px;
+            padding: 0 8px;
+            height: 28px;
             border-radius: 4px;
             font-size: 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 6px;
-            margin-bottom: 1px;
-            transition: background 0.12s;
+            gap: 5px;
+            margin-bottom: 0;
+            transition: background 0.1s;
             user-select: none;
             position: relative;
+            color: var(--text-primary);
           }
-          .layer-item:hover { background: var(--bg-element); }
+          .layer-item:hover { background: rgba(255,255,255,0.055); }
           .layer-item.active {
-            background: rgba(56,189,248,0.12);
+            background: rgba(56,189,248,0.13);
             color: var(--accent-color);
           }
+          .layer-item.active .layer-tag { color: var(--accent-color); }
+          .layer-item.active .layer-icon-svg { color: var(--accent-color); }
+          /* caret: triangle to expand/collapse */
           .layer-caret {
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            margin-right: 4px;
-            font-size: 8px;
             color: var(--text-secondary);
             cursor: pointer;
-            transition: transform 0.1s ease;
+            transition: color 0.1s;
+            border-radius: 2px;
           }
-          .layer-caret:hover {
-            color: var(--text-primary);
+          .layer-caret:hover { color: var(--text-primary); }
+          /* monochrome SVG icon */
+          .layer-icon-svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            opacity: 0.85;
           }
-          .layer-item.locked { opacity: 0.4; }
-          .layer-item.component-root { background: rgba(0,120,255,0.07); }
-          .layer-icon { font-size: 12px; flex-shrink: 0; opacity: 0.7; }
-          .layer-name-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-          .layer-class { color: #a78bfa; font-size: 10px; font-family: monospace; margin-left: 2px; }
-          .layer-text-snippet { color: #fbbf24; font-size: 10px; font-style: italic; margin-left: 2px; }
-          .layer-actions { display: none; align-items: center; gap: 4px; margin-left: auto; }
+          .layer-item.active .layer-icon-svg { opacity: 1; }
+          /* label area */
+          .layer-label {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+            overflow: hidden;
+          }
+          .layer-name {
+            font-size: 12px;
+            font-weight: 450;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: inherit;
+            letter-spacing: 0;
+          }
+          .layer-tag {
+            font-size: 10px;
+            color: #6b7280;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            white-space: nowrap;
+            flex-shrink: 0;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          /* text content shown when hovering — italic amber */
+          .layer-text {
+            font-size: 10px;
+            color: #d97706;
+            font-style: italic;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 1;
+          }
+          /* component root: subtle purple left-border accent */
+          .layer-item.component-root {
+            border-left: 2px solid rgba(167,139,250,0.4);
+            padding-left: 6px;
+          }
+          .layer-item.component-root .layer-icon-svg { color: #a78bfa; opacity: 1; }
+          /* hidden/locked tint */
+          .layer-item.hidden-node { opacity: 0.38; }
+          /* hover actions: eye only */
+          .layer-actions {
+            display: none;
+            align-items: center;
+            gap: 2px;
+            margin-left: auto;
+            flex-shrink: 0;
+          }
           .layer-item:hover .layer-actions { display: flex; }
           .layer-action-btn {
             background: none;
             border: none;
             color: var(--text-secondary);
             cursor: pointer;
-            padding: 2px;
+            padding: 2px 3px;
             border-radius: 3px;
             font-size: 11px;
             line-height: 1;
-            transition: color 0.15s;
+            display: flex;
+            align-items: center;
+            transition: color 0.12s;
           }
-          .layer-action-btn:hover { color: var(--text-primary); }
+          .layer-action-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.07); }
           .layer-action-btn.hidden-state { color: #ef4444; }
-          .layer-tag-badge {
-            font-size: 8px;
-            padding: 1px 3px;
-            border-radius: 3px;
-            font-weight: 700;
-            text-transform: uppercase;
-            flex-shrink: 0;
-          }
-          .layer-tag-badge.component { background: rgba(167,139,250,0.15); color: #c084fc; }
-          .layer-tag-badge.html { background: rgba(156,163,175,0.1); color: #6b7280; }
 
           /* ── CANVAS ── */
           .canvas-container {
@@ -1762,20 +1816,43 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           // LAYERS TREE RENDERING
           // ═══════════════════════════════════════════════════════════════
-          function getLayerIcon(name) {
+          /* ── Layer icon SVGs — Figma-style monochrome ── */
+          const LAYER_ICONS = {
+            frame:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="1" y1="4" x2="11" y2="4"/><line x1="1" y1="8" x2="11" y2="8"/><line x1="4" y1="1" x2="4" y2="11"/><line x1="8" y1="1" x2="8" y2="11"/></svg>',
+            text:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><text x="1" y="10" font-size="10" font-family="serif" font-weight="700">T</text></svg>',
+            button:   '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="10" height="6" rx="2"/></svg>',
+            image:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><polyline points="1,9 3.5,6.5 5.5,8.5 7.5,5.5 11,9"/><circle cx="8.5" cy="3.5" r="1"/></svg>',
+            list:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="2" width="2" height="2" rx="1"/><rect x="1" y="5" width="2" height="2" rx="1"/><rect x="1" y="8" width="2" height="2" rx="1"/><rect x="4.5" y="2.5" width="6.5" height="1" rx="0.5"/><rect x="4.5" y="5.5" width="6.5" height="1" rx="0.5"/><rect x="4.5" y="8.5" width="6.5" height="1" rx="0.5"/></svg>',
+            input:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="10" height="6" rx="1"/><line x1="3" y1="6" x2="3" y2="8" stroke-width="1"/></svg>',
+            nav:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="3" rx="1"/><rect x="1" y="6" width="4" height="5" rx="1"/><rect x="7" y="6" width="4" height="5" rx="1"/></svg>',
+            section:  '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/></svg>',
+            svg:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 11 L4 4 L7 8 L9 6 L11 11 Z"/></svg>',
+            link:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 A3 3 0 0 0 8.5 7.5 L9.5 6.5 A3 3 0 0 0 5.5 2.5 L4.5 3.5"/><path d="M7 4.5 A3 3 0 0 0 3.5 4.5 L2.5 5.5 A3 3 0 0 0 6.5 9.5 L7.5 8.5"/></svg>',
+            component:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1 L11 3.5 L11 8.5 L6 11 L1 8.5 L1 3.5 Z"/></svg>',
+            div:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="10" height="10" rx="1" stroke-dasharray="2 1.5"/></svg>',
+          };
+
+          function getLayerIconSVG(name) {
             const n = name.toLowerCase();
-            if (n === 'svg') return '◈';
-            if (n === 'img') return '🖼';
-            if (n === 'button' || n === 'a') return '⬡';
-            if (['p','span','h1','h2','h3','h4','h5','h6','label','em','strong','small'].includes(n)) return '𝐓';
-            if (['input','textarea','select'].includes(n)) return '⬜';
-            if (['ul','ol','li'].includes(n)) return '≡';
-            // Component (uppercase)
-            if (name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) return '⬡';
-            return '▣'; // div/section/article/main/etc
+            if (n === 'svg') return LAYER_ICONS.svg;
+            if (n === 'img') return LAYER_ICONS.image;
+            if (n === 'a') return LAYER_ICONS.link;
+            if (n === 'button') return LAYER_ICONS.button;
+            if (['input','textarea','select'].includes(n)) return LAYER_ICONS.input;
+            if (['p','span','h1','h2','h3','h4','h5','h6','label','em','strong','small','b','i'].includes(n)) return LAYER_ICONS.text;
+            if (['ul','ol','li'].includes(n)) return LAYER_ICONS.list;
+            if (n === 'nav') return LAYER_ICONS.nav;
+            if (['section','article','header','footer','main','aside'].includes(n)) return LAYER_ICONS.section;
+            // Component (PascalCase)
+            if (name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) return LAYER_ICONS.component;
+            return LAYER_ICONS.div;
           }
 
           let layerTree = null;
+
+          function escapeHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          }
 
           function renderLayersTree(tree) {
             layerTree = tree;
@@ -1808,44 +1885,55 @@ export function getEditorHTML(port: number): string {
                 item.classList.add('active');
               }
 
-              // Hidden state
-              if (hiddenIds.has(node.id)) {
-                item.style.opacity = '0.35';
-              }
-
               const hasChildren = node.children && node.children.length > 0;
+              // component-root gets 2px left-border; subtract 2 so indentation is visually consistent
               item.style.paddingLeft = (6 + depth * 12) + 'px';
 
-              const icon = getLayerIcon(node.name);
-              const badge = isComponent
-                ? '<span class="layer-tag-badge component">Comp</span>'
-                : '<span class="layer-tag-badge html">' + node.name + '</span>';
+              const iconSVG = getLayerIconSVG(node.name);
 
-              let extras = '';
-              if (node.className) {
-                const cls = node.className.split(' ').filter(Boolean).slice(0,2).map(c => '.' + c).join('');
-                extras += '<span class="layer-class">' + cls + '</span>';
-              }
-              if (node.text) {
-                extras += '<span class="layer-text-snippet">"' + node.text + '"</span>';
+              // Display name: component uses PascalCase name, HTML uses tag + first class
+              let displayName = node.name;
+              let tagLabel = '';
+              if (isComponent) {
+                // Show component name; if has a className, show first class as tag
+                if (node.className) {
+                  const firstClass = node.className.split(' ').filter(Boolean)[0];
+                  if (firstClass) tagLabel = '.' + firstClass;
+                }
+              } else {
+                // For HTML elements, show tag name as primary, first class dimmed
+                if (node.className) {
+                  const firstClass = node.className.split(' ').filter(Boolean)[0];
+                  if (firstClass) tagLabel = '.' + firstClass;
+                }
               }
 
-              const eyeIcon = hiddenIds.has(node.id) ? '🚫' : '👁';
-              const lockIcon = lockedIds.has(node.id) ? '🔒' : '🔓';
+              const isHidden = hiddenIds.has(node.id);
+              if (isHidden) item.classList.add('hidden-node');
 
               const isExpanded = expandedNodeIds.has(node.id);
-              const caretHTML = hasChildren
-                ? '<span class="layer-caret">' + (isExpanded ? '▼' : '▶') + '</span>'
-                : '<span class="layer-caret" style="visibility:hidden">▶</span>';
+              // Caret: right-pointing when collapsed, down when expanded
+              const caretSVG = hasChildren
+                ? '<span class="layer-caret" style="' + (isExpanded ? 'transform:rotate(90deg)' : '') + '">' +
+                    '<svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1.5 L6 4 L2 6.5 Z"/></svg>' +
+                  '</span>'
+                : '<span class="layer-caret" style="visibility:hidden"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1.5 L6 4 L2 6.5 Z"/></svg></span>';
+
+              // Eye icon SVG
+              const eyeSVG = isHidden
+                ? '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="1" x2="11" y2="11"/><path d="M4.5 4.7 A3 1.5 0 0 0 7.5 7.3"/><path d="M2 3.5 Q6 8.5 10 4.5 Q6 0.5 2 3.5 Z"/></svg>'
+                : '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 6 Q6 1 11 6 Q6 11 1 6 Z"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/></svg>';
 
               item.innerHTML =
-                caretHTML +
-                '<span class="layer-icon">' + icon + '</span>' +
-                badge +
-                '<span class="layer-name-text">' + node.name + extras + '</span>' +
+                caretSVG +
+                '<span class="layer-icon-svg">' + iconSVG + '</span>' +
+                '<span class="layer-label">' +
+                  '<span class="layer-name">' + displayName + '</span>' +
+                  (tagLabel ? '<span class="layer-tag">' + escapeHtml(tagLabel) + '</span>' : '') +
+                  (node.text ? '<span class="layer-text">' + escapeHtml(node.text.slice(0, 20)) + (node.text.length > 20 ? '…' : '') + '</span>' : '') +
+                '</span>' +
                 '<div class="layer-actions">' +
-                  '<button class="layer-action-btn eye-btn" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeIcon + '</button>' +
-                  '<button class="layer-action-btn lock-btn" data-node-id="' + node.id + '" title="Toggle lock">' + lockIcon + '</button>' +
+                  '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
 
               // Caret click to toggle collapse/expand
@@ -1889,19 +1977,6 @@ export function getEditorHTML(port: number): string {
                 }
                 renderLayersTree(layerTree);
               });
-
-              // Lock button
-              item.querySelector('.lock-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                const nid = e.currentTarget.dataset.nodeId;
-                if (lockedIds.has(nid)) {
-                  lockedIds.delete(nid);
-                } else {
-                  lockedIds.add(nid);
-                }
-                renderLayersTree(layerTree);
-              });
-
               // Drag-and-drop reorder
               item.setAttribute('draggable', 'true');
               item.addEventListener('dragstart', (e) => {
