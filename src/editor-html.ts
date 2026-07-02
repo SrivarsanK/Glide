@@ -198,6 +198,21 @@ export function getEditorHTML(port: number): string {
             background: rgba(56,189,248,0.12);
             color: var(--accent-color);
           }
+          .layer-caret {
+            width: 12px;
+            height: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            font-size: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: transform 0.1s ease;
+          }
+          .layer-caret:hover {
+            color: var(--text-primary);
+          }
           .layer-item.locked { opacity: 0.4; }
           .layer-item.component-root { background: rgba(0,120,255,0.07); }
           .layer-icon { font-size: 12px; flex-shrink: 0; opacity: 0.7; }
@@ -996,6 +1011,32 @@ export function getEditorHTML(port: number): string {
           let selectedComputedStyles = null;
           const componentRootSources = new Set();
           let currentGeneration = 0;
+          const expandedNodeIds = new Set();
+
+          function findNodeBySource(nodes, source) {
+            for (const node of nodes) {
+              const nodeSource = convertNodeIdToSource(node.id, currentFile);
+              if (nodeSource === source) return node;
+              if (node.children) {
+                const found = findNodeBySource(node.children, source);
+                if (found) return found;
+              }
+            }
+            return null;
+          }
+
+          function findAncestors(nodes, targetId, path = []) {
+            for (const node of nodes) {
+              if (node.id === targetId) {
+                return path;
+              }
+              if (node.children) {
+                const found = findAncestors(node.children, targetId, [...path, node.id]);
+                if (found) return found;
+              }
+            }
+            return null;
+          }
           let selectedSources = [];
           let selectedRects = [];
           let hoveredElement = null;
@@ -1065,7 +1106,42 @@ export function getEditorHTML(port: number): string {
                 if (message.type === 'tree') {
                   currentFile = message.file;
                   currentGeneration = message.generation || 0;
-                  renderLayersTree(message.tree);
+                  layerTree = message.tree;
+                  
+                  // Pre-expand roots and depth-0 children on first load
+                  if (expandedNodeIds.size === 0 && layerTree) {
+                    layerTree.forEach(node => {
+                      expandedNodeIds.add(node.id);
+                      if (node.children) {
+                        node.children.forEach(c => expandedNodeIds.add(c.id));
+                      }
+                    });
+                  }
+
+                  // Auto-expand ancestors of currently selected element(s)
+                  if (layerTree && selectedSources.length > 0) {
+                    selectedSources.forEach(source => {
+                      const node = findNodeBySource(layerTree, source);
+                      if (node) {
+                        const ancestors = findAncestors(layerTree, node.id);
+                        if (ancestors) {
+                          ancestors.forEach(id => expandedNodeIds.add(id));
+                        }
+                      }
+                    });
+                  }
+                  
+                  renderLayersTree(layerTree);
+
+                  // Auto-scroll selected element into view
+                  if (selectedSources.length > 0) {
+                    requestAnimationFrame(() => {
+                      const activeEl = document.querySelector('.layer-item.active');
+                      if (activeEl) {
+                        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }
+                    });
+                  }
                 } else if (message.type === 'status') {
                   if (message.success) {
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
@@ -1503,6 +1579,14 @@ export function getEditorHTML(port: number): string {
             const data = event.data;
             if (!data || !data.type) return;
 
+            if (data.type === 'glide:document-height') {
+              const iframe = document.getElementById('app-iframe');
+              if (iframe) {
+                iframe.style.height = data.height + 'px';
+              }
+              return;
+            }
+
             if (data.type === 'glide:marquee-start') {
               let rect = document.getElementById('marquee-select-rect');
               if (!rect) {
@@ -1729,7 +1813,8 @@ export function getEditorHTML(port: number): string {
                 item.style.opacity = '0.35';
               }
 
-              item.style.paddingLeft = (10 + depth * 14) + 'px';
+              const hasChildren = node.children && node.children.length > 0;
+              item.style.paddingLeft = (6 + depth * 12) + 'px';
 
               const icon = getLayerIcon(node.name);
               const badge = isComponent
@@ -1748,7 +1833,13 @@ export function getEditorHTML(port: number): string {
               const eyeIcon = hiddenIds.has(node.id) ? '🚫' : '👁';
               const lockIcon = lockedIds.has(node.id) ? '🔒' : '🔓';
 
+              const isExpanded = expandedNodeIds.has(node.id);
+              const caretHTML = hasChildren
+                ? '<span class="layer-caret">' + (isExpanded ? '▼' : '▶') + '</span>'
+                : '<span class="layer-caret" style="visibility:hidden">▶</span>';
+
               item.innerHTML =
+                caretHTML +
                 '<span class="layer-icon">' + icon + '</span>' +
                 badge +
                 '<span class="layer-name-text">' + node.name + extras + '</span>' +
@@ -1757,9 +1848,22 @@ export function getEditorHTML(port: number): string {
                   '<button class="layer-action-btn lock-btn" data-node-id="' + node.id + '" title="Toggle lock">' + lockIcon + '</button>' +
                 '</div>';
 
+              // Caret click to toggle collapse/expand
+              if (hasChildren) {
+                item.querySelector('.layer-caret').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  if (expandedNodeIds.has(node.id)) {
+                    expandedNodeIds.delete(node.id);
+                  } else {
+                    expandedNodeIds.add(node.id);
+                  }
+                  renderLayersTree(layerTree);
+                });
+              }
+
               // Click → select (with multi-select modifier)
               item.addEventListener('click', (e) => {
-                if (e.target.closest('.layer-actions')) return;
+                if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
                 if (lockedIds.has(node.id)) return;
                 const isShift = e.shiftKey || e.ctrlKey || e.metaKey;
                 const iframe = document.getElementById('app-iframe');
@@ -1825,9 +1929,9 @@ export function getEditorHTML(port: number): string {
                 if (!draggedSource || draggedSource === nodeSource) return;
                 const rect = item.getBoundingClientRect();
                 
-                // Inverted drop position check because Layers tree rendering is reversed to match Figma
+                // Direct DOM order matching (natural visual order)
                 const mid = (e.clientY - rect.top) < rect.height / 2;
-                const position = mid ? 'after' : 'before';
+                const position = mid ? 'before' : 'after';
                 
                 const parentNode = findParentNodeInTree(layerTree, node.id);
                 if (parentNode && socket && socket.readyState === WebSocket.OPEN) {
@@ -1845,7 +1949,7 @@ export function getEditorHTML(port: number): string {
 
               // Double-click → inline edit
               item.addEventListener('dblclick', (e) => {
-                if (e.target.closest('.layer-actions')) return;
+                if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
                 const nameSpan = item.querySelector('.layer-name-text');
                 const original = node.name + (node.text ? ': ' + node.text : '');
                 const inp = document.createElement('input');
@@ -1854,28 +1958,21 @@ export function getEditorHTML(port: number): string {
                 nameSpan.innerHTML = '';
                 nameSpan.appendChild(inp);
                 inp.focus();
-                inp.select();
+                
+                // auto-select text
+                const len = inp.value.length;
+                inp.setSelectionRange(0, len);
 
-                let fontStr = '16px sans-serif';
-                if (selectedComputedStyles) {
-                  fontStr = (selectedComputedStyles.fontWeight || '400') + ' ' + 
-                            (selectedComputedStyles.fontSize || '16px') + ' ' + 
-                            (selectedComputedStyles.fontFamily || 'sans-serif');
-                }
+                inp.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                });
 
+                // Style validation during input
                 inp.addEventListener('input', () => {
-                  const text = inp.value;
-                  const containerWidth = selectedRect ? selectedRect.width : 200;
-                  const containerHeight = selectedRect ? selectedRect.height : 40;
-                  
-                  const canvas = document.createElement('canvas');
-                  const ctx = canvas.getContext('2d');
-                  ctx.font = fontStr;
-                  const textWidth = ctx.measureText(text).width;
-                  
-                  if (textWidth > containerWidth || (textWidth / containerWidth * 20) > containerHeight) {
-                    inp.style.border = '1px solid var(--danger)';
-                    inp.style.boxShadow = '0 0 4px rgba(239, 68, 68, 0.5)';
+                  const newVal = inp.value.trim();
+                  if (newVal === '') {
+                    inp.style.border = '1px solid #ef4444';
+                    inp.style.boxShadow = '0 0 0 1px #ef4444';
                   } else {
                     inp.style.border = '1px solid var(--accent-color)';
                     inp.style.boxShadow = 'none';
@@ -1908,17 +2005,15 @@ export function getEditorHTML(port: number): string {
 
               list.appendChild(item);
 
-              if (node.children && node.children.length > 0) {
-                // Reversed child iteration to arrange layers like Figma (frontmost on top)
-                const reversedChildren = [...node.children].reverse();
-                reversedChildren.forEach(child => renderNode(child, depth + 1));
+              if (hasChildren && expandedNodeIds.has(node.id)) {
+                // Natural DOM order (top-to-bottom) for easy web-page hierarchy
+                node.children.forEach(child => renderNode(child, depth + 1));
               }
             }
 
             if (tree && tree.length > 0) {
-              // Reversed root iteration to arrange layers like Figma (frontmost on top)
-              const reversedTree = [...tree].reverse();
-              reversedTree.forEach(node => renderNode(node, 0));
+              // Natural DOM order (top-to-bottom) for easy web-page hierarchy
+              tree.forEach(node => renderNode(node, 0));
               document.getElementById('layer-count').textContent = totalCount + ' nodes';
             } else {
               list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No JSX elements found</div>';

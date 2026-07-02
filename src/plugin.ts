@@ -29,6 +29,7 @@ const BRIDGE_SCRIPT = `
   style.textContent = [
     '[data-glide-hover]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
+    'html, body { overflow: hidden !important; height: auto !important; }',
     'span[data-gl-source], strong[data-gl-source], em[data-gl-source], a[data-gl-source], label[data-gl-source] { display: inline-block !important; }',
     '.highlight[style*="transform"], .highlight[style*="position"], .highlight[data-glide-selected], .highlight[data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
     '[class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
@@ -556,7 +557,24 @@ const BRIDGE_SCRIPT = `
         sendMsg('glide:element-hovered', hovered);
       }
 
-      // Re-observe after mutations are complete
+    
+  // Post document height back to parent on load, resize, and DOM mutations
+  var lastHeight = 0;
+  function sendHeight() {
+    var h = document.body ? document.body.scrollHeight : 0;
+    if (h && h !== lastHeight) {
+      lastHeight = h;
+      window.parent.postMessage({ type: 'glide:document-height', height: h }, '*');
+    }
+  }
+  window.addEventListener('load', sendHeight);
+  window.addEventListener('resize', sendHeight);
+  if (typeof ResizeObserver !== 'undefined' && document.body) {
+    new ResizeObserver(sendHeight).observe(document.body);
+  }
+  setInterval(sendHeight, 500);
+
+  // Re-observe after mutations are complete
       observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
