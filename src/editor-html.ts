@@ -1351,6 +1351,11 @@ export function getEditorHTML(port: number): string {
             }
           });
 
+          let canvasContainerRect = canvasContainer.getBoundingClientRect();
+          window.addEventListener('resize', () => {
+            canvasContainerRect = canvasContainer.getBoundingClientRect();
+          });
+
           document.addEventListener('mousemove', (e) => {
             if (isPanning) {
               panX = e.clientX - panStart.x;
@@ -1358,12 +1363,9 @@ export function getEditorHTML(port: number): string {
               applyTransform();
             }
             // Update cursor coords in status bar
-            const rect = canvasContainer.getBoundingClientRect();
-            const cx = Math.round((e.clientX - rect.left - panX) / zoomLevel);
-            const cy = Math.round((e.clientY - rect.top - panY) / zoomLevel);
+            const cx = Math.round((e.clientX - canvasContainerRect.left - panX) / zoomLevel);
+            const cy = Math.round((e.clientY - canvasContainerRect.top - panY) / zoomLevel);
             document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
-            
-
           });
 
           document.addEventListener('mouseup', () => {
