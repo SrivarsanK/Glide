@@ -28,8 +28,11 @@ const BRIDGE_SCRIPT = `
   style.id = '__glide_styles__';
   style.textContent = [
     '[data-glide-hover]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
-    '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}'
-  ].join('');
+    '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
+    'span[data-gl-source], strong[data-gl-source], em[data-gl-source], a[data-gl-source], label[data-gl-source] { display: inline-block !important; }',
+    '.highlight[style*="transform"], .highlight[style*="position"], .highlight[data-glide-selected], .highlight[data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
+    '[class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
+  ].join('\n');
   document.head.appendChild(style);
 
   var hovered = null;
