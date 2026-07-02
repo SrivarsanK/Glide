@@ -1555,8 +1555,11 @@ export function getEditorHTML(port: number): string {
               }
             }
             if (data.type === 'glide:element-drag-end') {
-              sendStyleChange(data.source, 'marginLeft', data.marginLeft + 'px');
-              sendStyleChange(data.source, 'marginTop', data.marginTop + 'px');
+              sendStylePropsChange(data.source, {
+                position: 'relative',
+                left: data.dx + 'px',
+                top: data.dy + 'px'
+              });
               selectedRect = null;
               clearOverlay();
             }
@@ -2118,6 +2121,20 @@ export function getEditorHTML(port: number): string {
               column: parsed.column,
               viewportWidth: iframeWidth.current,
               change: { type: 'class', property, value }
+            }));
+          }
+
+          function sendStylePropsChange(source, styles) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'style', value: styles }
             }));
           }
 
