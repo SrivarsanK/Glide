@@ -13,7 +13,29 @@ server.onEdit((file, line, column, change) => {
   const targetId = `${file}:${line}:${column}`;
   const code = fs.readFileSync(file, 'utf-8');
 
-  if (change.type === 'style') {
+  if (change.type === 'multi-class') {
+    let updated = code;
+    const edits = change.value as Record<string, string>;
+    for (const [property, value] of Object.entries(edits)) {
+      if (file.endsWith('.vue')) {
+        const existing = getElementClass(updated, targetId);
+        const newClasses = updateClassString(existing, property, value);
+        updated = updateVueSFCClass(updated, targetId, newClasses);
+      } else if (file.endsWith('.svelte')) {
+        const existing = getElementClass(updated, targetId);
+        const newClasses = updateClassString(existing, property, value);
+        updated = updateSvelteClass(updated, targetId, newClasses);
+      } else if (file.endsWith('.html')) {
+        const existing = getElementClass(updated, targetId);
+        const newClasses = updateClassString(existing, property, value);
+        updated = updateHTMLClass(updated, targetId, newClasses);
+      } else {
+        updated = updateClassName(updated, line, column, property, value);
+      }
+    }
+    fs.writeFileSync(file, updated, 'utf-8');
+    console.log(`[Glide] Updated multi style class in ${file}:${line}:${column}`);
+  } else if (change.type === 'style') {
     // Write inline style prop directly to JSX — works with any CSS setup
     const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>);
     fs.writeFileSync(file, updated, 'utf-8');

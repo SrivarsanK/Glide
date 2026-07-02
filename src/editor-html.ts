@@ -1557,7 +1557,7 @@ export function getEditorHTML(port: number): string {
               }
             }
             if (data.type === 'glide:element-drag-end') {
-              sendStylePropsChange(data.source, {
+              sendMultiClassChange(data.source, {
                 position: 'relative',
                 left: data.dx + 'px',
                 top: data.dy + 'px'
@@ -2137,6 +2137,20 @@ export function getEditorHTML(port: number): string {
               column: parsed.column,
               viewportWidth: iframeWidth.current,
               change: { type: 'style', value: styles }
+            }));
+          }
+
+          function sendMultiClassChange(source, styles) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'multi-class', value: styles }
             }));
           }
 
