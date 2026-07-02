@@ -156,6 +156,26 @@ const BRIDGE_SCRIPT = `
       currentDx = 0;
       currentDy = 0;
 
+      // Select element immediately on pointerdown so the parent knows the active element
+      // before any dragging/drag-delta events are processed!
+      var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
+      if (!isShift) {
+        var old = document.querySelectorAll('[data-glide-selected]');
+        for (var i = 0; i < old.length; i++) {
+          old[i].removeAttribute('data-glide-selected');
+        }
+      }
+
+      if (isShift && el.hasAttribute('data-glide-selected')) {
+        el.removeAttribute('data-glide-selected');
+        sendMsg('glide:element-deselected', el, isShift);
+        selected = document.querySelector('[data-glide-selected]');
+      } else {
+        selected = el;
+        el.setAttribute('data-glide-selected', '');
+        sendMsg('glide:element-selected', el, isShift);
+      }
+
       var cs = window.getComputedStyle(el);
       initialMarginLeft = parseInt(cs.marginLeft) || 0;
       initialMarginTop = parseInt(cs.marginTop) || 0;
