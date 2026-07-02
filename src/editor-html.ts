@@ -1615,6 +1615,29 @@ export function getEditorHTML(port: number): string {
             }
           });
 
+          // Click out of frame (empty canvas background) clears selection
+          document.addEventListener('click', (e) => {
+            const isSidebar = e.target.closest('.sidebar');
+            const isHeader = e.target.closest('header');
+            const isToolbar = e.target.closest('#figma-toolbar');
+            const isIframe = e.target.closest('#app-iframe');
+            
+            if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
+              selectedSources = [];
+              selectedRects = [];
+              selectedElement = null;
+              selectedRect = null;
+              clearOverlay();
+              showNoSelection();
+              document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
+              
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
+              }
+            }
+          });
+
           // ═══════════════════════════════════════════════════════════════
           // OVERLAY SVG — selection + hover
           // ═══════════════════════════════════════════════════════════════
