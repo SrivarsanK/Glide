@@ -994,6 +994,7 @@ export function getEditorHTML(port: number): string {
           let selectedElement = null;
           let selectedRect = null;
           let selectedComputedStyles = null;
+          const componentRootSources = new Set();
           let selectedSources = [];
           let selectedRects = [];
           let hoveredElement = null;
@@ -1455,9 +1456,30 @@ export function getEditorHTML(port: number): string {
           function drawOverlay() {
             clearOverlay();
             if (selectedRects && selectedRects.length > 0) {
-              selectedRects.forEach(r => {
-                if (r) drawSelectionBox(r, false);
-              });
+              if (selectedRects.length === 1) {
+                if (selectedRects[0]) drawSelectionBox(selectedRects[0], false);
+              } else {
+                let minX = Infinity;
+                let minY = Infinity;
+                let maxX = -Infinity;
+                let maxY = -Infinity;
+                selectedRects.forEach(r => {
+                  if (r) {
+                    minX = Math.min(minX, r.x);
+                    minY = Math.min(minY, r.y);
+                    maxX = Math.max(maxX, r.x + r.width);
+                    maxY = Math.max(maxY, r.y + r.height);
+                  }
+                });
+                if (minX !== Infinity) {
+                  drawSelectionBox({
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                  }, false);
+                }
+              }
             }
             if (hoveredRect && (!hoveredElement || !selectedSources.includes(hoveredElement.source))) {
               drawSelectionBox(hoveredRect, true);
@@ -1470,6 +1492,89 @@ export function getEditorHTML(port: number): string {
           window.addEventListener('message', (event) => {
             const data = event.data;
             if (!data || !data.type) return;
+
+            if (data.type === 'glide:marquee-start') {
+              let rect = document.getElementById('marquee-select-rect');
+              if (!rect) {
+                rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.id = 'marquee-select-rect';
+                rect.setAttribute('fill', 'rgba(13, 153, 255, 0.08)');
+                rect.setAttribute('stroke', '#0d99ff');
+                rect.setAttribute('stroke-width', '1');
+                rect.setAttribute('stroke-dasharray', '3 3');
+                svg.appendChild(rect);
+              }
+              rect.setAttribute('x', data.x);
+              rect.setAttribute('y', data.y);
+              rect.setAttribute('width', '0');
+              rect.setAttribute('height', '0');
+            }
+            if (data.type === 'glide:marquee-move') {
+              const rect = document.getElementById('marquee-select-rect');
+              if (rect) {
+                const startX = data.startX;
+                const startY = data.startY;
+                const curX = data.x;
+                const curY = data.y;
+                const x = Math.min(startX, curX);
+                const y = Math.min(startY, curY);
+                const w = Math.abs(startX - curX);
+                const h = Math.abs(startY - curY);
+                rect.setAttribute('x', x);
+                rect.setAttribute('y', y);
+                rect.setAttribute('width', w);
+                rect.setAttribute('height', h);
+              }
+            }
+            if (data.type === 'glide:marquee-end') {
+              const rect = document.getElementById('marquee-select-rect');
+              if (rect) {
+                rect.remove();
+              }
+              const startX = data.startX;
+              const startY = data.startY;
+              const endX = data.endX;
+              const endY = data.endY;
+              const isRightToLeft = data.isRightToLeft;
+              const isShift = data.isShift;
+
+              const x = Math.min(startX, endX);
+              const y = Math.min(startY, endY);
+              const w = Math.abs(startX - endX);
+              const h = Math.abs(startY - endY);
+
+              if (w > 3 || h > 3) {
+                const iframe = document.getElementById('app-iframe');
+                if (iframe) {
+                  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                  const elements = iframeDoc.querySelectorAll('[data-gl-source]');
+                  
+                  const newSelections = [];
+                  elements.forEach(el => {
+                    const elRect = el.getBoundingClientRect();
+                    if (isRightToLeft) {
+                      const overlaps = !(elRect.left > x + w || elRect.right < x || elRect.top > y + h || elRect.bottom < y);
+                      if (overlaps) {
+                        newSelections.push(el.getAttribute('data-gl-source'));
+                      }
+                    } else {
+                      const enclosed = (elRect.left >= x && elRect.right <= x + w && elRect.top >= y && elRect.bottom <= y + h);
+                      if (enclosed) {
+                        newSelections.push(el.getAttribute('data-gl-source'));
+                      }
+                    }
+                  });
+
+                  if (iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                      type: 'glide:select-elements-batch',
+                      sources: newSelections,
+                      isShift: isShift
+                    }, '*');
+                  }
+                }
+              }
+            }
 
             if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
               updateLayersPanel(data);
@@ -1599,6 +1704,8 @@ export function getEditorHTML(port: number): string {
             layerTree = tree;
             const list = document.getElementById('layers-list');
             list.innerHTML = '';
+            
+            componentRootSources.clear();
 
             let totalCount = 0;
             function renderNode(node, depth) {
@@ -1614,7 +1721,10 @@ export function getEditorHTML(port: number): string {
 
               // Component root highlight
               const isComponent = node.name.length > 0 && node.name[0].toUpperCase() === node.name[0] && node.name[0] !== node.name[0].toLowerCase();
-              if (isComponent) item.classList.add('component-root');
+              if (isComponent) {
+                item.classList.add('component-root');
+                componentRootSources.add(nodeSource);
+              }
 
               // Active state
               if (selectedSources.includes(nodeSource)) {
@@ -1820,6 +1930,15 @@ export function getEditorHTML(port: number): string {
             } else {
               list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No JSX elements found</div>';
             }
+
+            // Sync component roots list to iframe
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:update-component-roots',
+                roots: Array.from(componentRootSources)
+              }, '*');
+            }
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -1835,6 +1954,13 @@ export function getEditorHTML(port: number): string {
 
             iframe.onload = () => {
               setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
+              // Send the component roots on load
+              if (iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:update-component-roots',
+                  roots: Array.from(componentRootSources)
+                }, '*');
+              }
             };
             iframe.onerror = () => {
               if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';

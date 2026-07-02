@@ -134,12 +134,40 @@ const BRIDGE_SCRIPT = `
   var currentDy = 0;
   var rafId = null;
 
-  // Pure local rAF loop — zero postMessage during drag for true 60fps
+  var isMarqueeing = false;
+  var wasMarqueeing = false;
+  var marqueeStartX = 0;
+  var marqueeStartY = 0;
+  var componentRoots = new Set();
+
+  function resolveSelectTarget(el, isCmdClick) {
+    if (isCmdClick) return el;
+    var ancestors = [];
+    var curr = el;
+    while (curr) {
+      if (curr.hasAttribute && curr.hasAttribute('data-gl-source')) {
+        ancestors.push(curr);
+      }
+      curr = curr.parentNode;
+    }
+    var compAncestors = ancestors.filter(function(node) {
+      var src = node.getAttribute('data-gl-source');
+      return componentRoots.has(src);
+    });
+    if (compAncestors.length === 0) return el;
+    for (var i = compAncestors.length - 1; i >= 0; i--) {
+      if (compAncestors[i].hasAttribute('data-glide-selected')) {
+        if (i > 0) return compAncestors[i - 1];
+        return el;
+      }
+    }
+    return compAncestors[compAncestors.length - 1];
+  }
+
   function rafDragLoop() {
     if (!isDragging || !dragEl) { rafId = null; return; }
     dragEl.style.transform = 'translate(' + currentDx + 'px, ' + currentDy + 'px)';
     dragEl.style.zIndex = '9999';
-    // Tell parent the current delta so its overlay can follow (single shared object, no alloc)
     window.parent.postMessage({ type: 'glide:drag-delta', dx: currentDx, dy: currentDy }, '*');
     rafId = requestAnimationFrame(rafDragLoop);
   }
@@ -148,17 +176,18 @@ const BRIDGE_SCRIPT = `
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
     var el = target && target.closest && target.closest('[data-gl-source]');
+    var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
+    var isCmdClick = e.metaKey || e.ctrlKey;
+
     if (el) {
+      var selectTarget = resolveSelectTarget(el, isCmdClick);
       isDragging = true;
-      dragEl = el;
+      dragEl = selectTarget;
       startX = e.clientX;
       startY = e.clientY;
       currentDx = 0;
       currentDy = 0;
 
-      // Select element immediately on pointerdown so the parent knows the active element
-      // before any dragging/drag-delta events are processed!
-      var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
       if (!isShift) {
         var old = document.querySelectorAll('[data-glide-selected]');
         for (var i = 0; i < old.length; i++) {
@@ -166,41 +195,34 @@ const BRIDGE_SCRIPT = `
         }
       }
 
-      if (isShift && el.hasAttribute('data-glide-selected')) {
-        el.removeAttribute('data-glide-selected');
-        sendMsg('glide:element-deselected', el, isShift);
+      if (isShift && selectTarget.hasAttribute('data-glide-selected')) {
+        selectTarget.removeAttribute('data-glide-selected');
+        sendMsg('glide:element-deselected', selectTarget, isShift);
         selected = document.querySelector('[data-glide-selected]');
       } else {
-        selected = el;
-        el.setAttribute('data-glide-selected', '');
-        sendMsg('glide:element-selected', el, isShift);
+        selected = selectTarget;
+        selectTarget.setAttribute('data-glide-selected', '');
+        sendMsg('glide:element-selected', selectTarget, isShift);
       }
 
-      var cs = window.getComputedStyle(el);
+      var cs = window.getComputedStyle(selectTarget);
       initialMarginLeft = parseInt(cs.marginLeft) || 0;
       initialMarginTop = parseInt(cs.marginTop) || 0;
-
-      // Extract existing left/top styles from computed style (which picks up stylesheet/position-map overrides) to accumulate position correctly
       var styleLeft = cs.left;
       var styleTop = cs.top;
       initialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft) || 0);
       initialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop) || 0);
 
-      // Temporarily disable CSS transitions with !important to prevent lagging when dragging elements with transitions (e.g. .btn-primary)
-      el.style.setProperty('transition', 'none', 'important');
-      el.style.setProperty('transition-property', 'none', 'important');
+      selectTarget.style.setProperty('transition', 'none', 'important');
+      selectTarget.style.setProperty('transition-property', 'none', 'important');
+      var r = selectTarget.getBoundingClientRect();
+      selectTarget.setPointerCapture(e.pointerId);
 
-      // Capture rect BEFORE pointer capture so it's accurate
-      var r = el.getBoundingClientRect();
-
-      el.setPointerCapture(e.pointerId);
-
-      // Kick off local rAF loop immediately
       if (!rafId) rafId = requestAnimationFrame(rafDragLoop);
 
       window.parent.postMessage({
         type: 'glide:element-drag-start',
-        source: el.getAttribute('data-gl-source'),
+        source: selectTarget.getAttribute('data-gl-source'),
         initialMarginLeft: initialMarginLeft,
         initialMarginTop: initialMarginTop,
         clientX: e.clientX,
@@ -215,6 +237,17 @@ const BRIDGE_SCRIPT = `
 
       e.preventDefault();
       e.stopPropagation();
+    } else {
+      isMarqueeing = true;
+      marqueeStartX = e.clientX;
+      marqueeStartY = e.clientY;
+      window.parent.postMessage({
+        type: 'glide:marquee-start',
+        x: marqueeStartX,
+        y: marqueeStartY
+      }, '*');
+      e.preventDefault();
+      e.stopPropagation();
     }
   }, true);
 
@@ -223,7 +256,6 @@ const BRIDGE_SCRIPT = `
       currentDx = e.clientX - startX;
       currentDy = e.clientY - startY;
 
-      // Force select the dragged element if it isn't already selected (implementing user requested drag-select fix)
       if (selected !== dragEl) {
         var old = document.querySelectorAll('[data-glide-selected]');
         for (var i = 0; i < old.length; i++) {
@@ -234,7 +266,16 @@ const BRIDGE_SCRIPT = `
         sendMsg('glide:element-selected', dragEl, false);
       }
 
-      // rAF loop is already running — just update the shared state
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (isMarqueeing) {
+      window.parent.postMessage({
+        type: 'glide:marquee-move',
+        startX: marqueeStartX,
+        startY: marqueeStartY,
+        x: e.clientX,
+        y: e.clientY
+      }, '*');
       e.preventDefault();
       e.stopPropagation();
     } else {
@@ -259,26 +300,18 @@ const BRIDGE_SCRIPT = `
   document.addEventListener('pointerup', function(e) {
     if (isDragging && dragEl) {
       isDragging = false;
-      // Stop the rAF loop
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
       dragEl.releasePointerCapture(e.pointerId);
 
-      // Compute final cumulative offsets (existing left/top style + current drag offset)
       var finalLeft = initialLeft + currentDx;
       var finalTop = initialTop + currentDy;
 
-      // Apply position inline with !important BEFORE clearing transform so element stays at dropped position.
-      // Must use !important because the __glide_positions__ stylesheet also uses !important,
-      // and without it the inline style cannot override the stylesheet's old position values.
       dragEl.style.setProperty('position', 'relative', 'important');
       dragEl.style.setProperty('left', finalLeft + 'px', 'important');
       dragEl.style.setProperty('top', finalTop + 'px', 'important');
 
-      // Restore original transition properties
       dragEl.style.removeProperty('transition');
       dragEl.style.removeProperty('transition-property');
-
-      // Now safe to clear transform and zIndex
       dragEl.style.transform = '';
       dragEl.style.zIndex = '';
 
@@ -292,6 +325,22 @@ const BRIDGE_SCRIPT = `
       dragEl = null;
       e.preventDefault();
       e.stopPropagation();
+    } else if (isMarqueeing) {
+      isMarqueeing = false;
+      wasMarqueeing = true;
+      setTimeout(function() { wasMarqueeing = false; }, 50);
+      var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
+      window.parent.postMessage({
+        type: 'glide:marquee-end',
+        startX: marqueeStartX,
+        startY: marqueeStartY,
+        endX: e.clientX,
+        endY: e.clientY,
+        isRightToLeft: (e.clientX < marqueeStartX),
+        isShift: isShift
+      }, '*');
+      e.preventDefault();
+      e.stopPropagation();
     }
   }, true);
 
@@ -303,37 +352,65 @@ const BRIDGE_SCRIPT = `
     if (el) {
       e.preventDefault();
       e.stopPropagation();
-      
+    } else if (!e.target.closest('#glide-context-menu')) {
+      if (!wasMarqueeing) {
+        var old = document.querySelectorAll('[data-glide-selected]');
+        for (var i = 0; i < old.length; i++) {
+          old[i].removeAttribute('data-glide-selected');
+        }
+        selected = null;
+        window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+      }
+    }
+  }, true);
+
+  document.addEventListener('dblclick', function(e) {
+    var target = e.target;
+    if (target.nodeType === 3) target = target.parentNode;
+    var el = target && target.closest && target.closest('[data-gl-source]');
+    if (el) {
+      e.preventDefault();
+      e.stopPropagation();
+      var old = document.querySelectorAll('[data-glide-selected]');
+      for (var i = 0; i < old.length; i++) {
+        old[i].removeAttribute('data-glide-selected');
+      }
+      selected = el;
+      el.setAttribute('data-glide-selected', '');
+      sendMsg('glide:element-selected', el, false);
+    }
+  }, true);
+
+  window.addEventListener('message', function(e) {
+    if (!e.data) return;
+    if (e.data.type === 'glide:update-component-roots') {
+      componentRoots = new Set(e.data.roots || []);
+    }
+    if (e.data.type === 'glide:select-elements-batch') {
+      var sources = e.data.sources || [];
+      var isShift = e.data.isShift;
       if (!isShift) {
         var old = document.querySelectorAll('[data-glide-selected]');
         for (var i = 0; i < old.length; i++) {
           old[i].removeAttribute('data-glide-selected');
         }
       }
-      
-      if (isShift && el.hasAttribute('data-glide-selected')) {
-        el.removeAttribute('data-glide-selected');
-        sendMsg('glide:element-deselected', el, isShift);
-        // Reset selected reference to another selected element, if any
-        selected = document.querySelector('[data-glide-selected]');
-      } else {
-        selected = el;
-        el.setAttribute('data-glide-selected', '');
-        sendMsg('glide:element-selected', el, isShift);
+      sources.forEach(function(src) {
+        var el = document.querySelector('[data-gl-source="' + src + '"]');
+        if (el) {
+          el.setAttribute('data-glide-selected', '');
+        }
+      });
+      var allSelected = document.querySelectorAll('[data-glide-selected]');
+      if (allSelected.length > 0) {
+        window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+        for (var i = 0; i < allSelected.length; i++) {
+          sendMsg('glide:element-selected', allSelected[i], true);
+        }
+      } else if (!isShift) {
+        window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
       }
-    } else if (!e.target.closest('#glide-context-menu')) {
-      // Clear selection if clicking empty canvas space
-      var old = document.querySelectorAll('[data-glide-selected]');
-      for (var i = 0; i < old.length; i++) {
-        old[i].removeAttribute('data-glide-selected');
-      }
-      selected = null;
-      window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
     }
-  }, true);
-
-  window.addEventListener('message', function(e) {
-    if (!e.data) return;
     if (e.data.type === 'glide:select-element-by-id') {
       var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
       var isShift = e.data.isShift;
@@ -344,7 +421,6 @@ const BRIDGE_SCRIPT = `
             old[i].removeAttribute('data-glide-selected');
           }
         }
-        
         if (isShift && el.hasAttribute('data-glide-selected')) {
           el.removeAttribute('data-glide-selected');
           sendMsg('glide:element-deselected', el, isShift);
