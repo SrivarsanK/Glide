@@ -181,6 +181,28 @@ describe('AST Write-back Engine', () => {
       updateClassName(code, 3, 11, 'className', 'bg-blue', undefined, 'incorrecthash');
     }).toThrow('STALE_NODE: Reference is stale');
   });
+
+  test('should update all elements sharing the exact same className in the file', () => {
+    const code = `
+      export function Grid() {
+        return (
+          <div className="grid">
+            <div className="card bg-gray-800 p-6">Card 1</div>
+            <div className="card bg-gray-800 p-6">Card 2</div>
+            <div className="card bg-gray-800 p-6">Card 3</div>
+          </div>
+        );
+      }
+    `;
+
+    // Target the first card (line 5, column 13)
+    const result = updateClassName(code, 5, 13, 'padding', 32); // p-6 (24px) -> p-8 (32px)
+    
+    // Check that ALL three cards were updated!
+    const matches = result.match(/className="card bg-gray-800 p-8"/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(3);
+  });
 });
 import { computeNodeHash } from '../writer.js';
 

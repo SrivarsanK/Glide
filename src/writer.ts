@@ -55,10 +55,12 @@ function matchesProperty(c: string, property: string): boolean {
     case 'marginRight': return name.startsWith('mr-');
     case 'marginTop': return name.startsWith('mt-');
     case 'marginBottom': return name.startsWith('mb-');
+    case 'margin': return name.split('-')[0] === 'm';
     case 'paddingLeft': return name.startsWith('pl-');
     case 'paddingRight': return name.startsWith('pr-');
     case 'paddingTop': return name.startsWith('pt-');
     case 'paddingBottom': return name.startsWith('pb-');
+    case 'padding': return name.split('-')[0] === 'p';
     case 'width': return name.startsWith('w-');
     case 'height': return name.startsWith('h-');
     case 'gap': return name.startsWith('gap-') && !name.startsWith('gap-y') && !name.startsWith('gap-x');
@@ -137,10 +139,12 @@ function getNewClass(property: string, value: any): string {
         case 'marginRight': prefix = 'mr-'; break;
         case 'marginTop': prefix = 'mt-'; break;
         case 'marginBottom': prefix = 'mb-'; break;
+        case 'margin': prefix = 'm-'; break;
         case 'paddingLeft': prefix = 'pl-'; break;
         case 'paddingRight': prefix = 'pr-'; break;
         case 'paddingTop': prefix = 'pt-'; break;
         case 'paddingBottom': prefix = 'pb-'; break;
+        case 'padding': prefix = 'p-'; break;
         case 'width': prefix = 'w-'; break;
         case 'height': prefix = 'h-'; break;
         case 'gap': prefix = 'gap-'; break;
@@ -163,7 +167,7 @@ function getNewClass(property: string, value: any): string {
         }
 
         // Check for standard multiples of 4 for margins/paddings
-        if (['marginLeft','marginRight','marginTop','marginBottom','paddingLeft','paddingRight','paddingTop','paddingBottom'].includes(property)) {
+        if (['marginLeft','marginRight','marginTop','marginBottom','margin','paddingLeft','paddingRight','paddingTop','paddingBottom','padding'].includes(property)) {
           const num = Number(val);
           if (!isNaN(num) && num % 4 === 0 && num > 0 && num <= 384) {
             return `${prefix}${num / 4}`;
@@ -317,24 +321,63 @@ export function updateClassName(
 
   const newVal = updateClassString(existingVal, property, value, breakpoint);
 
-  if (classAttr) {
-    classAttr.value = t.stringLiteral(newVal);
-  } else {
-    openingEl.attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier('className'),
-        t.stringLiteral(newVal)
-      )
-    );
+  // 1. Gather all nodes to update: target node + any nodes with matching className
+  const nodesToUpdate: Array<{ node: any; path: any }> = [];
+  nodesToUpdate.push({ node: targetPath.node, path: targetPath });
+
+  if (existingVal) {
+    traverse(ast, {
+      JSXElement(path: any) {
+        if (path.node === targetPath.node) return;
+        const nodeOpeningEl = path.node.openingElement;
+        const nodeClassAttr = nodeOpeningEl.attributes.find(
+          (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
+        );
+        if (nodeClassAttr && nodeClassAttr.value && nodeClassAttr.value.type === 'StringLiteral') {
+          if (nodeClassAttr.value.value === existingVal) {
+            nodesToUpdate.push({ node: path.node, path: path });
+          }
+        }
+      }
+    });
   }
 
-  const { code: newJSXCode } = generate(targetPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
+  // 2. Sort nodes by start index in descending order for correct back-to-front string slices
+  nodesToUpdate.sort((a, b) => b.node.start - a.node.start);
 
-  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+  // 3. Apply changes and slice update
+  let updatedSourceCode = sourceCode;
+  let targetJSXCode = '';
+  for (const { node, path: itemPath } of nodesToUpdate) {
+    const itemOpeningEl = node.openingElement;
+    let itemClassAttr = itemOpeningEl.attributes.find(
+      (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
+    );
+    if (itemClassAttr) {
+      itemClassAttr.value = t.stringLiteral(newVal);
+    } else {
+      itemOpeningEl.attributes.push(
+        t.jsxAttribute(
+          t.jsxIdentifier('className'),
+          t.stringLiteral(newVal)
+        )
+      );
+    }
+
+    const { code: newJSXCode } = generate(node, {
+      retainLines: false,
+      compact: false,
+      comments: true,
+    });
+
+    if (node === targetPath.node) {
+      targetJSXCode = newJSXCode;
+    }
+
+    updatedSourceCode = updatedSourceCode.slice(0, node.start) + newJSXCode + updatedSourceCode.slice(node.end);
+  }
+
+  const newJSXCode = targetJSXCode;
 
   validateTypeScript(updatedSourceCode);
 
