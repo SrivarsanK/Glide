@@ -2098,45 +2098,7 @@ export function getEditorHTML(port: number): string {
             group:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="0.5" y="2" width="8" height="7" rx="1"/><rect x="3.5" y="0.5" width="8" height="7" rx="1"/></svg>',
           };
 
-          /* Human-readable name map for HTML tags */
-          const HUMAN_NAMES = {
-            div: 'Container', span: 'Text Span', p: 'Paragraph',
-            h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3',
-            h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6',
-            ul: 'List', ol: 'Ordered List', li: 'List Item',
-            a: 'Link', button: 'Button', img: 'Image',
-            input: 'Input', textarea: 'Text Area', select: 'Dropdown',
-            nav: 'Navigation', header: 'Header', footer: 'Footer',
-            main: 'Main', section: 'Section', article: 'Article',
-            aside: 'Sidebar', form: 'Form', table: 'Table',
-            tr: 'Table Row', td: 'Table Cell', th: 'Table Header',
-            label: 'Label', strong: 'Bold', em: 'Italic',
-            small: 'Small Text', b: 'Bold', i: 'Italic',
-            video: 'Video', audio: 'Audio', canvas: 'Canvas',
-            svg: 'Vector', figure: 'Figure', figcaption: 'Caption',
-          };
-
-          /* Background element detection */
-          const BACKGROUND_TAGS = ['html','body','head','meta','link','script','style'];
-
-          function isGroupNode(node) {
-            const n = node.name.toLowerCase();
-            if (n !== 'div') return false;
-            if (node.className && node.className.includes('group')) return true;
-            if (node.id && typeof node.id === 'string' && node.id.includes('group')) return true;
-            if (node.children && node.children.length > 1 && !node.text) return false;
-            return false;
-          }
-
-          function getHumanName(name, node) {
-            const lower = name.toLowerCase();
-            if (isGroupNode(node)) return '⊞ Group';
-            if (HUMAN_NAMES[lower]) return HUMAN_NAMES[lower];
-            return name;
-          }
-
-          function getLayerIconSVG(name, node) {
-            if (isGroupNode(node)) return LAYER_ICONS.group;
+          function getLayerIconSVG(name) {
             const n = name.toLowerCase();
             if (n === 'svg') return LAYER_ICONS.svg;
             if (n === 'img') return LAYER_ICONS.image;
@@ -2147,7 +2109,6 @@ export function getEditorHTML(port: number): string {
             if (['ul','ol','li'].includes(n)) return LAYER_ICONS.list;
             if (n === 'nav') return LAYER_ICONS.nav;
             if (['section','article','header','footer','main','aside'].includes(n)) return LAYER_ICONS.section;
-            // Component (PascalCase)
             if (name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) return LAYER_ICONS.component;
             return LAYER_ICONS.div;
           }
@@ -2168,7 +2129,7 @@ export function getEditorHTML(port: number): string {
             let totalCount = 0;
             function renderNode(node, depth) {
               totalCount++;
-              if (lockedIds.has(node.id)) return; // skip locked hidden children
+              if (lockedIds.has(node.id)) return;
 
               const item = document.createElement('div');
               item.className = 'layer-item';
@@ -2197,10 +2158,10 @@ export function getEditorHTML(port: number): string {
               const hasChildren = node.children && node.children.length > 0;
               item.style.paddingLeft = (6 + depth * 12) + 'px';
 
-              const iconSVG = getLayerIconSVG(node.name, node);
+              const iconSVG = getLayerIconSVG(node.name);
 
-              // Human-readable display name
-              let displayName = getHumanName(node.name, node);
+              // Display: tagName as-is per FEATURES.md §18, first class as dim tag
+              let displayName = node.name;
               let tagLabel = '';
               if (isComponent) {
                 if (node.className) {
@@ -2208,9 +2169,6 @@ export function getEditorHTML(port: number): string {
                   if (firstClass) tagLabel = '.' + firstClass;
                 }
               } else {
-                // Show original tag as dim label for clarity
-                const lower = node.name.toLowerCase();
-                if (HUMAN_NAMES[lower]) tagLabel = '<' + node.name + '>';
                 if (node.className) {
                   const firstClass = node.className.split(' ').filter(Boolean)[0];
                   if (firstClass) tagLabel = '.' + firstClass;
@@ -2395,40 +2353,7 @@ export function getEditorHTML(port: number): string {
             }
 
             if (tree && tree.length > 0) {
-              /* Separate background-level (html/body/head) from content elements */
-              const bgNodes = [];
-              const contentNodes = [];
-              tree.forEach(node => {
-                if (BACKGROUND_TAGS.includes(node.name.toLowerCase())) {
-                  bgNodes.push(node);
-                } else {
-                  contentNodes.push(node);
-                }
-              });
-
-              if (bgNodes.length > 0 && contentNodes.length > 0) {
-                /* Background section */
-                const bgHeader = document.createElement('div');
-                bgHeader.className = 'layer-section-header';
-                bgHeader.textContent = 'Background';
-                list.appendChild(bgHeader);
-                bgNodes.forEach(node => renderNode(node, 0));
-
-                /* Divider */
-                const divider = document.createElement('div');
-                divider.className = 'layer-section-divider';
-                list.appendChild(divider);
-
-                /* Elements section */
-                const elHeader = document.createElement('div');
-                elHeader.className = 'layer-section-header';
-                elHeader.textContent = 'Elements';
-                list.appendChild(elHeader);
-                contentNodes.forEach(node => renderNode(node, 0));
-              } else {
-                tree.forEach(node => renderNode(node, 0));
-              }
-
+              tree.forEach(node => renderNode(node, 0));
               document.getElementById('layer-count').textContent = totalCount + ' elements';
             } else {
               list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No elements found</div>';
