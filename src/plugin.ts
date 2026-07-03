@@ -497,6 +497,23 @@ const BRIDGE_SCRIPT = `
     }
   }, true);
 
+  document.addEventListener('contextmenu', function(e) {
+    var target = e.target;
+    while (target && target !== document.documentElement) {
+      if (target.hasAttribute && target.hasAttribute('data-gl-source')) {
+        e.preventDefault();
+        window.parent.postMessage({
+          type: 'glide:contextmenu',
+          source: target.getAttribute('data-gl-source'),
+          clientX: e.clientX,
+          clientY: e.clientY
+        }, '*');
+        return;
+      }
+      target = target.parentNode || target.parentElement;
+    }
+  }, true);
+
   document.addEventListener('click', function(e) {
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;

@@ -8,9 +8,11 @@ import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from './reorder.js';
 
 export interface EditChange {
-  type: 'style' | 'class' | 'text' | 'multi-class' | 'position';
-  property: string;
-  value: any;
+  type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'group' | 'ungroup';
+  property?: string;
+  value?: any;
+  sources?: string[];
+  source?: string;
 }
 
 export interface EditMessage {

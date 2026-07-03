@@ -1674,6 +1674,9 @@ export function getEditorHTML(port: number): string {
 
           // Click out of frame (empty canvas background) clears selection
           document.addEventListener('click', (e) => {
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+
             const isSidebar = e.target.closest('.sidebar');
             const isHeader = e.target.closest('header');
             const isToolbar = e.target.closest('#figma-toolbar');
@@ -2000,6 +2003,31 @@ export function getEditorHTML(port: number): string {
             }
             if (data.type === 'glide:snap-guides-clear') {
               renderSnapGuides([]);
+            }
+            if (data.type === 'glide:contextmenu') {
+              const iframe = document.getElementById('app-iframe');
+              const rect = iframe.getBoundingClientRect();
+              const menu = document.getElementById('glide-context-menu');
+              if (menu) {
+                const mGroup = document.getElementById('menu-group');
+                const mUngroup = document.getElementById('menu-ungroup');
+
+                if (selectedSources.length > 1) {
+                  if (mGroup) mGroup.classList.remove('disabled');
+                } else {
+                  if (mGroup) mGroup.classList.add('disabled');
+                }
+
+                if (selectedElement && selectedElement.source) {
+                  if (mUngroup) mUngroup.classList.remove('disabled');
+                } else {
+                  if (mUngroup) mUngroup.classList.add('disabled');
+                }
+
+                menu.style.display = 'block';
+                menu.style.left = (rect.left + data.clientX) + 'px';
+                menu.style.top = (rect.top + data.clientY) + 'px';
+              }
             }
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };
@@ -2670,6 +2698,50 @@ export function getEditorHTML(port: number): string {
             }));
           }
 
+          function triggerGroup() {
+            if (selectedSources.length < 2) {
+              alert('Select 2 or more elements to group');
+              return;
+            }
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(selectedSources[0]);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: {
+                type: 'group',
+                sources: selectedSources
+              }
+            }));
+          }
+
+          function triggerUngroup() {
+            if (!selectedElement || !selectedElement.source) {
+              alert('Select a group element to ungroup');
+              return;
+            }
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(selectedElement.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: {
+                type: 'ungroup',
+                source: selectedElement.source
+              }
+            }));
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // INIT
           // ═══════════════════════════════════════════════════════════════
@@ -2693,6 +2765,12 @@ export function getEditorHTML(port: number): string {
 
           if (btnLeft) btnLeft.addEventListener('click', toggleLeft);
           if (btnRight) btnRight.addEventListener('click', toggleRight);
+
+          const mGroup = document.getElementById('menu-group');
+          if (mGroup) mGroup.addEventListener('click', triggerGroup);
+
+          const mUngroup = document.getElementById('menu-ungroup');
+          if (mUngroup) mUngroup.addEventListener('click', triggerUngroup);
 
           connectSocket();
           // Load default url on start

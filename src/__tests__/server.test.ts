@@ -109,4 +109,70 @@ describe('GlideServer WebSocket Server', () => {
 
     client.close();
   });
+
+  test('should accept connection and receive group and ungroup edit payloads', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    let receivedEdit: any = null;
+    server.onEdit((file, line, column, change) => {
+      receivedEdit = { file, line, column, change };
+    });
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    // 1. Send Group Payload
+    const groupPayload = {
+      type: 'edit',
+      file: 'src/App.tsx',
+      line: 12,
+      column: 3,
+      change: {
+        type: 'group',
+        sources: ['src/App.tsx:12:3', 'src/App.tsx:13:3'],
+      },
+    };
+
+    client.send(JSON.stringify(groupPayload));
+
+    const groupResponse = await new Promise<string>((resolve) => {
+      client.once('message', (data) => {
+        resolve(data.toString());
+      });
+    });
+
+    let resObj = JSON.parse(groupResponse);
+    expect(resObj.success).toBe(true);
+    expect(receivedEdit).not.toBeNull();
+    expect(receivedEdit.change.type).toBe('group');
+    expect(receivedEdit.change.sources).toEqual(['src/App.tsx:12:3', 'src/App.tsx:13:3']);
+
+    // 2. Send Ungroup Payload
+    const ungroupPayload = {
+      type: 'edit',
+      file: 'src/App.tsx',
+      line: 12,
+      column: 3,
+      change: {
+        type: 'ungroup',
+        source: 'src/App.tsx:12:3',
+      },
+    };
+
+    client.send(JSON.stringify(ungroupPayload));
+
+    const ungroupResponse = await new Promise<string>((resolve) => {
+      client.once('message', (data) => {
+        resolve(data.toString());
+      });
+    });
+
+    resObj = JSON.parse(ungroupResponse);
+    expect(resObj.success).toBe(true);
+    expect(receivedEdit.change.type).toBe('ungroup');
+    expect(receivedEdit.change.source).toBe('src/App.tsx:12:3');
+
+    client.close();
+  });
 });

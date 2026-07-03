@@ -1,5 +1,6 @@
 import { GlideServer } from './index.js';
 import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from './writer.js';
+import { groupJSXElements, ungroupJSXElement } from './reorder.js';
 import { updateVueSFCClass } from './vue.js';
 import { updateSvelteClass } from './svelte.js';
 import { updateHTMLClass, updateHTMLText, getElementClass } from './html.js';
@@ -46,6 +47,20 @@ server.onEdit((file, line, column, change, hash) => {
 
   const code = fs.readFileSync(file, 'utf-8');
 
+  if (change.type === 'group') {
+    const updated = groupJSXElements(code, change.sources!);
+    fs.writeFileSync(file, updated, 'utf-8');
+    console.log(`[Glide] Grouped elements in ${file}`);
+    return;
+  }
+
+  if (change.type === 'ungroup') {
+    const updated = ungroupJSXElement(code, change.source!);
+    fs.writeFileSync(file, updated, 'utf-8');
+    console.log(`[Glide] Ungrouped element ${change.source!} in ${file}`);
+    return;
+  }
+
   if (change.type === 'multi-class') {
     let updated = code;
     const edits = change.value as Record<string, string>;
@@ -77,18 +92,18 @@ server.onEdit((file, line, column, change, hash) => {
     let updated = '';
     if (file.endsWith('.vue')) {
       const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property, change.value);
+      const newClasses = updateClassString(existing, change.property!, change.value);
       updated = updateVueSFCClass(code, targetId, newClasses);
     } else if (file.endsWith('.svelte')) {
       const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property, change.value);
+      const newClasses = updateClassString(existing, change.property!, change.value);
       updated = updateSvelteClass(code, targetId, newClasses);
     } else if (file.endsWith('.html')) {
       const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property, change.value);
+      const newClasses = updateClassString(existing, change.property!, change.value);
       updated = updateHTMLClass(code, targetId, newClasses);
     } else {
-      updated = updateClassName(code, line, column, change.property, change.value, hash);
+      updated = updateClassName(code, line, column, change.property!, change.value, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
     console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
