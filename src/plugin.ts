@@ -768,11 +768,12 @@ export function glideSourceStamping(): Plugin {
     const posFile = path.join(rootDir, 'glide-positions.json');
     if (!fs.existsSync(posFile)) return '';
     try {
-      const positions: Record<string, Record<string, string>> = JSON.parse(
+      const positions: Record<string, Record<string, string> | null> = JSON.parse(
         fs.readFileSync(posFile, 'utf-8')
       );
       return Object.entries(positions)
         .map(([sourceId, styles]) => {
+          if (!styles) return '';
           const escapedId = sourceId.replace(/\\/g, '/').replace(/"/g, '\\"');
           const styleStr = Object.entries(styles)
             .map(([k, v]) => {
@@ -782,6 +783,7 @@ export function glideSourceStamping(): Plugin {
             .join(';');
           return `[data-gl-source="${escapedId}"]{${styleStr}}`;
         })
+        .filter(Boolean)
         .join('\n');
     } catch {
       return '';

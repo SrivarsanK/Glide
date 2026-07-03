@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { glideSourceStamping } from '../plugin.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('glideSourceStamping Vite Plugin', () => {
   test('injects data-gl-source attributes in dev mode', () => {
@@ -112,6 +118,44 @@ describe('glideSourceStamping Vite Plugin', () => {
     if (plugin.transform && typeof plugin.transform === 'function') {
       const result = plugin.transform.call({} as any, code, filePath);
       expect(result).toBeNull();
+    }
+  });
+
+  test('handles null entries in glide-positions.json during transformIndexHtml', () => {
+    const plugin = glideSourceStamping();
+    
+    const mockRoot = path.resolve(__dirname, '../../tmp-test-root');
+    if (!fs.existsSync(mockRoot)) {
+      fs.mkdirSync(mockRoot, { recursive: true });
+    }
+    const posFile = path.join(mockRoot, 'glide-positions.json');
+    const mockPositions = {
+      'src/App.tsx:10:5': { position: 'relative', left: '10px' },
+      'src/App.tsx:20:5': null
+    };
+    fs.writeFileSync(posFile, JSON.stringify(mockPositions), 'utf-8');
+
+    if (plugin.configResolved && typeof plugin.configResolved === 'function') {
+      plugin.configResolved({ command: 'serve', root: mockRoot } as any);
+    }
+
+    try {
+      if (plugin.transformIndexHtml && typeof plugin.transformIndexHtml === 'function') {
+        const html = '<html><head></head><body></body></html>';
+        const result = (plugin.transformIndexHtml as any)(html);
+        
+        expect(result).toContain('src/App.tsx:10:5');
+        expect(result).toContain('position:relative!important');
+        expect(result).toContain('left:10px!important');
+        expect(result).not.toContain('src/App.tsx:20:5');
+      }
+    } finally {
+      if (fs.existsSync(posFile)) {
+        fs.unlinkSync(posFile);
+      }
+      if (fs.existsSync(mockRoot)) {
+        fs.rmdirSync(mockRoot);
+      }
     }
   });
 });
