@@ -213,6 +213,33 @@ export function getEditorHTML(port: number): string {
 
           /* ── LAYERS PANEL ── */
           .layers-scroll { flex: 1; overflow-y: auto; padding: 4px 2px; }
+
+          /* Section dividers for Background vs Elements */
+          .layer-section-header {
+            padding: 6px 14px 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            opacity: 0.6;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .layer-section-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-color);
+          }
+          .layer-section-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 6px 10px;
+          }
+
           .layer-item {
             padding: 0 8px;
             height: 28px;
@@ -235,6 +262,16 @@ export function getEditorHTML(port: number): string {
           }
           .layer-item.active .layer-tag { color: var(--accent-color); }
           .layer-item.active .layer-icon-svg { color: var(--accent-color); }
+
+          /* Group container: teal left border + subtle bg */
+          .layer-item.group-container {
+            border-left: 2px solid rgba(45,212,191,0.5);
+            padding-left: 6px;
+          }
+          .layer-item.group-container .layer-icon-svg { color: #2dd4bf; opacity: 1; }
+          .layer-item.group-container .layer-name { color: #5eead4; }
+          .layer-item.group-container.active .layer-name { color: var(--accent-color); }
+
           /* caret: triangle to expand/collapse */
           .layer-caret {
             width: 14px;
@@ -2058,9 +2095,48 @@ export function getEditorHTML(port: number): string {
             link:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 A3 3 0 0 0 8.5 7.5 L9.5 6.5 A3 3 0 0 0 5.5 2.5 L4.5 3.5"/><path d="M7 4.5 A3 3 0 0 0 3.5 4.5 L2.5 5.5 A3 3 0 0 0 6.5 9.5 L7.5 8.5"/></svg>',
             component:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1 L11 3.5 L11 8.5 L6 11 L1 8.5 L1 3.5 Z"/></svg>',
             div:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="10" height="10" rx="1" stroke-dasharray="2 1.5"/></svg>',
+            group:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="0.5" y="2" width="8" height="7" rx="1"/><rect x="3.5" y="0.5" width="8" height="7" rx="1"/></svg>',
           };
 
-          function getLayerIconSVG(name) {
+          /* Human-readable name map for HTML tags */
+          const HUMAN_NAMES = {
+            div: 'Container', span: 'Text Span', p: 'Paragraph',
+            h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3',
+            h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6',
+            ul: 'List', ol: 'Ordered List', li: 'List Item',
+            a: 'Link', button: 'Button', img: 'Image',
+            input: 'Input', textarea: 'Text Area', select: 'Dropdown',
+            nav: 'Navigation', header: 'Header', footer: 'Footer',
+            main: 'Main', section: 'Section', article: 'Article',
+            aside: 'Sidebar', form: 'Form', table: 'Table',
+            tr: 'Table Row', td: 'Table Cell', th: 'Table Header',
+            label: 'Label', strong: 'Bold', em: 'Italic',
+            small: 'Small Text', b: 'Bold', i: 'Italic',
+            video: 'Video', audio: 'Audio', canvas: 'Canvas',
+            svg: 'Vector', figure: 'Figure', figcaption: 'Caption',
+          };
+
+          /* Background element detection */
+          const BACKGROUND_TAGS = ['html','body','head','meta','link','script','style'];
+
+          function isGroupNode(node) {
+            const n = node.name.toLowerCase();
+            if (n !== 'div') return false;
+            if (node.className && node.className.includes('group')) return true;
+            if (node.id && typeof node.id === 'string' && node.id.includes('group')) return true;
+            if (node.children && node.children.length > 1 && !node.text) return false;
+            return false;
+          }
+
+          function getHumanName(name, node) {
+            const lower = name.toLowerCase();
+            if (isGroupNode(node)) return '⊞ Group';
+            if (HUMAN_NAMES[lower]) return HUMAN_NAMES[lower];
+            return name;
+          }
+
+          function getLayerIconSVG(name, node) {
+            if (isGroupNode(node)) return LAYER_ICONS.group;
             const n = name.toLowerCase();
             if (n === 'svg') return LAYER_ICONS.svg;
             if (n === 'img') return LAYER_ICONS.image;
@@ -2108,28 +2184,33 @@ export function getEditorHTML(port: number): string {
                 componentRootSources.add(nodeSource);
               }
 
+              // Group container highlight
+              if (isGroupNode(node)) {
+                item.classList.add('group-container');
+              }
+
               // Active state
               if (selectedSources.includes(nodeSource)) {
                 item.classList.add('active');
               }
 
               const hasChildren = node.children && node.children.length > 0;
-              // component-root gets 2px left-border; subtract 2 so indentation is visually consistent
               item.style.paddingLeft = (6 + depth * 12) + 'px';
 
-              const iconSVG = getLayerIconSVG(node.name);
+              const iconSVG = getLayerIconSVG(node.name, node);
 
-              // Display name: component uses PascalCase name, HTML uses tag + first class
-              let displayName = node.name;
+              // Human-readable display name
+              let displayName = getHumanName(node.name, node);
               let tagLabel = '';
               if (isComponent) {
-                // Show component name; if has a className, show first class as tag
                 if (node.className) {
                   const firstClass = node.className.split(' ').filter(Boolean)[0];
                   if (firstClass) tagLabel = '.' + firstClass;
                 }
               } else {
-                // For HTML elements, show tag name as primary, first class dimmed
+                // Show original tag as dim label for clarity
+                const lower = node.name.toLowerCase();
+                if (HUMAN_NAMES[lower]) tagLabel = '<' + node.name + '>';
                 if (node.className) {
                   const firstClass = node.className.split(' ').filter(Boolean)[0];
                   if (firstClass) tagLabel = '.' + firstClass;
@@ -2155,7 +2236,7 @@ export function getEditorHTML(port: number): string {
                 caretSVG +
                 '<span class="layer-icon-svg">' + iconSVG + '</span>' +
                 '<span class="layer-label">' +
-                  '<span class="layer-name">' + displayName + '</span>' +
+                  '<span class="layer-name">' + escapeHtml(displayName) + '</span>' +
                   (tagLabel ? '<span class="layer-tag">' + escapeHtml(tagLabel) + '</span>' : '') +
                   (node.text ? '<span class="layer-text">' + escapeHtml(node.text.slice(0, 20)) + (node.text.length > 20 ? '…' : '') + '</span>' : '') +
                 '</span>' +
@@ -2314,11 +2395,43 @@ export function getEditorHTML(port: number): string {
             }
 
             if (tree && tree.length > 0) {
-              // Natural DOM order (top-to-bottom) for easy web-page hierarchy
-              tree.forEach(node => renderNode(node, 0));
-              document.getElementById('layer-count').textContent = totalCount + ' nodes';
+              /* Separate background-level (html/body/head) from content elements */
+              const bgNodes = [];
+              const contentNodes = [];
+              tree.forEach(node => {
+                if (BACKGROUND_TAGS.includes(node.name.toLowerCase())) {
+                  bgNodes.push(node);
+                } else {
+                  contentNodes.push(node);
+                }
+              });
+
+              if (bgNodes.length > 0 && contentNodes.length > 0) {
+                /* Background section */
+                const bgHeader = document.createElement('div');
+                bgHeader.className = 'layer-section-header';
+                bgHeader.textContent = 'Background';
+                list.appendChild(bgHeader);
+                bgNodes.forEach(node => renderNode(node, 0));
+
+                /* Divider */
+                const divider = document.createElement('div');
+                divider.className = 'layer-section-divider';
+                list.appendChild(divider);
+
+                /* Elements section */
+                const elHeader = document.createElement('div');
+                elHeader.className = 'layer-section-header';
+                elHeader.textContent = 'Elements';
+                list.appendChild(elHeader);
+                contentNodes.forEach(node => renderNode(node, 0));
+              } else {
+                tree.forEach(node => renderNode(node, 0));
+              }
+
+              document.getElementById('layer-count').textContent = totalCount + ' elements';
             } else {
-              list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No JSX elements found</div>';
+              list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No elements found</div>';
             }
 
             // Sync component roots list to iframe
