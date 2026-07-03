@@ -6,19 +6,52 @@ export function getEditorHTML(port: number): string {
         <meta charset="UTF-8">
         <title>Glide — Code-Native Visual Designer</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <script src="https://unpkg.com/lucide@latest"></script>
         <style>
           :root {
-            --bg-base: #090d16;
-            --bg-surface: #111827;
-            --bg-element: #1f2937;
-            --border-color: #374151;
-            --text-primary: #f9fafb;
-            --text-secondary: #9ca3af;
-            --accent-color: #38bdf8;
-            --accent-hover: #0ea5e9;
+            /* FIGMA CUSTOM THEME DESIGN TOKENS */
+            --bg-canvas: #1e1e1e; /* OBSERVED */
+            --bg-panel: #2c2c2c; /* INFERRED */
+            --bg-panel-elevated: #2c2c2c; /* INFERRED */
+            --border-subtle: #333333; /* INFERRED */
+            --text-primary: #ffffff; /* INFERRED */
+            --text-secondary: #b3b3b3; /* INFERRED */
+            --accent: #0c8ce9; /* OBSERVED */
+
+            /* COMPATIBILITY ALIASES FOR VERIFIED CODEBASE LAYOUTS */
+            --bg-base: var(--bg-canvas);
+            --bg-surface: var(--bg-panel);
+            --bg-element: var(--bg-panel-elevated);
+            --border-color: var(--border-subtle);
+            --accent-color: var(--accent);
+            --accent-hover: #0a7ccf;
             --danger: #ef4444;
             --success: #22c55e;
           }
+          
+          /* Lucide Icons Styling */
+          .lucide {
+            width: 14px;
+            height: 14px;
+            stroke-width: 1.5px;
+            display: inline-block;
+            vertical-align: middle;
+          }
+
+          /* ── UTILITY RAIL & PAGES ── */
+          .utility-rail .rail-btn {
+            opacity: 0.6;
+            transition: opacity 0.15s, color 0.15s;
+          }
+          .utility-rail .rail-btn:hover {
+            opacity: 1;
+            color: var(--text-primary) !important;
+          }
+          .utility-rail .rail-btn.active {
+            opacity: 1;
+            color: var(--accent-color) !important;
+          }
+
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: 'Inter', sans-serif;
@@ -746,19 +779,39 @@ export function getEditorHTML(port: number): string {
         <!-- ═══════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════ -->
         <div class="main-container">
 
+          <!-- LEFT UTILITY RAIL -->
+          <div class="utility-rail" style="width: 50px; background: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 20px; flex-shrink: 0; z-index: 11;">
+            <button class="rail-btn active" id="rail-file" title="File" style="background: transparent; border: none; color: var(--text-primary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
+              <i data-lucide="file" style="width: 18px; height: 18px;"></i>
+              <span>File</span>
+            </button>
+            <button class="rail-btn" id="rail-assets" title="Assets" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
+              <i data-lucide="package" style="width: 18px; height: 18px;"></i>
+              <span>Assets</span>
+            </button>
+            <button class="rail-btn" id="rail-tools" title="Tools" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
+              <i data-lucide="wrench" style="width: 18px; height: 18px;"></i>
+              <span>Tools</span>
+            </button>
+            <button class="rail-btn" id="rail-variables" title="Variables" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
+              <i data-lucide="component" style="width: 18px; height: 18px;"></i>
+              <span>Variables</span>
+            </button>
+          </div>
+
           <!-- LEFT SIDEBAR — LAYERS -->
           <div class="sidebar" id="glide-layers">
             <!-- Pages Subsection -->
             <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
               <div class="sidebar-header" style="border-bottom: none;">
                 <span>Pages</span>
-                <div style="display:flex;gap:8px;color:var(--text-secondary);">
-                  <span style="cursor:pointer;" title="Search">🔍</span>
-                  <span style="cursor:pointer;" title="Add Page">+</span>
+                <div style="display:flex;gap:8px;color:var(--text-secondary);align-items:center;">
+                  <i data-lucide="search" style="width: 12px; height: 12px; cursor:pointer;" title="Search"></i>
+                  <i data-lucide="plus" style="width: 12px; height: 12px; cursor:pointer;" title="Add Page"></i>
                 </div>
               </div>
               <div class="page-item" style="padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; font-weight: 500;">
-                📄 <span id="active-page-name">Page 1</span>
+                <i data-lucide="file" style="width: 12px; height: 12px;"></i> <span id="active-page-name">Page 1</span>
               </div>
             </div>
 
@@ -802,14 +855,18 @@ export function getEditorHTML(port: number): string {
             <!-- Floating Bottom Toolbar -->
             <div class="figma-toolbar" id="figma-toolbar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px; gap: 1px;">
               <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 1l5.5 12 1.5-5 5-1.5L1 1z"/></svg>
+                <i data-lucide="mouse-pointer-2" style="width: 14px; height: 14px;"></i>
               </button>
-              <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">✋</button>
+              <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">
+                <i data-lucide="hand" style="width: 14px; height: 14px;"></i>
+              </button>
               <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
-              <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">💬</button>
+              <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">
+                <i data-lucide="message-square" style="width: 14px; height: 14px;"></i>
+              </button>
               <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
-              <button class="tool-btn" id="tool-dev" title="Dev Mode" style="opacity: 0.6;">
-                <span style="font-size: 11px; font-weight: bold; font-family: monospace; color: var(--text-secondary);">&lt;/&gt;</span>
+              <button class="tool-btn" id="tool-dev" title="Dev Mode" style="opacity: 0.6; display: flex; align-items: center; justify-content: center;">
+                <i data-lucide="code-2" style="width: 14px; height: 14px;"></i>
               </button>
             </div>
           </div>
@@ -822,7 +879,7 @@ export function getEditorHTML(port: number): string {
             </div>
 
             <div id="no-selection-msg" class="no-selection">
-              <div class="no-selection-icon">🎯</div>
+              <i data-lucide="target" style="width: 32px; height: 32px; opacity: 0.3; margin-bottom: 8px;"></i>
               <div class="no-selection-text">Select an element on the canvas to edit its properties</div>
             </div>
 
@@ -861,27 +918,27 @@ export function getEditorHTML(port: number): string {
                 <div class="props-row">
                   <span class="props-label" style="min-width:60px;">Direction</span>
                   <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="flex-row" title="Row">⇒ Row</button>
-                    <button class="icon-btn" id="flex-col" title="Column">⇓ Col</button>
+                    <button class="icon-btn" id="flex-row" title="Row" style="display: flex; align-items: center; gap: 4px;"><i data-lucide="arrow-right" style="width: 12px; height: 12px;"></i> Row</button>
+                    <button class="icon-btn" id="flex-col" title="Column" style="display: flex; align-items: center; gap: 4px;"><i data-lucide="arrow-down" style="width: 12px; height: 12px;"></i> Col</button>
                   </div>
                 </div>
                 <div class="props-row">
                   <span class="props-label" style="min-width:60px;">Justify</span>
                   <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="jc-start" title="flex-start">⟤</button>
-                    <button class="icon-btn" id="jc-center" title="center">⊡</button>
-                    <button class="icon-btn" id="jc-end" title="flex-end">⟥</button>
-                    <button class="icon-btn" id="jc-between" title="space-between">⟺</button>
-                    <button class="icon-btn" id="jc-around" title="space-around">⟛</button>
+                    <button class="icon-btn" id="jc-start" title="flex-start"><i data-lucide="align-start-vertical" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="jc-center" title="center"><i data-lucide="align-center-vertical" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="jc-end" title="flex-end"><i data-lucide="align-end-vertical" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="jc-between" title="space-between"><i data-lucide="align-justify" style="width: 12px; height: 12px; transform: rotate(90deg);"></i></button>
+                    <button class="icon-btn" id="jc-around" title="space-around"><i data-lucide="stretch-horizontal" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div class="props-row">
                   <span class="props-label" style="min-width:60px;">Align</span>
                   <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="ai-start" title="flex-start">⤒</button>
-                    <button class="icon-btn" id="ai-center" title="center">⊞</button>
-                    <button class="icon-btn" id="ai-end" title="flex-end">⤓</button>
-                    <button class="icon-btn" id="ai-stretch" title="stretch">⤡</button>
+                    <button class="icon-btn" id="ai-start" title="flex-start"><i data-lucide="align-start-horizontal" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ai-center" title="center"><i data-lucide="align-center-horizontal" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ai-end" title="flex-end"><i data-lucide="align-end-horizontal" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ai-stretch" title="stretch"><i data-lucide="stretch-vertical" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div class="props-grid">
@@ -957,18 +1014,18 @@ export function getEditorHTML(port: number): string {
                 <div class="props-row" style="margin-bottom:6px;">
                   <span class="props-label" style="min-width:40px;">Align</span>
                   <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="ta-left" title="Left">⬅</button>
-                    <button class="icon-btn" id="ta-center" title="Center">↔</button>
-                    <button class="icon-btn" id="ta-right" title="Right">➡</button>
-                    <button class="icon-btn" id="ta-justify" title="Justify">☰</button>
+                    <button class="icon-btn" id="ta-left" title="Left"><i data-lucide="align-left" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ta-center" title="Center"><i data-lucide="align-center" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ta-right" title="Right"><i data-lucide="align-right" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ta-justify" title="Justify"><i data-lucide="align-justify" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div class="props-row" style="margin-bottom:6px;">
                   <span class="props-label" style="min-width:40px;">Style</span>
                   <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="td-underline" title="Underline" style="text-decoration:underline;">U</button>
-                    <button class="icon-btn" id="td-italic" title="Italic" style="font-style:italic;">I</button>
-                    <button class="icon-btn" id="td-strike" title="Strikethrough" style="text-decoration:line-through;">S</button>
+                    <button class="icon-btn" id="td-underline" title="Underline"><i data-lucide="underline" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="td-italic" title="Italic"><i data-lucide="italic" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="td-strike" title="Strikethrough"><i data-lucide="strikethrough" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div class="props-field">
@@ -2055,17 +2112,16 @@ export function getEditorHTML(port: number): string {
               if (isHidden) item.classList.add('hidden-node');
 
               const isExpanded = expandedNodeIds.has(node.id);
-              // Caret: right-pointing when collapsed, down when expanded
               const caretSVG = hasChildren
                 ? '<span class="layer-caret" style="' + (isExpanded ? 'transform:rotate(90deg)' : '') + '">' +
-                    '<svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1.5 L6 4 L2 6.5 Z"/></svg>' +
+                    '<i data-lucide="chevron-down" style="width: 8px; height: 8px;"></i>' +
                   '</span>'
-                : '<span class="layer-caret" style="visibility:hidden"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1.5 L6 4 L2 6.5 Z"/></svg></span>';
+                : '<span class="layer-caret" style="visibility:hidden"><i data-lucide="chevron-down" style="width: 8px; height: 8px;"></i></span>';
 
               // Eye icon SVG
               const eyeSVG = isHidden
-                ? '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="1" y1="1" x2="11" y2="11"/><path d="M4.5 4.7 A3 1.5 0 0 0 7.5 7.3"/><path d="M2 3.5 Q6 8.5 10 4.5 Q6 0.5 2 3.5 Z"/></svg>'
-                : '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 6 Q6 1 11 6 Q6 11 1 6 Z"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/></svg>';
+                ? '<i data-lucide="eye-off" style="width: 12px; height: 12px;"></i>'
+                : '<i data-lucide="eye" style="width: 12px; height: 12px;"></i>';
 
               item.innerHTML =
                 caretSVG +
