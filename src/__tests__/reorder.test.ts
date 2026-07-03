@@ -69,3 +69,46 @@ describe('AST Layer Reordering', () => {
     expect(updated).toContain('<p data-gl-source="p">Subtitle</p>');
   });
 });
+
+import { groupJSXElements, ungroupJSXElement } from '../reorder.js';
+
+describe('AST Group & Ungroup', () => {
+  test('should wrap selected sibling elements in a container div', () => {
+    const code = `
+      export function Banner() {
+        return (
+          <div data-gl-source="banner">
+            <h1 data-gl-source="h1">Title</h1>
+            <p data-gl-source="p">Subtitle</p>
+          </div>
+        );
+      }
+    `;
+
+    const updated = groupJSXElements(code, ['h1', 'p']);
+    expect(updated).toContain('style={{');
+    expect(updated).toContain('position: "relative"');
+    expect(updated).toContain('<h1 data-gl-source="h1">Title</h1>');
+    expect(updated).toContain('<p data-gl-source="p">Subtitle</p>');
+  });
+
+  test('should ungroup nested children back into parent container', () => {
+    const code = `
+      export function Banner() {
+        return (
+          <div data-gl-source="banner">
+            <div data-gl-source="group-1">
+              <h1 data-gl-source="h1">Title</h1>
+              <p data-gl-source="p">Subtitle</p>
+            </div>
+          </div>
+        );
+      }
+    `;
+
+    const updated = ungroupJSXElement(code, 'group-1');
+    expect(updated).not.toContain('group-1');
+    expect(updated).toContain('<div data-gl-source="banner">');
+    expect(updated).toContain('<h1 data-gl-source="h1">Title</h1>');
+  });
+});
