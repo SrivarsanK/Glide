@@ -2113,6 +2113,10 @@ export function getEditorHTML(port: number): string {
             return LAYER_ICONS.div;
           }
 
+          function isGroupNode(node) {
+            return node.name.toLowerCase() === 'div' && node.id && String(node.id).includes('group');
+          }
+
           let layerTree = null;
 
           function escapeHtml(s) {
