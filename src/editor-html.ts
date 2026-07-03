@@ -2701,6 +2701,11 @@ export function getEditorHTML(port: number): string {
             loadApp(defaultUrl);
           }
           applyTransform();
+
+          // Initialize Lucide icons on page load
+          if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+          }
         </script>
       </body>
     </html>
