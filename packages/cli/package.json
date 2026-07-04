@@ -1,0 +1,22 @@
+{
+  "name": "@glide-dev/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "glide": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "dependencies": {
+    "@glide-dev/server": "*",
+    "@glide-dev/ast-writer": "*",
+    "@glide-dev/adapter-vue": "*",
+    "@glide-dev/adapter-svelte": "*",
+    "@glide-dev/adapter-html": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  }
+}

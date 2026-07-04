@@ -1,0 +1,17 @@
+{
+  "name": "@glide-dev/adapter-react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "dependencies": {
+    "@glide-dev/core": "*",
+    "@babel/parser": "^7.24.0",
+    "@babel/traverse": "^7.24.0",
+    "@babel/generator": "^7.24.0",
+    "@babel/types": "^7.24.0"
+  },
+  "devDependencies": { "typescript": "^5.4.2" }
+}

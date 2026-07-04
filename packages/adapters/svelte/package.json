@@ -1,0 +1,13 @@
+{
+  "name": "@glide-dev/adapter-svelte",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "dependencies": {
+    "svelte": "^4.2.12"
+  },
+  "devDependencies": { "typescript": "^5.4.2" }
+}

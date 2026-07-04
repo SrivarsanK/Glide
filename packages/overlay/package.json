@@ -1,0 +1,16 @@
+{
+  "name": "@glide-dev/overlay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "dependencies": {
+    "@glide-dev/core": "*",
+    "@chenglou/pretext": "^0.0.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  }
+}

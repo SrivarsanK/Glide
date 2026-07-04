@@ -1,0 +1,13 @@
+{
+  "name": "@glide-dev/adapter-vue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "dependencies": {
+    "@vue/compiler-sfc": "^3.4.21"
+  },
+  "devDependencies": { "typescript": "^5.4.2" }
+}
