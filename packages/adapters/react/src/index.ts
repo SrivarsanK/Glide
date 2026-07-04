@@ -26,7 +26,7 @@ export class ReactAdapter implements FrameworkAdapter {
     traverse(ast, {
       JSXOpeningElement(path: any) {
         const loc = path.node.loc;
-        if (loc && loc.start.line === line && loc.start.column === col) {
+        if (loc && loc.start.line === line && loc.start.column === col - 1) {
           targetNode = path.node;
           path.stop();
         }
