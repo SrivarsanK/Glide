@@ -101,20 +101,20 @@ export function getEditorHTML(port: number): string {
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            width: 30px;
-            height: 30px;
-            border-radius: 5px;
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             transition: all 0.15s;
-            font-size: 14px;
+            font-size: 16px;
             position: relative;
           }
           .tool-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
           .tool-btn.active { color: var(--accent-color); background: rgba(56,189,248,0.15); }
-          .tool-btn-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 2px; }
+          .tool-btn-sep { width: 1px; height: 26px; background: var(--border-color); margin: 0 2px; }
 
           /* ── DEVICE PREVIEW TOOLBAR ── */
           .device-bar {
@@ -947,26 +947,6 @@ export function getEditorHTML(port: number): string {
         <!-- ═══════════════════════════════════ MAIN LAYOUT ═══════════════════════════════════ -->
         <div class="main-container">
 
-          <!-- LEFT UTILITY RAIL -->
-          <div class="utility-rail" style="width: 50px; background: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 20px; flex-shrink: 0; z-index: 11;">
-            <button class="rail-btn active" id="rail-file" title="File" style="background: transparent; border: none; color: var(--text-primary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
-              <i data-lucide="file" style="width: 18px; height: 18px;"></i>
-              <span>File</span>
-            </button>
-            <button class="rail-btn" id="rail-assets" title="Assets" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
-              <i data-lucide="package" style="width: 18px; height: 18px;"></i>
-              <span>Assets</span>
-            </button>
-            <button class="rail-btn" id="rail-tools" title="Tools" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
-              <i data-lucide="wrench" style="width: 18px; height: 18px;"></i>
-              <span>Tools</span>
-            </button>
-            <button class="rail-btn" id="rail-variables" title="Variables" style="background: transparent; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; font-size: 9px; font-weight: 500;">
-              <i data-lucide="component" style="width: 18px; height: 18px;"></i>
-              <span>Variables</span>
-            </button>
-          </div>
-
           <!-- LEFT SIDEBAR — LAYERS -->
           <div class="sidebar" id="glide-layers">
             <!-- Pages Subsection -->
@@ -974,13 +954,18 @@ export function getEditorHTML(port: number): string {
               <div class="sidebar-header" style="border-bottom: none;">
                 <span>Pages</span>
                 <div style="display:flex;gap:8px;color:var(--text-secondary);align-items:center;">
-                  <i data-lucide="search" style="width: 12px; height: 12px; cursor:pointer;" title="Search"></i>
+                  <i id="btn-search-layers" data-lucide="search" style="width: 12px; height: 12px; cursor:pointer;" title="Search"></i>
                   <i data-lucide="plus" style="width: 12px; height: 12px; cursor:pointer;" title="Add Page"></i>
                 </div>
               </div>
               <div class="page-item" style="padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; font-weight: 500;">
                 <i data-lucide="file" style="width: 12px; height: 12px;"></i> <span id="active-page-name">Page 1</span>
               </div>
+            </div>
+            
+            <!-- Search Input Container -->
+            <div id="search-container" style="display: none; padding: 6px 14px; border-bottom: 1px solid var(--border-color);">
+              <input type="text" id="layer-search-input" placeholder="Search layers..." style="width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--text-primary); font-size: 11px; outline: none;" />
             </div>
 
             <!-- Layers Subsection -->
@@ -1073,20 +1058,20 @@ export function getEditorHTML(port: number): string {
             </div>
 
             <!-- Floating Bottom Toolbar -->
-            <div class="figma-toolbar" id="figma-toolbar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px; gap: 1px;">
+            <div class="figma-toolbar" id="figma-toolbar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 10px; padding: 4px; gap: 2px;">
               <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
-                <i data-lucide="mouse-pointer-2" style="width: 14px; height: 14px;"></i>
+                <i data-lucide="mouse-pointer-2" style="width: 18px; height: 18px;"></i>
               </button>
               <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">
-                <i data-lucide="hand" style="width: 14px; height: 14px;"></i>
+                <i data-lucide="hand" style="width: 18px; height: 18px;"></i>
               </button>
-              <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
+              <div class="tool-btn-sep" style="width: 1px; height: 26px; background: var(--border-color); margin: 0 4px;"></div>
               <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">
-                <i data-lucide="message-square" style="width: 14px; height: 14px;"></i>
+                <i data-lucide="message-square" style="width: 18px; height: 18px;"></i>
               </button>
-              <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 2px;"></div>
+              <div class="tool-btn-sep" style="width: 1px; height: 26px; background: var(--border-color); margin: 0 4px;"></div>
               <button class="tool-btn" id="tool-dev" title="Dev Mode" style="opacity: 0.6; display: flex; align-items: center; justify-content: center;">
-                <i data-lucide="code-2" style="width: 14px; height: 14px;"></i>
+                <i data-lucide="code-2" style="width: 18px; height: 18px;"></i>
               </button>
             </div>
           </div>
@@ -2690,8 +2675,30 @@ export function getEditorHTML(port: number): string {
             
             componentRootSources.clear();
 
+            const filterInput = document.getElementById('layer-search-input');
+            const filterVal = (filterInput ? filterInput.value : '').trim().toLowerCase();
+
+            function nodeMatchesQuery(n, q) {
+              if (n.name.toLowerCase().includes(q)) return true;
+              if (n.className && n.className.toLowerCase().includes(q)) return true;
+              if (n.text && n.text.toLowerCase().includes(q)) return true;
+              return false;
+            }
+            function hasMatchingDescendant(n, q) {
+              if (nodeMatchesQuery(n, q)) return true;
+              if (n.children) {
+                for (const child of n.children) {
+                  if (hasMatchingDescendant(child, q)) return true;
+                }
+              }
+              return false;
+            }
+
             let totalCount = 0;
             function renderNode(node, depth) {
+              if (filterVal && !hasMatchingDescendant(node, filterVal)) {
+                return;
+              }
               totalCount++;
               if (lockedIds.has(node.id)) return;
 
@@ -2930,6 +2937,9 @@ export function getEditorHTML(port: number): string {
                 type: 'glide:update-component-roots',
                 roots: Array.from(componentRootSources)
               }, '*');
+            }
+            if (window.lucide) {
+              window.lucide.createIcons();
             }
           }
 
@@ -3596,6 +3606,33 @@ export function getEditorHTML(port: number): string {
               showToast('info', 'Undoing last change...');
             }
           };
+
+          document.getElementById('btn-search-layers').addEventListener('click', () => {
+            const container = document.getElementById('search-container');
+            const input = document.getElementById('layer-search-input');
+            if (container.style.display === 'none') {
+              container.style.display = 'block';
+              input.focus();
+            } else {
+              container.style.display = 'none';
+              input.value = '';
+              renderLayersTree(layerTree);
+            }
+          });
+
+          document.getElementById('layer-search-input').addEventListener('input', () => {
+            renderLayersTree(layerTree);
+          });
+
+          document.getElementById('layer-search-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+              const container = document.getElementById('search-container');
+              const input = document.getElementById('layer-search-input');
+              container.style.display = 'none';
+              input.value = '';
+              renderLayersTree(layerTree);
+            }
+          });
 
           connectSocket();
           // Load default url on start
