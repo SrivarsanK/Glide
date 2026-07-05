@@ -44,12 +44,24 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     // This avoids triggering Vite HMR and prevents full page reloads (flicker).
     // The Glide Vite plugin reads this file and injects CSS position overrides.
     const positionsFile = getPositionsFile(file);
-    let positions: Record<string, Record<string, string>> = {};
+    let beforeContent = '';
     if (fs.existsSync(positionsFile)) {
-      try { positions = JSON.parse(fs.readFileSync(positionsFile, 'utf-8')); } catch {}
+      beforeContent = fs.readFileSync(positionsFile, 'utf-8');
+    }
+
+    let positions: Record<string, Record<string, string>> = {};
+    if (beforeContent) {
+      try { positions = JSON.parse(beforeContent); } catch {}
     }
     positions[targetId] = change.value as Record<string, string>;
-    fs.writeFileSync(positionsFile, JSON.stringify(positions, null, 2), 'utf-8');
+    const afterContent = JSON.stringify(positions, null, 2);
+    fs.writeFileSync(positionsFile, afterContent, 'utf-8');
+    
+    pushHistory({
+      description: `Moved element in ${path.basename(file)}`,
+      diffs: [{ file: positionsFile, before: beforeContent, after: afterContent }]
+    });
+
     console.log(`[Glide] Saved position for ${targetId} in ${positionsFile}`);
     return;
   }
