@@ -954,7 +954,9 @@ export function getEditorHTML(port: number): string {
               <div class="sidebar-header" style="border-bottom: none;">
                 <span>Pages</span>
                 <div style="display:flex;gap:8px;color:var(--text-secondary);align-items:center;">
-                  <i id="btn-search-layers" data-lucide="search" style="width: 12px; height: 12px; cursor:pointer;" title="Search"></i>
+                  <button id="btn-search-layers" title="Search" style="background: transparent; border: none; padding: 0; color: inherit; cursor: pointer; display: flex; align-items: center;">
+                    <i data-lucide="search" style="width: 12px; height: 12px;"></i>
+                  </button>
                   <i data-lucide="plus" style="width: 12px; height: 12px; cursor:pointer;" title="Add Page"></i>
                 </div>
               </div>
