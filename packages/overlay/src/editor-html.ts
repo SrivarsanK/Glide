@@ -372,8 +372,8 @@ export function getEditorHTML(port: number): string {
           /* ── CANVAS ── */
           .canvas-container {
             flex: 1;
-            background: #0d1117;
-            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+            background: var(--bg-base);
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0);
             background-size: 24px 24px;
             display: flex;
             align-items: center;
@@ -1693,11 +1693,11 @@ export function getEditorHTML(port: number): string {
             canvas.height = height * dpr;
             ctx.scale(dpr, dpr);
 
-            ctx.fillStyle = '#1e1b4b'; // Theme indigo
+            ctx.fillStyle = '#2c2c2c';
             ctx.fillRect(0, 0, width, height);
 
-            ctx.strokeStyle = '#312e81';
-            ctx.fillStyle = '#a5b4fc';
+            ctx.strokeStyle = '#444444';
+            ctx.fillStyle = '#888888';
             ctx.font = '9px monospace';
             ctx.lineWidth = 1;
             
@@ -1756,11 +1756,11 @@ export function getEditorHTML(port: number): string {
             canvas.height = height * dpr;
             ctx.scale(dpr, dpr);
 
-            ctx.fillStyle = '#1e1b4b';
+            ctx.fillStyle = '#2c2c2c';
             ctx.fillRect(0, 0, width, height);
 
-            ctx.strokeStyle = '#312e81';
-            ctx.fillStyle = '#a5b4fc';
+            ctx.strokeStyle = '#444444';
+            ctx.fillStyle = '#888888';
             ctx.font = '9px monospace';
             ctx.lineWidth = 1;
             
