@@ -1,12 +1,15 @@
-import { parse } from '@babel/parser';
+import { parse as babelParse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import _generate from '@babel/generator';
 import * as t from '@babel/types';
 import * as crypto from 'crypto';
 import ts from 'typescript';
+import { parse as recastParse, print as recastPrint } from 'recast';
+import * as babelParser from 'recast/parsers/babel.js';
 
 const traverse = (traverseModule as any).default || traverseModule;
 const generate = (_generate as any).default || _generate;
+
 
 export function computeNodeHash(sourceCodeSlice: string): string {
   return crypto.createHash('sha1').update(sourceCodeSlice.trim()).digest('hex').substring(0, 8);
@@ -26,7 +29,7 @@ export function findJSXElementAt(
   line: number,
   column: number
 ): any {
-  const ast = parse(sourceCode, {
+  const ast = babelParse(sourceCode, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
@@ -276,13 +279,39 @@ export function updateClassName(
   breakpoint?: string,
   expectedHash?: string
 ): string {
-  const ast = parse(sourceCode, {
+  // Parse with babel for precise location/hash check
+  const babelAst = babelParse(sourceCode, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
 
-  let targetPath: any = null;
+  let babelTarget: any = null;
+  traverse(babelAst, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        babelTarget = path;
+        path.stop();
+      }
+    },
+  });
 
+  if (!babelTarget) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
+  }
+
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(babelTarget.node.start, babelTarget.node.end);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
+  }
+
+  // Now parse with recast for CST mutation and print
+  const ast = recastParse(sourceCode, { parser: babelParser });
+
+  let targetPath: any = null;
   traverse(ast, {
     JSXElement(path: any) {
       const loc = path.node.openingElement.loc;
@@ -292,20 +321,6 @@ export function updateClassName(
       }
     },
   });
-
-  if (!targetPath) {
-    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
-  }
-
-  const nodeStart = targetPath.node.start;
-  const nodeEnd = targetPath.node.end;
-  if (expectedHash && expectedHash !== 'nohash') {
-    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
-    const currentHash = computeNodeHash(currentSlice);
-    if (currentHash !== expectedHash) {
-      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
-    }
-  }
 
   const openingEl = targetPath.node.openingElement;
   let classAttr = openingEl.attributes.find(
@@ -342,13 +357,8 @@ export function updateClassName(
     });
   }
 
-  // 2. Sort nodes by start index in descending order for correct back-to-front string slices
-  nodesToUpdate.sort((a, b) => b.node.start - a.node.start);
-
-  // 3. Apply changes and slice update
-  let updatedSourceCode = sourceCode;
-  let targetJSXCode = '';
-  for (const { node, path: itemPath } of nodesToUpdate) {
+  // 2. Apply changes
+  for (const { node } of nodesToUpdate) {
     const itemOpeningEl = node.openingElement;
     let itemClassAttr = itemOpeningEl.attributes.find(
       (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
@@ -363,28 +373,14 @@ export function updateClassName(
         )
       );
     }
-
-    const { code: newJSXCode } = generate(node, {
-      retainLines: false,
-      compact: false,
-      comments: true,
-    });
-
-    if (node === targetPath.node) {
-      targetJSXCode = newJSXCode;
-    }
-
-    updatedSourceCode = updatedSourceCode.slice(0, node.start) + newJSXCode + updatedSourceCode.slice(node.end);
   }
 
-  const newJSXCode = targetJSXCode;
+  const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const confirmAst = parse(newJSXCode, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const newJSXCode = recastPrint(targetPath.node).code;
+  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXOpeningElement(path: any) {
@@ -410,13 +406,39 @@ export function updateJSXText(
   newText: string,
   expectedHash?: string
 ): string {
-  const ast = parse(sourceCode, {
+  // Parse with babel for precise location/hash check
+  const babelAst = babelParse(sourceCode, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
 
-  let targetPath: any = null;
+  let babelTarget: any = null;
+  traverse(babelAst, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        babelTarget = path;
+        path.stop();
+      }
+    },
+  });
 
+  if (!babelTarget) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
+  }
+
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(babelTarget.node.start, babelTarget.node.end);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
+  }
+
+  // Now parse with recast for CST mutation and print
+  const ast = recastParse(sourceCode, { parser: babelParser });
+
+  let targetPath: any = null;
   traverse(ast, {
     JSXElement(path: any) {
       const loc = path.node.openingElement.loc;
@@ -426,20 +448,6 @@ export function updateJSXText(
       }
     },
   });
-
-  if (!targetPath) {
-    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
-  }
-
-  const nodeStart = targetPath.node.start;
-  const nodeEnd = targetPath.node.end;
-  if (expectedHash && expectedHash !== 'nohash') {
-    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
-    const currentHash = computeNodeHash(currentSlice);
-    if (currentHash !== expectedHash) {
-      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
-    }
-  }
 
   const children: any[] = targetPath.node.children || [];
   const textChildIdx = children.findIndex((c: any) => c.type === 'JSXText');
@@ -452,20 +460,12 @@ export function updateJSXText(
     targetPath.node.children = [t.jsxText(newText)];
   }
 
-  const { code: newJSXCode } = generate(targetPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+  const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const confirmAst = parse(newJSXCode, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const newJSXCode = recastPrint(targetPath.node).code;
+  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXText(path: any) {
@@ -488,13 +488,39 @@ export function updateJSXStyleProp(
   styles: Record<string, string>,
   expectedHash?: string
 ): string {
-  const ast = parse(sourceCode, {
+  // Parse with babel for precise location/hash check
+  const babelAst = babelParse(sourceCode, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
 
-  let targetPath: any = null;
+  let babelTarget: any = null;
+  traverse(babelAst, {
+    JSXElement(path: any) {
+      const loc = path.node.openingElement.loc;
+      if (loc && loc.start.line === line && loc.start.column === column - 1) {
+        babelTarget = path;
+        path.stop();
+      }
+    },
+  });
 
+  if (!babelTarget) {
+    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
+  }
+
+  if (expectedHash && expectedHash !== 'nohash') {
+    const currentSlice = sourceCode.slice(babelTarget.node.start, babelTarget.node.end);
+    const currentHash = computeNodeHash(currentSlice);
+    if (currentHash !== expectedHash) {
+      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
+    }
+  }
+
+  // Now parse with recast for CST mutation and print
+  const ast = recastParse(sourceCode, { parser: babelParser });
+
+  let targetPath: any = null;
   traverse(ast, {
     JSXElement(path: any) {
       const loc = path.node.openingElement.loc;
@@ -504,20 +530,6 @@ export function updateJSXStyleProp(
       }
     },
   });
-
-  if (!targetPath) {
-    throw new Error(`NODE_NOT_FOUND: JSX element not found at line ${line}, column ${column}`);
-  }
-
-  const nodeStart = targetPath.node.start;
-  const nodeEnd = targetPath.node.end;
-  if (expectedHash && expectedHash !== 'nohash') {
-    const currentSlice = sourceCode.slice(nodeStart, nodeEnd);
-    const currentHash = computeNodeHash(currentSlice);
-    if (currentHash !== expectedHash) {
-      throw new Error(`STALE_NODE: Reference is stale. Expected hash ${expectedHash}, got ${currentHash}`);
-    }
-  }
 
   const openingEl = targetPath.node.openingElement;
   let styleAttr = openingEl.attributes.find(
@@ -554,20 +566,12 @@ export function updateJSXStyleProp(
     );
   }
 
-  const { code: newJSXCode } = generate(targetPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  const updatedSourceCode = sourceCode.slice(0, nodeStart) + newJSXCode + sourceCode.slice(nodeEnd);
+  const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const confirmAst = parse(newJSXCode, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const newJSXCode = recastPrint(targetPath.node).code;
+  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXAttribute(path: any) {

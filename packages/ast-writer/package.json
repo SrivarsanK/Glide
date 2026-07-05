@@ -16,12 +16,13 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@glide-dev/core": "*",
+    "@babel/generator": "^7.24.0",
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
-    "@babel/generator": "^7.24.0",
     "@babel/types": "^7.24.0",
-    "postcss": "^8.0.0"
+    "@glide-dev/core": "*",
+    "postcss": "^8.0.0",
+    "recast": "^0.23.12"
   },
   "devDependencies": {
     "typescript": "^5.4.2"
