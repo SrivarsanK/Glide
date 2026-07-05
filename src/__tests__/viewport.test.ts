@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { resolveActiveBreakpoint } from '../viewport.js';
+import { resolveActiveBreakpoint } from '../../packages/overlay/src/utils/viewport.js';
 
 describe('Viewport Device Resolver', () => {
   test('should map viewport widths to Tailwind breakpoints', () => {

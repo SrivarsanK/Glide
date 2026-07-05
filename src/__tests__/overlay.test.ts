@@ -1,5 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { GlideOverlay } from '../overlay.js';
+import { GlideOverlay } from '../../packages/overlay/src/overlay.js';
 
 describe('GlideOverlay Canvas Layer', () => {
   let mockWindow: any;

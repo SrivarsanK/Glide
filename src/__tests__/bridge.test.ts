@@ -1,5 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { GlideBridge } from '../bridge.js';
+import { GlideBridge } from '../../packages/overlay/src/bridge.js';
 
 describe('GlideBridge Client Bridge', () => {
   let mockWindow: any;

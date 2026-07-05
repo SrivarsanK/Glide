@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from 'vitest';
-import { GlideServer, EditMessage } from '../server.js';
+import { GlideServer, EditMessage } from '../../packages/server/src/ws-server.js';
 import WebSocket from 'ws';
 
 describe('GlideServer WebSocket Server', () => {

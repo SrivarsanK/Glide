@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { updateSvelteClass } from '../svelte.js';
+import { updateSvelteClass } from '../../packages/adapters/svelte/src/index.js';
 
 describe('Svelte SFC Transformation Adapter', () => {
   test('should update existing class attribute in Svelte templates', () => {

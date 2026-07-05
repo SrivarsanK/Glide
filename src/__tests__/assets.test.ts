@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import * as fs from 'fs';
-import { saveUploadedAsset } from '../assets.js';
+import { saveUploadedAsset } from '../../packages/server/src/assets.js';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),

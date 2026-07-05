@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseTailwindClasses, updateTailwindClasses } from '../properties.js';
+import { parseTailwindClasses, updateTailwindClasses } from '../../packages/ast-writer/src/properties.js';
 
 describe('Properties Parser and Updater', () => {
   test('should parse simple Tailwind styling classes', () => {

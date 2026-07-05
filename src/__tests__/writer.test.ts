@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findJSXElementAt, updateClassName, updateJSXText } from '../writer.js';
+import { findJSXElementAt, updateClassName, updateJSXText } from '../../packages/ast-writer/src/writer.js';
 
 describe('AST Write-back Engine', () => {
   test('should find a JSX opening element by coordinates', () => {
@@ -204,5 +204,5 @@ describe('AST Write-back Engine', () => {
     expect(matches!.length).toBe(3);
   });
 });
-import { computeNodeHash } from '../writer.js';
+import { computeNodeHash } from '../../packages/ast-writer/src/writer.js';
 

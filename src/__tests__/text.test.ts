@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { measureTextLayout } from '../text.js';
+import { measureTextLayout } from '../../packages/overlay/src/utils/text-measure.js';
 
 describe('Pretext Text Measurement', () => {
   test('should calculate natural text width', () => {

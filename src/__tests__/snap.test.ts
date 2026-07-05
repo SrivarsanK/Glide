@@ -4,7 +4,7 @@ import {
   resolvePixelGridSnap,
   snapToGrid,
   OUR_SNAP_THRESHOLD_PX,
-} from '../snap.js';
+} from '../../packages/overlay/src/snap.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

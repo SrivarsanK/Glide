@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { glideSourceStamping } from '../plugin.js';
+import { glideSourceStamping } from '../../packages/vite-plugin/src/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';

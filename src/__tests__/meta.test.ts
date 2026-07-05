@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectProjectMeta, generateVSCodeConfig } from '../meta.js';
+import { detectProjectMeta, generateVSCodeConfig } from '../../packages/core/src/detect.js';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),

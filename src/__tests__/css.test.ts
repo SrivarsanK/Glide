@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { updateCSSModuleRule } from '../css.js';
+import { updateCSSModuleRule } from '../../packages/ast-writer/src/css.js';
 
 describe('CSS Modules Rule Modifier', () => {
   test('should update existing CSS property values', () => {

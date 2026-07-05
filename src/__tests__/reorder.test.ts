@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { reorderJSXElement } from '../reorder.js';
+import { reorderJSXElement } from '../../packages/ast-writer/src/reorder.js';
 
 describe('AST Layer Reordering', () => {
   test('should reorder sibling elements within the same parent', () => {
@@ -70,7 +70,7 @@ describe('AST Layer Reordering', () => {
   });
 });
 
-import { groupJSXElements, ungroupJSXElement } from '../reorder.js';
+import { groupJSXElements, ungroupJSXElement } from '../../packages/ast-writer/src/reorder.js';
 
 describe('AST Group & Ungroup', () => {
   test('should wrap selected sibling elements in a container div', () => {
