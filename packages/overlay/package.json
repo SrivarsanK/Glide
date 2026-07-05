@@ -5,10 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
     "@glide-dev/core": "*",
-    "@chenglou/pretext": "^0.0.8"
+    "jotai": "^2.20.1"
   },
   "devDependencies": {
     "typescript": "^5.4.2"

@@ -880,6 +880,12 @@ export function getEditorHTML(port: number): string {
             justify-content: flex-end;
             gap: 8px;
           }
+          .history-row:hover {
+            background: rgba(255,255,255,0.04) !important;
+          }
+          .history-row.current:hover {
+            background: rgba(13, 153, 255, 0.15) !important;
+          }
         </style>
       </head>
       <body>
@@ -893,6 +899,9 @@ export function getEditorHTML(port: number): string {
             </button>
             <button id="toggle-right-sidebar" class="header-sidebar-btn active" title="Toggle Properties Panel ( ] )">
               <i data-lucide="panel-right" id="icon-toggle-right" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button id="btn-toggle-history" class="header-sidebar-btn" title="History (Ctrl+Alt+H)">
+              <i data-lucide="clock" id="icon-toggle-history" style="width: 16px; height: 16px;"></i>
             </button>
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
             <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2;">
@@ -980,6 +989,19 @@ export function getEditorHTML(port: number): string {
               <div class="layers-scroll" id="layers-list">
                 <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">
                   Click an element<br>on the canvas to<br>see layers.
+                </div>
+              </div>
+            </div>
+            <!-- LEFT SIDEBAR — HISTORY PANEL (overlays layers panel when visible) -->
+            <div id="glide-history" style="display: none; position: absolute; inset: 0; z-index: 100; background: var(--bg-surface); flex-direction: column;">
+              <div class="history-header" style="padding: 10px 14px; display: flex; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; height: 38px; box-sizing: border-box; justify-content: space-between;">
+                <button id="btn-history-back" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 0;">← back</button>
+                <span style="font-weight: 700; color: var(--text-primary); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase;">HISTORY</span>
+                <span style="color: #555; font-size: 11px; cursor: not-allowed; user-select: none;" title="Disabled in v1">clear</span>
+              </div>
+              <div class="layers-scroll" id="history-list" style="flex: 1; overflow-y: auto;">
+                <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                  No edits yet.<br>Make a change on the canvas to start building history.
                 </div>
               </div>
             </div>
@@ -1537,6 +1559,8 @@ export function getEditorHTML(port: number): string {
                       }
                     });
                   }
+                } else if (message.type === 'HISTORY_UPDATE') {
+                  updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
                   if (message.success) {
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
@@ -2042,18 +2066,27 @@ export function getEditorHTML(port: number): string {
               return;
             }
 
+            // Toggle history panel: Ctrl+Alt+H
+            if (ctrl && e.altKey && (key === 'h' || key === 'H')) {
+              e.preventDefault();
+              toggleHistory();
+              return;
+            }
+
             // Ctrl+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo
-            if (ctrl && key === 'z' && !e.shiftKey) {
+            if (ctrl && (key === 'z' || key === 'Z') && !e.shiftKey) {
               e.preventDefault();
               if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'undo' }));
+                showToast('info', 'Undoing last change...');
               }
               return;
             }
-            if (ctrl && ((key === 'z' && e.shiftKey) || key === 'y')) {
+            if (ctrl && (((key === 'z' || key === 'Z') && e.shiftKey) || key === 'y' || key === 'Y')) {
               e.preventDefault();
               if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'redo' }));
+                showToast('info', 'Redoing last change...');
               }
               return;
             }
@@ -2671,6 +2704,84 @@ export function getEditorHTML(port: number): string {
 
           function isGroupNode(node) {
             return node.name.toLowerCase() === 'div' && node.id && String(node.id).includes('group');
+          }
+
+          let historyStack = [];
+          let historyCurrentIndex = -1;
+          let historyPanelVisible = false;
+
+          function toggleHistory() {
+            historyPanelVisible = !historyPanelVisible;
+            const historyEl = document.getElementById('glide-history');
+            const toggleBtn = document.getElementById('btn-toggle-history');
+            if (historyEl) historyEl.style.display = historyPanelVisible ? 'flex' : 'none';
+            if (toggleBtn) toggleBtn.classList.toggle('active', historyPanelVisible);
+            
+            // If opening, request the latest history
+            if (historyPanelVisible && socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
+            }
+          }
+
+          function updateHistoryUI(stack, currentIndex) {
+            historyStack = stack;
+            historyCurrentIndex = currentIndex;
+            
+            const panel = document.getElementById('glide-history');
+            if (!panel) return;
+            
+            const list = document.getElementById('history-list');
+            if (!list) return;
+            
+            list.innerHTML = '';
+            
+            if (stack.length === 0) {
+              list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">No edits yet.<br>Make a change on the canvas to start building history.</div>';
+              return;
+            }
+            
+            const getRelativeTime = (timestamp) => {
+              const diff = Date.now() - timestamp;
+              if (diff < 60000) return 'just now';
+              const mins = Math.floor(diff / 60000);
+              if (mins < 60) return mins + 'm ago';
+              const hours = Math.floor(mins / 60);
+              return hours + 'h ago';
+            };
+
+            // Add Initial State Row
+            const isInitialCurrent = currentIndex === -1;
+            const initRow = document.createElement('div');
+            initRow.className = 'history-row' + (isInitialCurrent ? ' current' : '');
+            initRow.style.cssText = 'padding: 8px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; border-left: 2px solid ' + (isInitialCurrent ? '#0d99ff' : 'transparent') + '; background: ' + (isInitialCurrent ? 'rgba(13, 153, 255, 0.1)' : 'transparent') + '; color: ' + (isInitialCurrent ? 'var(--text-primary)' : 'var(--text-secondary)') + ';';
+            initRow.innerHTML = '<span style="color: #0d99ff">●</span><span style="font-size: 11px;">[initial state]</span>';
+            initRow.addEventListener('click', () => {
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'JUMP_TO_HISTORY', index: -1 }));
+              }
+            });
+            list.appendChild(initRow);
+
+            // Add each stack entry
+            stack.forEach((entry, index) => {
+              const isCurrent = index === currentIndex;
+              const isPast = index < currentIndex;
+              const isFuture = index > currentIndex;
+              
+              const row = document.createElement('div');
+              row.className = 'history-row' + (isCurrent ? ' current' : '');
+              row.style.cssText = 'padding: 8px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-left: 2px solid ' + (isCurrent ? '#0d99ff' : 'transparent') + '; background: ' + (isCurrent ? 'rgba(13, 153, 255, 0.1)' : 'transparent') + '; opacity: ' + (isFuture ? '0.4' : '1') + '; color: ' + (isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)') + ';';
+              
+              row.innerHTML = '<div style="display: flex; align-items: center; gap: 8px;"><span style="color: ' + (isCurrent ? '#0d99ff' : '#888') + '">' + (isPast || isCurrent ? '●' : '○') + '</span><span style="font-size: 11px; font-style: ' + (isFuture ? 'italic' : 'normal') + '">' + escapeHtml(entry.description) + '</span></div><span style="font-size: 10px; color: #666">' + getRelativeTime(entry.timestamp) + '</span>';
+              
+              row.addEventListener('click', () => {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: 'JUMP_TO_HISTORY', index: index }));
+                }
+              });
+              
+              list.appendChild(row);
+            });
           }
 
           let layerTree = null;
@@ -3643,6 +3754,14 @@ export function getEditorHTML(port: number): string {
               input.value = '';
               renderLayersTree(layerTree);
             }
+          });
+
+          document.getElementById('btn-toggle-history').addEventListener('click', () => {
+            toggleHistory();
+          });
+
+          document.getElementById('btn-history-back').addEventListener('click', () => {
+            toggleHistory();
           });
 
           connectSocket();

@@ -9,6 +9,16 @@ import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElemen
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { HistoryManager } from './undo-manager.js';
+import {
+  pushHistory,
+  undo,
+  redo,
+  jumpTo,
+  getHistoryState,
+  clearHistory,
+  setHistoryLimit
+} from './history-manager.js';
+
 
 const execAsync = promisify(exec);
 
@@ -55,10 +65,23 @@ export class GlideServer {
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        clearHistory();
+        let limit = 100;
+        const configPath = path.join(process.cwd(), 'glide.config.ts');
+        if (fs.existsSync(configPath)) {
+          const content = fs.readFileSync(configPath, 'utf-8');
+          const match = content.match(/historyLimit\s*:\s*(\d+)/);
+          if (match) {
+            limit = parseInt(match[1], 10);
+          }
+        }
+        setHistoryLimit(limit);
+
         this.server = createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(getEditorHTML(this.targetPort));
         });
+
 
         // Start file watcher for drift detection
         const srcPath = path.resolve(process.cwd(), 'src');
@@ -105,6 +128,14 @@ export class GlideServer {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = insertJSXElement(code, parentId, elementType);
                     fs.writeFileSync(file, updated, 'utf-8');
+                    pushHistory({
+                      description: `Inserted ${elementType} in ${path.basename(file)}`,
+                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
                     // Automatically send updated tree back
                     const tree = buildComponentTree(updated);
                     ws.send(JSON.stringify({
@@ -136,6 +167,14 @@ export class GlideServer {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = reorderJSXElement(code, targetId, parentId, siblingId, position);
                     fs.writeFileSync(file, updated, 'utf-8');
+                    pushHistory({
+                      description: `Reordered elements in ${path.basename(file)}`,
+                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
                     ws.send(JSON.stringify({
                       type: 'status',
                       success: true
@@ -164,6 +203,14 @@ export class GlideServer {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = groupJSXElements(code, selectedIds);
                     fs.writeFileSync(file, updated, 'utf-8');
+                    pushHistory({
+                      description: `Grouped elements in ${path.basename(file)}`,
+                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
                     const tree = buildComponentTree(updated);
                     ws.send(JSON.stringify({
                       type: 'tree',
@@ -194,6 +241,14 @@ export class GlideServer {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = ungroupJSXElement(code, groupId);
                     fs.writeFileSync(file, updated, 'utf-8');
+                    pushHistory({
+                      description: `Ungrouped element in ${path.basename(file)}`,
+                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
                     const tree = buildComponentTree(updated);
                     ws.send(JSON.stringify({
                       type: 'tree',
@@ -224,6 +279,14 @@ export class GlideServer {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = arrangeJSXElement(code, targetId, action);
                     fs.writeFileSync(file, updated, 'utf-8');
+                    pushHistory({
+                      description: `Arranged element in ${path.basename(file)}`,
+                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
                     const tree = buildComponentTree(updated);
                     ws.send(JSON.stringify({
                       type: 'tree',
@@ -246,6 +309,7 @@ export class GlideServer {
                 }
                 return;
               }
+
 
               if (message.type === 'git-branch-create') {
                 const { branchName } = message;
@@ -292,33 +356,34 @@ export class GlideServer {
                 return;
               }
 
-              if (message.type === 'undo') {
+              if (message.type === 'undo' || message.type === 'UNDO') {
                 console.log('[Glide] Undo request received');
                 try {
-                  const undoneFile = this.history.undo((filePath, content) => {
-                    fs.writeFileSync(filePath, content, 'utf-8');
-                  });
-                  if (undoneFile) {
-                    const updatedCode = fs.readFileSync(undoneFile, 'utf-8');
-                    const tree = buildComponentTree(updatedCode);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file: undoneFile,
-                      tree
-                    }));
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: true,
-                      message: 'Undo successful',
-                      action: 'undo'
-                    }));
-                  } else {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: 'Nothing to undo'
-                    }));
+                  const diffs = undo();
+                  if (diffs && diffs.length > 0) {
+                    for (const diff of diffs) {
+                      fs.writeFileSync(diff.file, diff.before, 'utf-8');
+                      // Push updated tree
+                      const updatedCode = fs.readFileSync(diff.file, 'utf-8');
+                      const tree = buildComponentTree(updatedCode);
+                      ws.send(JSON.stringify({
+                        type: 'tree',
+                        file: diff.file,
+                        tree
+                      }));
+                    }
                   }
+                  ws.send(JSON.stringify({
+                    type: 'HISTORY_UPDATE',
+                    ...getHistoryState()
+                  }));
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: true,
+                    message: 'Undo successful',
+                    action: 'undo'
+                  }));
+                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
                 } catch (err: any) {
                   ws.send(JSON.stringify({
                     type: 'status',
@@ -329,33 +394,34 @@ export class GlideServer {
                 return;
               }
 
-              if (message.type === 'redo') {
+              if (message.type === 'redo' || message.type === 'REDO') {
                 console.log('[Glide] Redo request received');
                 try {
-                  const redoneFile = this.history.redo((filePath, content) => {
-                    fs.writeFileSync(filePath, content, 'utf-8');
-                  });
-                  if (redoneFile) {
-                    const updatedCode = fs.readFileSync(redoneFile, 'utf-8');
-                    const tree = buildComponentTree(updatedCode);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file: redoneFile,
-                      tree
-                    }));
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: true,
-                      message: 'Redo successful',
-                      action: 'redo'
-                    }));
-                  } else {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: 'Nothing to redo'
-                    }));
+                  const diffs = redo();
+                  if (diffs && diffs.length > 0) {
+                    for (const diff of diffs) {
+                      fs.writeFileSync(diff.file, diff.after, 'utf-8');
+                      // Push updated tree
+                      const updatedCode = fs.readFileSync(diff.file, 'utf-8');
+                      const tree = buildComponentTree(updatedCode);
+                      ws.send(JSON.stringify({
+                        type: 'tree',
+                        file: diff.file,
+                        tree
+                      }));
+                    }
                   }
+                  ws.send(JSON.stringify({
+                    type: 'HISTORY_UPDATE',
+                    ...getHistoryState()
+                  }));
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: true,
+                    message: 'Redo successful',
+                    action: 'redo'
+                  }));
+                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
                 } catch (err: any) {
                   ws.send(JSON.stringify({
                     type: 'status',
@@ -365,6 +431,44 @@ export class GlideServer {
                 }
                 return;
               }
+
+              if (message.type === 'JUMP_TO_HISTORY') {
+                console.log('[Glide] Jump to history index:', message.index);
+                try {
+                  const writes = jumpTo(message.index);
+                  for (const w of writes) {
+                    fs.writeFileSync(w.file, w.content, 'utf-8');
+                    // Push updated tree
+                    const tree = buildComponentTree(w.content);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file: w.file,
+                      tree
+                    }));
+                  }
+                  ws.send(JSON.stringify({
+                    type: 'HISTORY_UPDATE',
+                    ...getHistoryState()
+                  }));
+                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
+                } catch (err: any) {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: err.message
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'GET_HISTORY') {
+                ws.send(JSON.stringify({
+                  type: 'HISTORY_UPDATE',
+                  ...getHistoryState()
+                }));
+                return;
+              }
+
 
               if (message.type === 'edit') {
                 const { file, line, column, change, hash, generation } = message as any;
@@ -396,12 +500,6 @@ export class GlideServer {
                   return;
                 }
 
-                // Record undo state before applying edits
-                if (change.type !== 'position' && fs.existsSync(file)) {
-                  const originalCode = fs.readFileSync(file, 'utf-8');
-                  this.history.recordChange(file, originalCode, `${change.type} change`);
-                }
-
                 // Call registered edit callbacks
                 for (const callback of this.editCallbacks) {
                   try {
@@ -425,6 +523,11 @@ export class GlideServer {
                     success: true,
                   })
                 );
+
+                ws.send(JSON.stringify({
+                  type: 'HISTORY_UPDATE',
+                  ...getHistoryState()
+                }));
               } else {
                 ws.send(
                   JSON.stringify({

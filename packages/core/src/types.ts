@@ -136,10 +136,31 @@ export interface ToastMessage {
   hmr: boolean;
 }
 
-// ── File Diff (Undo/Redo) ──────────────────────────────────────────────
-
 export interface FileDiff {
   file: string;
   before: string;
   after: string;
 }
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  description: string;
+  diffs: FileDiff[];
+}
+
+export interface JumpToHistoryMessage {
+  type: 'JUMP_TO_HISTORY';
+  index: number;
+}
+
+export interface GetHistoryMessage {
+  type: 'GET_HISTORY';
+}
+
+export interface HistoryUpdateMessage {
+  type: 'HISTORY_UPDATE';
+  stack: HistoryEntry[];
+  currentIndex: number;
+}
+

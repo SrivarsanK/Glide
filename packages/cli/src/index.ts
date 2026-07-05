@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { GlideServer } from '@glide-dev/server';
+import { GlideServer, pushHistory } from '@glide-dev/server';
 import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@glide-dev/ast-writer';
 import { groupJSXElements, ungroupJSXElement } from '@glide-dev/ast-writer';
 import { updateVueSFCClass } from '@glide-dev/adapter-vue';
@@ -30,6 +30,14 @@ function getPositionsFile(file: string): string {
 server.onEdit((file: string, line: number, column: number, change: any, hash?: string) => {
   const targetId = `${file}:${line}:${column}`;
 
+  function buildDescription(change: any, file: string, line?: number): string {
+    const shortFile = path.basename(file);
+    const locSuffix = line ? `:${line}` : '';
+    const prop = change.property || change.type || 'style';
+    const val = typeof change.value === 'object' ? JSON.stringify(change.value) : change.value;
+    return `${prop}: ${val} on ${shortFile}${locSuffix}`;
+  }
+
   if (change.type === 'position') {
     // ── ZERO-FLICKER POSITION STORAGE ────────────────────────────────────
     // Write position to glide-positions.json instead of modifying the JSX source.
@@ -51,6 +59,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   if (change.type === 'group') {
     const updated = groupJSXElements(code, change.sources!);
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: `Grouped elements in ${path.basename(file)}`,
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Grouped elements in ${file}`);
     return;
   }
@@ -58,6 +70,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   if (change.type === 'ungroup') {
     const updated = ungroupJSXElement(code, change.source!);
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: `Ungrouped element in ${path.basename(file)}`,
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Ungrouped element ${change.source!} in ${file}`);
     return;
   }
@@ -83,11 +99,19 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       }
     }
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: `Updated multiple styles in ${path.basename(file)}`,
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Updated multi style class in ${file}:${line}:${column}`);
   } else if (change.type === 'style') {
     // Write inline style prop directly to JSX — works with any CSS setup
     const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>, hash);
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: buildDescription(change, file, line),
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
   } else if (change.type === 'class') {
     let updated = '';
@@ -107,6 +131,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       updated = updateClassName(code, line, column, change.property!, change.value, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: buildDescription(change, file, line),
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
   } else if (change.type === 'text') {
     let updated = '';
@@ -116,6 +144,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       updated = updateJSXText(code, line, column, change.value, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
+    pushHistory({
+      description: buildDescription(change, file, line),
+      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+    });
     console.log(`[Glide] Updated text content in ${file}:${line}:${column}`);
   }
 });
