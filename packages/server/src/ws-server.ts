@@ -6,6 +6,12 @@ import { buildComponentTree } from '@glide-dev/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@glide-dev/ast-writer';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { HistoryManager } from './undo-manager.js';
+
+const execAsync = promisify(exec);
+
 
 export interface EditChange {
   type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'group' | 'ungroup';
@@ -39,6 +45,7 @@ export class GlideServer {
   private editCallbacks: EditCallback[] = [];
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
+  private history = new HistoryManager();
 
   constructor(port = 7777, targetPort = 5173) {
     this.port = port;
@@ -240,6 +247,125 @@ export class GlideServer {
                 return;
               }
 
+              if (message.type === 'git-branch-create') {
+                const { branchName } = message;
+                console.log(`[Glide] Creating and checking out git branch: ${branchName}`);
+                try {
+                  await execAsync(`git checkout -b ${branchName}`);
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: true,
+                    branch: branchName,
+                    action: 'create'
+                  }));
+                } catch (err: any) {
+                  console.error(`[Glide] Failed to create git branch ${branchName}:`, err.message);
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: false,
+                    error: err.message,
+                    action: 'create'
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'git-branch-finalize') {
+                const { commitMessage } = message;
+                console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}"`);
+                try {
+                  await execAsync(`git add -A && git commit -m "${commitMessage}"`);
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: true,
+                    action: 'finalize'
+                  }));
+                } catch (err: any) {
+                  console.error(`[Glide] Failed to finalize git branch:`, err.message);
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: false,
+                    error: err.message,
+                    action: 'finalize'
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'undo') {
+                console.log('[Glide] Undo request received');
+                try {
+                  const undoneFile = this.history.undo((filePath, content) => {
+                    fs.writeFileSync(filePath, content, 'utf-8');
+                  });
+                  if (undoneFile) {
+                    const updatedCode = fs.readFileSync(undoneFile, 'utf-8');
+                    const tree = buildComponentTree(updatedCode);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file: undoneFile,
+                      tree
+                    }));
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: true,
+                      message: 'Undo successful',
+                      action: 'undo'
+                    }));
+                  } else {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: 'Nothing to undo'
+                    }));
+                  }
+                } catch (err: any) {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: err.message
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'redo') {
+                console.log('[Glide] Redo request received');
+                try {
+                  const redoneFile = this.history.redo((filePath, content) => {
+                    fs.writeFileSync(filePath, content, 'utf-8');
+                  });
+                  if (redoneFile) {
+                    const updatedCode = fs.readFileSync(redoneFile, 'utf-8');
+                    const tree = buildComponentTree(updatedCode);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file: redoneFile,
+                      tree
+                    }));
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: true,
+                      message: 'Redo successful',
+                      action: 'redo'
+                    }));
+                  } else {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: 'Nothing to redo'
+                    }));
+                  }
+                } catch (err: any) {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: err.message
+                  }));
+                }
+                return;
+              }
+
               if (message.type === 'edit') {
                 const { file, line, column, change, hash, generation } = message as any;
                 console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
@@ -268,6 +394,12 @@ export class GlideServer {
                     })
                   );
                   return;
+                }
+
+                // Record undo state before applying edits
+                if (change.type !== 'position' && fs.existsSync(file)) {
+                  const originalCode = fs.readFileSync(file, 'utf-8');
+                  this.history.recordChange(file, originalCode, `${change.type} change`);
                 }
 
                 // Call registered edit callbacks
