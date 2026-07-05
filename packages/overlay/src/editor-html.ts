@@ -189,7 +189,7 @@ export function getEditorHTML(port: number): string {
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            overflow: visible;
+            overflow: hidden;
             position: relative;
           }
           .sidebar-right {
@@ -426,35 +426,28 @@ export function getEditorHTML(port: number): string {
           .sidebar.collapsed {
             display: none !important;
           }
-          /* ── SIDEBAR TOGGLE TAB ── */
-          .sidebar-toggle-btn {
-            position: absolute;
-            right: -20px;
-            bottom: 48px;
-            width: 20px;
-            height: 44px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            border-left: none;
+          /* ── HEADER SIDEBAR TOGGLE ── */
+          .header-sidebar-btn {
+            width: 30px;
+            height: 30px;
+            background: transparent;
+            border: none;
             color: var(--text-secondary);
-            border-radius: 0 6px 6px 0;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            z-index: 20;
-            transition: all 0.2s;
-            box-shadow: 2px 0 8px rgba(0,0,0,0.3);
-            padding: 0;
-          }
-          .sidebar-toggle-btn:hover {
-            color: var(--text-primary);
-            background: var(--bg-element);
-          }
-          .sidebar-toggle-btn svg, .sidebar-toggle-btn i {
-            width: 12px;
-            height: 12px;
+            transition: all 0.15s;
             flex-shrink: 0;
+          }
+          .header-sidebar-btn:hover {
+            background: rgba(255,255,255,0.07);
+            color: var(--text-primary);
+          }
+          .header-sidebar-btn.active {
+            background: rgba(56,189,248,0.12);
+            color: var(--accent-color);
           }
 
           /* ── CONTEXT MENU ── */
@@ -894,7 +887,14 @@ export function getEditorHTML(port: number): string {
         <header>
           <!-- Left top panel status -->
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="logo" style="margin-right: 16px;">⚡ <span>Glide</span></div>
+            <div class="logo" style="margin-right: 4px;">⚡ <span>Glide</span></div>
+            <button id="toggle-left-sidebar" class="header-sidebar-btn active" title="Toggle Layers Panel ( [ )">
+              <i data-lucide="panel-left" id="icon-toggle-left" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button id="toggle-right-sidebar" class="header-sidebar-btn active" title="Toggle Properties Panel ( ] )">
+              <i data-lucide="panel-right" id="icon-toggle-right" style="width: 16px; height: 16px;"></i>
+            </button>
+            <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
             <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2;">
               <span id="header-file-name" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Untitled</span>
               <span style="font-size: 10px; color: var(--text-secondary);">Team project</span>
@@ -983,15 +983,10 @@ export function getEditorHTML(port: number): string {
                 </div>
               </div>
             </div>
-            <!-- Sidebar Toggle Tab -->
-            <button id="toggle-left-sidebar" class="sidebar-toggle-btn" title="Toggle Layers Panel ( [ )" style="position: absolute;">
-              <i data-lucide="panel-left-close" id="icon-toggle-left" style="width: 10px; height: 10px;"></i>
-            </button>
           </div>
 
           <!-- CANVAS -->
           <div class="canvas-container" id="canvas-container" style="position: relative;">
-            <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )" style="position: absolute; right: -12px; bottom: 48px; border-radius: 6px 0 0 6px; border-right: none; border-left: 1px solid var(--border-color);">▶</button>
             
             <!-- RULERS -->
             <div id="glide-rulers-corner" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; z-index: 10;"></div>
@@ -1448,9 +1443,10 @@ export function getEditorHTML(port: number): string {
             function toggleLeft() {
               if (!leftSidebar) return;
               const isCollapsed = leftSidebar.classList.toggle('collapsed');
+              if (btnLeft) btnLeft.classList.toggle('active', !isCollapsed);
               const icon = document.getElementById('icon-toggle-left');
               if (icon) {
-                icon.setAttribute('data-lucide', isCollapsed ? 'panel-left-open' : 'panel-left-close');
+                icon.setAttribute('data-lucide', 'panel-left');
                 if (window.lucide) window.lucide.createIcons();
               }
             }
@@ -1458,7 +1454,12 @@ export function getEditorHTML(port: number): string {
             function toggleRight() {
               if (!rightSidebar) return;
               const isCollapsed = rightSidebar.classList.toggle('collapsed');
-              btnRight.textContent = isCollapsed ? '◀' : '▶';
+              if (btnRight) btnRight.classList.toggle('active', !isCollapsed);
+              const icon = document.getElementById('icon-toggle-right');
+              if (icon) {
+                icon.setAttribute('data-lucide', 'panel-right');
+                if (window.lucide) window.lucide.createIcons();
+              }
             }
 
            const iframeWidth = { current: 1440 };
