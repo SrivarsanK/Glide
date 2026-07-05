@@ -17,6 +17,49 @@ const tsxParser = {
 
 const traverse = (traverseModule as any).default || traverseModule;
 
+function matchesSourceId(path: any, targetId: string): boolean {
+  if (!targetId) return false;
+  const openingEl = path.node.openingElement;
+  let currentId = '';
+  openingEl.attributes.forEach((attr: any) => {
+    if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
+      if (attr.value && attr.value.type === 'StringLiteral') {
+        currentId = attr.value.value;
+      }
+    }
+  });
+
+  if (currentId === targetId) {
+    return true;
+  }
+
+  const parts = targetId.split(':');
+  let lineNum = NaN;
+  let colNum = NaN;
+  if (parts.length >= 3) {
+    const last = parts[parts.length - 1];
+    const secondLast = parts[parts.length - 2];
+    const thirdLast = parts[parts.length - 3];
+    const lastAsNum = parseInt(last, 10);
+    const secondLastAsNum = parseInt(secondLast, 10);
+    const thirdLastAsNum = parseInt(thirdLast, 10);
+    if (!isNaN(secondLastAsNum) && !isNaN(lastAsNum)) {
+      lineNum = secondLastAsNum;
+      colNum = lastAsNum;
+    } else if (!isNaN(thirdLastAsNum) && !isNaN(secondLastAsNum)) {
+      lineNum = thirdLastAsNum;
+      colNum = secondLastAsNum;
+    }
+  }
+
+  if (!isNaN(lineNum) && !isNaN(colNum) && path.node.loc) {
+    const loc = path.node.loc;
+    return loc.start.line === lineNum && (loc.start.column + 1) === colNum;
+  }
+
+  return false;
+}
+
 export function reorderJSXElement(
   code: string,
   targetId: string,
@@ -33,23 +76,13 @@ export function reorderJSXElement(
 
   traverse(ast, {
     JSXElement(path: any) {
-      const openingEl = path.node.openingElement;
-      let currentId = '';
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            currentId = attr.value.value;
-          }
-        }
-      });
-
-      if (currentId === targetId) {
+      if (matchesSourceId(path, targetId)) {
         targetPath = path;
       }
-      if (currentId === parentId) {
+      if (matchesSourceId(path, parentId)) {
         newParentPath = path;
       }
-      if (siblingId && currentId === siblingId) {
+      if (siblingId && matchesSourceId(path, siblingId)) {
         siblingPath = path;
       }
     },
@@ -109,17 +142,7 @@ export function insertJSXElement(
 
   traverse(ast, {
     JSXElement(path: any) {
-      const openingEl = path.node.openingElement;
-      let currentId = '';
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            currentId = attr.value.value;
-          }
-        }
-      });
-
-      if (currentId === parentId) {
+      if (matchesSourceId(path, parentId)) {
         parentPath = path;
       }
     },
@@ -189,17 +212,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
 
   traverse(ast, {
     JSXElement(path: any) {
-      const openingEl = path.node.openingElement;
-      let currentId = '';
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            currentId = attr.value.value;
-          }
-        }
-      });
-
-      if (selectedIds.includes(currentId)) {
+      if (selectedIds.some(id => matchesSourceId(path, id))) {
         selectedPaths.push(path);
       }
     },
@@ -288,17 +301,7 @@ export function ungroupJSXElement(code: string, groupId: string): string {
 
   traverse(ast, {
     JSXElement(path: any) {
-      const openingEl = path.node.openingElement;
-      let currentId = '';
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            currentId = attr.value.value;
-          }
-        }
-      });
-
-      if (currentId === groupId) {
+      if (matchesSourceId(path, groupId)) {
         targetPath = path;
       }
     },
@@ -351,17 +354,7 @@ export function arrangeJSXElement(
 
   traverse(ast, {
     JSXElement(path: any) {
-      const openingEl = path.node.openingElement;
-      let currentId = '';
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            currentId = attr.value.value;
-          }
-        }
-      });
-
-      if (currentId === targetId) {
+      if (matchesSourceId(path, targetId)) {
         targetPath = path;
       }
     },

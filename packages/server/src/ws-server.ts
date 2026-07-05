@@ -56,6 +56,12 @@ export class GlideServer {
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private history = new HistoryManager();
+  private lastSelfWrites = new Map<string, number>();
+
+  public recordSelfWrite(filePath: string) {
+    const normPath = filePath.replace(/\\/g, '/');
+    this.lastSelfWrites.set(normPath, Date.now());
+  }
 
   constructor(port = 7777, targetPort = 5173) {
     this.port = port;
@@ -88,6 +94,11 @@ export class GlideServer {
         this.watcher = chokidar.watch(srcPath, { persistent: true });
         this.watcher.on('change', (filePath: string) => {
           const normPath = filePath.replace(/\\/g, '/');
+          const lastWrite = this.lastSelfWrites.get(normPath) || 0;
+          if (Date.now() - lastWrite < 500) {
+            console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
+            return;
+          }
           this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
           console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
         });
@@ -127,6 +138,7 @@ export class GlideServer {
                   try {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = insertJSXElement(code, parentId, elementType);
+                    this.recordSelfWrite(file);
                     fs.writeFileSync(file, updated, 'utf-8');
                     pushHistory({
                       description: `Inserted ${elementType} in ${path.basename(file)}`,
@@ -166,6 +178,7 @@ export class GlideServer {
                   try {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = reorderJSXElement(code, targetId, parentId, siblingId, position);
+                    this.recordSelfWrite(file);
                     fs.writeFileSync(file, updated, 'utf-8');
                     pushHistory({
                       description: `Reordered elements in ${path.basename(file)}`,
@@ -202,6 +215,7 @@ export class GlideServer {
                   try {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = groupJSXElements(code, selectedIds);
+                    this.recordSelfWrite(file);
                     fs.writeFileSync(file, updated, 'utf-8');
                     pushHistory({
                       description: `Grouped elements in ${path.basename(file)}`,
@@ -240,6 +254,7 @@ export class GlideServer {
                   try {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = ungroupJSXElement(code, groupId);
+                    this.recordSelfWrite(file);
                     fs.writeFileSync(file, updated, 'utf-8');
                     pushHistory({
                       description: `Ungrouped element in ${path.basename(file)}`,
@@ -278,6 +293,7 @@ export class GlideServer {
                   try {
                     const code = fs.readFileSync(file, 'utf-8');
                     const updated = arrangeJSXElement(code, targetId, action);
+                    this.recordSelfWrite(file);
                     fs.writeFileSync(file, updated, 'utf-8');
                     pushHistory({
                       description: `Arranged element in ${path.basename(file)}`,
@@ -362,6 +378,7 @@ export class GlideServer {
                   const diffs = undo();
                   if (diffs && diffs.length > 0) {
                     for (const diff of diffs) {
+                      this.recordSelfWrite(diff.file);
                       fs.writeFileSync(diff.file, diff.before, 'utf-8');
                       // Only push updated tree for code files
                       if (!diff.file.endsWith('.json')) {
@@ -402,6 +419,7 @@ export class GlideServer {
                   const diffs = redo();
                   if (diffs && diffs.length > 0) {
                     for (const diff of diffs) {
+                      this.recordSelfWrite(diff.file);
                       fs.writeFileSync(diff.file, diff.after, 'utf-8');
                       // Only push updated tree for code files
                       if (!diff.file.endsWith('.json')) {
@@ -441,6 +459,7 @@ export class GlideServer {
                 try {
                   const writes = jumpTo(message.index);
                   for (const w of writes) {
+                    this.recordSelfWrite(w.file);
                     fs.writeFileSync(w.file, w.content, 'utf-8');
                     // Only push updated tree for code files
                     if (!w.file.endsWith('.json')) {
@@ -507,6 +526,7 @@ export class GlideServer {
                 }
 
                 // Call registered edit callbacks
+                this.recordSelfWrite(file);
                 for (const callback of this.editCallbacks) {
                   try {
                     await callback(file, line, column, change, hash);
