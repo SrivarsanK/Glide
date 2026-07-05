@@ -245,24 +245,26 @@ export function getEditorHTML(port: number): string {
             padding: 0 8px;
             height: 28px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 5px;
-            margin-bottom: 0;
+            margin: 1px 4px;
             transition: background 0.1s;
             user-select: none;
             position: relative;
             color: var(--text-primary);
           }
-          .layer-item:hover { background: rgba(255,255,255,0.055); }
+          .layer-item:hover { background: rgba(255,255,255,0.04); }
           .layer-item.active {
-            background: rgba(56,189,248,0.13);
-            color: var(--accent-color);
+            background: var(--accent-color) !important;
+            color: #ffffff !important;
           }
-          .layer-item.active .layer-tag { color: var(--accent-color); }
-          .layer-item.active .layer-icon-svg { color: var(--accent-color); }
+          .layer-item.active .layer-tag { color: rgba(255,255,255,0.6) !important; }
+          .layer-item.active .layer-text { color: rgba(255,255,255,0.65) !important; }
+          .layer-item.active .layer-icon-svg { color: #ffffff !important; opacity: 1; }
+          .layer-item.active .layer-caret { color: #ffffff !important; }
 
           /* Group container: teal left border + subtle bg */
           .layer-item.group-container {
@@ -271,7 +273,7 @@ export function getEditorHTML(port: number): string {
           }
           .layer-item.group-container .layer-icon-svg { color: #2dd4bf; opacity: 1; }
           .layer-item.group-container .layer-name { color: #5eead4; }
-          .layer-item.group-container.active .layer-name { color: var(--accent-color); }
+          .layer-item.group-container.active .layer-name { color: #ffffff; }
 
           /* caret: triangle to expand/collapse */
           .layer-caret {
@@ -309,7 +311,7 @@ export function getEditorHTML(port: number): string {
             overflow: hidden;
           }
           .layer-name {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 450;
             white-space: nowrap;
             overflow: hidden;
@@ -345,7 +347,8 @@ export function getEditorHTML(port: number): string {
           .layer-item.component-root .layer-icon-svg { color: #a78bfa; opacity: 1; }
           /* hidden/locked tint */
           .layer-item.hidden-node { opacity: 0.38; }
-          /* hover actions: eye only */
+          .layer-item.locked-node { opacity: 0.5; cursor: not-allowed; }
+          /* hover actions: eye and lock */
           .layer-actions {
             display: none;
             align-items: center;
@@ -369,6 +372,7 @@ export function getEditorHTML(port: number): string {
           }
           .layer-action-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.07); }
           .layer-action-btn.hidden-state { color: #ef4444; }
+          .layer-action-btn.locked-state { color: var(--accent-color); }
 
           /* ── CANVAS ── */
           .canvas-container {
@@ -532,38 +536,50 @@ export function getEditorHTML(port: number): string {
           }
           .props-field {
             display: flex;
-            flex-direction: column;
-            gap: 3px;
+            flex-direction: row;
+            align-items: center;
+            background: var(--bg-element);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 2px 6px;
+            gap: 4px;
+            height: 26px;
+            box-sizing: border-box;
+            transition: border-color 0.15s;
+          }
+          .props-field:focus-within {
+            border-color: var(--accent-color);
           }
           .props-label {
             font-size: 10px;
             color: var(--text-secondary);
-            font-weight: 500;
+            font-weight: 600;
+            user-select: none;
+            flex-shrink: 0;
+            padding-right: 2px;
           }
           .props-input {
-            background: var(--bg-element);
-            border: 1px solid var(--border-color);
+            background: transparent;
+            border: none;
             color: var(--text-primary);
-            padding: 4px 7px;
-            border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-family: inherit;
             outline: none;
             width: 100%;
-            transition: border-color 0.15s;
+            padding: 0;
+            height: 100%;
           }
-          .props-input:focus { border-color: var(--accent-color); }
           .props-select {
-            background: var(--bg-element);
-            border: 1px solid var(--border-color);
+            background: transparent;
+            border: none;
             color: var(--text-primary);
-            padding: 4px 6px;
-            border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-family: inherit;
             outline: none;
             width: 100%;
             cursor: pointer;
+            height: 100%;
+            padding: 0;
           }
           .icon-btn-group { display: flex; gap: 3px; }
           .icon-btn {
@@ -868,10 +884,6 @@ export function getEditorHTML(port: number): string {
             padding: 8px 12px;
             border-radius: 6px;
             font-size: 12px;
-            outline: none;
-            margin-top: 10px;
-            font-family: monospace;
-          }
           .modal-input:focus {
             border-color: var(--accent-color);
           }
@@ -885,6 +897,44 @@ export function getEditorHTML(port: number): string {
           }
           .history-row.current:hover {
             background: rgba(13, 153, 255, 0.15) !important;
+          }
+
+          /* Sleek Custom Scrollbars */
+          ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+          ::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 3px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+          }
+
+          /* Figma-like Align Buttons */
+          .align-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.12s;
+          }
+          .align-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+          }
+          .align-btn:active {
+            color: var(--accent-color);
+            background: rgba(13, 153, 255, 0.12);
           }
         </style>
       </head>
@@ -1112,6 +1162,17 @@ export function getEditorHTML(port: number): string {
             </div>
 
             <div id="props-content" style="display:none;">
+
+               <!-- Alignment Toolbar (Figma style) -->
+               <div class="props-section" style="padding: 8px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.08);">
+                 <button class="align-btn" id="align-left" title="Align Left"><i data-lucide="align-left" style="width: 14px; height: 14px;"></i></button>
+                 <button class="align-btn" id="align-horizontal-centers" title="Align Horizontal Centers"><i data-lucide="align-center-horizontal" style="width: 14px; height: 14px;"></i></button>
+                 <button class="align-btn" id="align-right" title="Align Right"><i data-lucide="align-right" style="width: 14px; height: 14px;"></i></button>
+                 <div style="width: 1px; height: 16px; background: var(--border-color);"></div>
+                 <button class="align-btn" id="align-top" title="Align Top"><i data-lucide="align-start-horizontal" style="width: 14px; height: 14px; transform: rotate(90deg);"></i></button>
+                 <button class="align-btn" id="align-vertical-centers" title="Align Vertical Centers"><i data-lucide="align-center-vertical" style="width: 14px; height: 14px; transform: rotate(90deg);"></i></button>
+                 <button class="align-btn" id="align-bottom" title="Align Bottom"><i data-lucide="align-end-horizontal" style="width: 14px; height: 14px; transform: rotate(90deg);"></i></button>
+               </div>
 
               <!-- Position & Size -->
               <div class="props-section" id="section-geometry">
@@ -2822,7 +2883,6 @@ export function getEditorHTML(port: number): string {
                 return;
               }
               totalCount++;
-              if (lockedIds.has(node.id)) return;
 
               const item = document.createElement('div');
               item.className = 'layer-item';
@@ -2830,6 +2890,9 @@ export function getEditorHTML(port: number): string {
 
               const nodeSource = convertNodeIdToSource(node.id, currentFile);
               item.dataset.source = nodeSource;
+
+              const isLocked = lockedIds.has(node.id);
+              if (isLocked) item.classList.add('locked-node');
 
               // Component root highlight
               const isComponent = node.name.length > 0 && node.name[0].toUpperCase() === node.name[0] && node.name[0] !== node.name[0].toLowerCase();
@@ -2883,15 +2946,21 @@ export function getEditorHTML(port: number): string {
                 ? '<i data-lucide="eye-off" style="width: 12px; height: 12px;"></i>'
                 : '<i data-lucide="eye" style="width: 12px; height: 12px;"></i>';
 
+              // Lock icon SVG
+              const lockSVG = isLocked
+                ? '<i data-lucide="lock" style="width: 12px; height: 12px;"></i>'
+                : '<i data-lucide="unlock" style="width: 12px; height: 12px;"></i>';
+
               item.innerHTML =
                 caretSVG +
                 '<span class="layer-icon-svg">' + iconSVG + '</span>' +
                 '<span class="layer-label">' +
-                  '<span class="layer-name">' + escapeHtml(displayName) + '</span>' +
+                  '<span class="layer-name layer-name-text">' + escapeHtml(displayName) + '</span>' +
                   (tagLabel ? '<span class="layer-tag">' + escapeHtml(tagLabel) + '</span>' : '') +
                   (node.text ? '<span class="layer-text">' + escapeHtml(node.text.slice(0, 20)) + (node.text.length > 20 ? '…' : '') + '</span>' : '') +
                 '</span>' +
                 '<div class="layer-actions">' +
+                  '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + node.id + '" title="Toggle lock">' + lockSVG + '</button>' +
                   '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
 
@@ -2911,7 +2980,6 @@ export function getEditorHTML(port: number): string {
               // Click → select (with multi-select modifier)
               item.addEventListener('click', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
-                if (lockedIds.has(node.id)) return;
                 const isShift = e.shiftKey || e.ctrlKey || e.metaKey;
                 const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
@@ -2923,7 +2991,19 @@ export function getEditorHTML(port: number): string {
                 }
               });
 
-              // Eye button
+              // Lock button click
+              item.querySelector('.lock-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nid = e.currentTarget.dataset.nodeId;
+                if (lockedIds.has(nid)) {
+                  lockedIds.delete(nid);
+                } else {
+                  lockedIds.add(nid);
+                }
+                renderLayersTree(layerTree);
+              });
+
+              // Eye button click
               item.querySelector('.eye-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
                 const nid = e.currentTarget.dataset.nodeId;
@@ -3456,6 +3536,67 @@ export function getEditorHTML(port: number): string {
               '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
             row.querySelector('button').addEventListener('click', () => row.remove());
             document.getElementById('shadows-list').appendChild(row);
+          });
+
+          // Figma-like Align Button Click Handlers
+          const alignMap = {
+            'align-left': { property: 'marginLeft', value: '0px' },
+            'align-right': { property: 'marginRight', value: '0px' },
+            'align-top': { property: 'marginTop', value: '0px' },
+            'align-bottom': { property: 'marginBottom', value: '0px' },
+            'align-horizontal-centers': { property: 'marginLeft', value: 'auto' },
+            'align-vertical-centers': { property: 'marginTop', value: 'auto' }
+          };
+          Object.entries(alignMap).forEach(([id, change]) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+              btn.addEventListener('click', () => {
+                if (id === 'align-horizontal-centers') {
+                  sendMultiClassChange(selectedElement.source, {
+                    marginLeft: 'auto',
+                    marginRight: 'auto'
+                  });
+                } else if (id === 'align-vertical-centers') {
+                  sendMultiClassChange(selectedElement.source, {
+                    marginTop: 'auto',
+                    marginBottom: 'auto'
+                  });
+                } else {
+                  sendEdit({ type: 'class', property: change.property, value: change.value });
+                }
+              });
+            }
+          });
+
+          // Figma-like Collapsible Sections (toggle content on clicking section headers)
+          document.querySelectorAll('.props-section').forEach(section => {
+            const title = section.querySelector('.props-section-title');
+            if (title) {
+              // Add a chevron element if not present
+              if (!title.querySelector('i')) {
+                const chevron = document.createElement('i');
+                chevron.setAttribute('data-lucide', 'chevron-down');
+                chevron.style.cssText = 'width: 10px; height: 10px; transition: transform 0.15s; margin-left: auto;';
+                title.style.cssText = 'display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;';
+                title.appendChild(chevron);
+              }
+              
+              // Set up toggle click handler
+              title.addEventListener('click', (e) => {
+                // Find all children siblings except the title, toggle their display
+                const siblings = Array.from(section.children).filter(c => c !== title);
+                const chevron = title.querySelector('i');
+                const isCollapsed = siblings[0] && siblings[0].style.display === 'none';
+                
+                siblings.forEach(sib => {
+                  sib.style.display = isCollapsed ? '' : 'none';
+                });
+                
+                if (chevron) {
+                  chevron.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(-90deg)';
+                }
+              });
+            }
           });
 
           // Helper: send style change by source
