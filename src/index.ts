@@ -22,7 +22,6 @@ export { updateSvelteClass } from '@glide-dev/adapter-svelte';
 export { updateHTMLClass, updateHTMLText, parseHTMLToReact, getElementClass } from '@glide-dev/adapter-html';
 export { GlideServer, HistoryManager, saveUploadedAsset } from '@glide-dev/server';
 export { getEditorHTML, GlideBridge, GlideOverlay, snapToGrid, measureTextLayout, resolveActiveBreakpoint } from '@glide-dev/overlay';
-export { default as glideSourceStampingPlugin } from '@glide-dev/babel-plugin';
-export { glideSourceStamping } from './plugin.js'; // Keep existing plugin until fully migrated
+export { glideSourceStamping } from '@glide-dev/vite-plugin';
 
 

@@ -26,7 +26,7 @@
     }
   },
   "bin": {
-    "glide": "dist/cli.js"
+    "glide": "packages/cli/dist/index.js"
   },
   "type": "module",
   "scripts": {
