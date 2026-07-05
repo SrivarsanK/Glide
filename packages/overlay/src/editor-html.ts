@@ -189,7 +189,8 @@ export function getEditorHTML(port: number): string {
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow: visible;
+            position: relative;
           }
           .sidebar-right {
             border-right: none;
@@ -428,9 +429,9 @@ export function getEditorHTML(port: number): string {
           /* ── SIDEBAR TOGGLE TAB ── */
           .sidebar-toggle-btn {
             position: absolute;
-            right: -12px;
+            right: -20px;
             bottom: 48px;
-            width: 12px;
+            width: 20px;
             height: 44px;
             background: var(--bg-surface);
             border: 1px solid var(--border-color);
@@ -449,12 +450,11 @@ export function getEditorHTML(port: number): string {
           .sidebar-toggle-btn:hover {
             color: var(--text-primary);
             background: var(--bg-element);
-            width: 16px;
-            right: -16px;
           }
-          .sidebar-toggle-btn svg {
-            width: 10px;
-            height: 10px;
+          .sidebar-toggle-btn svg, .sidebar-toggle-btn i {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
           }
 
           /* ── CONTEXT MENU ── */
