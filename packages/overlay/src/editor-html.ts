@@ -758,6 +758,134 @@ export function getEditorHTML(port: number): string {
           .page-item:hover {
             background: rgba(255, 255, 255, 0.08) !important;
           }
+
+          /* ── GRID OVERLAY ── */
+          .grid-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background-image: 
+              linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 8px 8px;
+            z-index: 1;
+          }
+
+          /* ── RULERS & GUIDES ── */
+          #glide-rulers-corner {
+            border-right: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-surface);
+          }
+          #glide-ruler-h {
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-surface);
+          }
+          #glide-ruler-v {
+            border-right: 1px solid var(--border-color);
+            background: var(--bg-surface);
+          }
+
+          /* ── TOAST NOTIFICATIONS ── */
+          .toast-container {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+          }
+          .toast {
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.2s ease-out;
+          }
+          .toast.success {
+            border-left: 4px solid var(--success);
+          }
+          .toast.error {
+            border-left: 4px solid var(--danger);
+          }
+          .toast-undo {
+            color: var(--accent-color);
+            text-decoration: underline;
+            cursor: pointer;
+            margin-left: 8px;
+            font-weight: 600;
+          }
+          @keyframes slideUp {
+            from { transform: translateY(12px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+
+          /* ── BRANCHING DIALOG ── */
+          .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            backdrop-filter: blur(4px);
+          }
+          .modal-content {
+            background: #1e1e1e;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 400px;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.7);
+          }
+          .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+          }
+          .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+          }
+          .modal-body {
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+          }
+          .modal-input {
+            width: 100%;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            margin-top: 10px;
+            font-family: monospace;
+          }
+          .modal-input:focus {
+            border-color: var(--accent-color);
+          }
+          .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+          }
         </style>
       </head>
       <body>
@@ -793,10 +921,13 @@ export function getEditorHTML(port: number): string {
             <input class="device-custom-input" id="custom-width" type="number" placeholder="Custom" title="Custom width (px)">
           </div>
 
-          <!-- Snapping controls -->
+          <!-- Snapping, Grid, Guides, and Branch controls -->
           <div class="device-bar" style="margin-right: 8px;">
             <button class="device-btn active" id="btn-snap-object" title="Snap to Sibling Objects">🎯 Snap Obj</button>
             <button class="device-btn active" id="btn-snap-pixel" title="Snap to Pixel Grid">🔢 Snap Pixel</button>
+            <button class="device-btn" id="btn-toggle-grid" title="Toggle 8px Grid Overlay (Ctrl+G)">⊞ Grid</button>
+            <button class="device-btn active" id="btn-toggle-guides" title="Toggle Rulers & Guides (Ctrl+;)">😎 Guides</button>
+            <button class="device-btn" id="btn-branching" title="Git Branching Mode">⎇ Branch</button>
           </div>
 
           <!-- Present, Share & Zoom controls -->
@@ -871,8 +1002,20 @@ export function getEditorHTML(port: number): string {
             <button id="toggle-left-sidebar" class="sidebar-toggle-btn left-toggle" title="Toggle Layers Sidebar ( [ )">◀</button>
             <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )">▶</button>
             
+            <!-- RULERS -->
+            <div id="glide-rulers-corner" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; z-index: 10;"></div>
+            <div id="glide-ruler-h" style="position: absolute; top: 0; left: 20px; right: 0; height: 20px; z-index: 9; overflow: hidden;">
+              <canvas id="ruler-h-canvas" style="display: block; width: 100%; height: 100%;"></canvas>
+            </div>
+            <div id="glide-ruler-v" style="position: absolute; top: 20px; left: 0; bottom: 0; width: 20px; z-index: 9; overflow: hidden;">
+              <canvas id="ruler-v-canvas" style="display: block; width: 100%; height: 100%;"></canvas>
+            </div>
+
             <div class="canvas-viewport" id="canvas-viewport">
               <div class="preview-frame-wrapper" id="frame-wrapper">
+                <!-- GRID OVERLAY -->
+                <div id="grid-overlay" class="grid-overlay" style="display: none;"></div>
+                
                 <div class="canvas-loading" id="canvas-loading">
                   <div class="spinner"></div>
                   <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
@@ -886,6 +1029,46 @@ export function getEditorHTML(port: number): string {
                   </defs>
                   <!-- selection/hover drawn dynamically -->
                 </svg>
+              </div>
+            </div>
+
+            <!-- TOAST CONTAINER -->
+            <div id="toast-container" class="toast-container"></div>
+
+            <!-- BRANCHING MODE DIALOGS -->
+            <div id="branching-modal" class="modal-overlay" style="display: none;">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <i data-lucide="git-branch" style="width: 20px; height: 20px; color: var(--accent-color);"></i>
+                  <div class="modal-title">Glide Branching Mode</div>
+                </div>
+                <div class="modal-body">
+                  Edit visually on a safe git branch. Merge when ready.<br><br>
+                  Glide will create a new branch and route all visual source edits to it. When satisfied, finalize to commit changes.
+                  <input type="text" id="branch-name-input" class="modal-input" placeholder="glide/visual-edit-...">
+                </div>
+                <div class="modal-footer">
+                  <button class="device-btn" id="btn-modal-cancel" style="height: 32px; padding: 0 16px;">Cancel</button>
+                  <button class="device-btn" id="btn-modal-confirm" style="background: var(--accent-color); color: white; border: none; height: 32px; padding: 0 16px;">Start Editing</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="finalize-modal" class="modal-overlay" style="display: none;">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <i data-lucide="check-circle" style="width: 20px; height: 20px; color: var(--success);"></i>
+                  <div class="modal-title">Finalize Changes</div>
+                </div>
+                <div class="modal-body">
+                  Staging and committing all visual edits on branch <strong id="active-branch-label">branch-name</strong>.<br><br>
+                  Enter a commit message:
+                  <input type="text" id="commit-msg-input" class="modal-input" placeholder="Visual style updates">
+                </div>
+                <div class="modal-footer">
+                  <button class="device-btn" id="btn-finalize-cancel" style="height: 32px; padding: 0 16px;">Cancel</button>
+                  <button class="device-btn" id="btn-finalize-confirm" style="background: var(--success); color: white; border: none; height: 32px; padding: 0 16px;">Commit Changes</button>
+                </div>
               </div>
             </div>
 
@@ -1097,16 +1280,30 @@ export function getEditorHTML(port: number): string {
                   </div>
                 </div>
                 <div id="fill-gradient-controls" style="display:none;">
-                  <div class="props-row">
+                  <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">Type</span>
                     <div class="icon-btn-group" style="flex:1;">
                       <button class="icon-btn active" id="grad-linear">Linear</button>
                       <button class="icon-btn" id="grad-radial">Radial</button>
                     </div>
                   </div>
-                  <div class="props-field">
+                  <div class="props-field" style="margin-bottom:8px;">
                     <span class="props-label">Angle (°)</span>
                     <input class="props-input" id="prop-grad-angle" type="number" value="90">
+                  </div>
+                  <div class="props-row" style="margin-bottom:8px;">
+                    <span class="props-label" style="min-width:50px;">Start</span>
+                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;">
+                      <input type="color" id="prop-grad-start" value="#000000">
+                    </div>
+                    <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="flex:1;font-family:monospace;">
+                  </div>
+                  <div class="props-row" style="margin-bottom:8px;">
+                    <span class="props-label" style="min-width:50px;">End</span>
+                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;">
+                      <input type="color" id="prop-grad-end" value="#ffffff">
+                    </div>
+                    <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="flex:1;font-family:monospace;">
                   </div>
                   <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
                 </div>
@@ -1201,6 +1398,13 @@ export function getEditorHTML(port: number): string {
           const componentRootSources = new Set();
           let currentGeneration = 0;
           const expandedNodeIds = new Set();
+          
+          // Phase 2 state
+          let gridVisible = false;
+          let guidesVisible = true;
+          let guides = []; // Array of { axis: 'x' | 'y', position: number }
+          let activeBranch = null;
+          let draggingGuide = null;
 
           function findNodeBySource(nodes, source) {
             for (const node of nodes) {
@@ -1342,8 +1546,37 @@ export function getEditorHTML(port: number): string {
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
                     }
+                    if (message.action === 'undo' || message.action === 'redo') {
+                      showToast('success', message.message || 'Action completed');
+                    } else if (currentFile) {
+                      showToast('success', currentFile.split('/').pop() + ' updated successfully.');
+                    }
                   } else {
                     console.error('[Glide] Server error:', message.error);
+                    showToast('error', message.error || 'Server error');
+                  }
+                } else if (message.type === 'git-status') {
+                  if (message.success) {
+                    if (message.action === 'create') {
+                      activeBranch = message.branch;
+                      const btn = document.getElementById('btn-branching');
+                      if (btn) {
+                        btn.classList.add('active');
+                        btn.textContent = '⎇ ' + activeBranch.split('/').pop();
+                      }
+                      showToast('success', 'Checked out branch: ' + activeBranch);
+                    } else if (message.action === 'finalize') {
+                      showToast('success', 'Visual edits staged and committed successfully!');
+                      activeBranch = null;
+                      const btn = document.getElementById('btn-branching');
+                      if (btn) {
+                        btn.classList.remove('active');
+                        btn.textContent = '⎇ Branch';
+                      }
+                    }
+                  } else {
+                    console.error('[Glide] Git error:', message.error);
+                    showToast('error', 'Git error: ' + message.error);
                   }
                 }
               } catch (e) {
@@ -1442,6 +1675,153 @@ export function getEditorHTML(port: number): string {
             const vp = document.getElementById('canvas-viewport');
             vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
             document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
+            
+            drawRulers();
+          }
+
+          function drawRulers() {
+            if (!guidesVisible) {
+              document.getElementById('glide-rulers-corner').style.display = 'none';
+              document.getElementById('glide-ruler-h').style.display = 'none';
+              document.getElementById('glide-ruler-v').style.display = 'none';
+              return;
+            }
+            document.getElementById('glide-rulers-corner').style.display = 'block';
+            document.getElementById('glide-ruler-h').style.display = 'block';
+            document.getElementById('glide-ruler-v').style.display = 'block';
+
+            drawRulerH();
+            drawRulerV();
+          }
+
+          function drawRulerH() {
+            const canvas = document.getElementById('ruler-h-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.parentElement.clientWidth;
+            const height = canvas.parentElement.clientHeight;
+            
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+
+            ctx.fillStyle = '#1e1b4b'; // Theme indigo
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = '#312e81';
+            ctx.fillStyle = '#a5b4fc';
+            ctx.font = '9px monospace';
+            ctx.lineWidth = 1;
+            
+            const iframe = document.getElementById('app-iframe');
+            if (!iframe) return;
+            const fw = iframe.clientWidth;
+            const container = document.getElementById('canvas-container');
+            const cw = container.clientWidth;
+            
+            const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
+
+            const startX = Math.floor(-originX / zoomLevel);
+            const endX = Math.ceil((width - originX) / zoomLevel);
+
+            let step = 100;
+            if (zoomLevel > 2) step = 10;
+            else if (zoomLevel > 0.6) step = 50;
+            else if (zoomLevel > 0.25) step = 100;
+            else step = 500;
+
+            const firstTick = Math.floor(startX / step) * step;
+
+            for (let x = firstTick; x <= endX; x += step) {
+              const rx = x * zoomLevel + originX;
+              if (rx < 0 || rx > width) continue;
+
+              ctx.beginPath();
+              ctx.moveTo(rx, height);
+              ctx.lineTo(rx, height - 8);
+              ctx.stroke();
+
+              ctx.fillText(x.toString(), rx + 2, height - 10);
+              
+              const subStep = step / 10;
+              for (let j = 1; j < 10; j++) {
+                const sx = rx + j * subStep * zoomLevel;
+                if (sx >= 0 && sx <= width) {
+                  ctx.beginPath();
+                  ctx.moveTo(sx, height);
+                  ctx.lineTo(sx, height - (j === 5 ? 5 : 3));
+                  ctx.stroke();
+                }
+              }
+            }
+          }
+
+          function drawRulerV() {
+            const canvas = document.getElementById('ruler-v-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.parentElement.clientWidth;
+            const height = canvas.parentElement.clientHeight;
+            
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+
+            ctx.fillStyle = '#1e1b4b';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = '#312e81';
+            ctx.fillStyle = '#a5b4fc';
+            ctx.font = '9px monospace';
+            ctx.lineWidth = 1;
+            
+            const iframe = document.getElementById('app-iframe');
+            if (!iframe) return;
+            const fh = iframe.clientHeight;
+            const container = document.getElementById('canvas-container');
+            const ch = container.clientHeight;
+            
+            const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
+
+            const startY = Math.floor(-originY / zoomLevel);
+            const endY = Math.ceil((height - originY) / zoomLevel);
+
+            let step = 100;
+            if (zoomLevel > 2) step = 10;
+            else if (zoomLevel > 0.6) step = 50;
+            else if (zoomLevel > 0.25) step = 100;
+            else step = 500;
+
+            const firstTick = Math.floor(startY / step) * step;
+
+            for (let y = firstTick; y <= endY; y += step) {
+              const ry = y * zoomLevel + originY;
+              if (ry < 0 || ry > height) continue;
+
+              ctx.beginPath();
+              ctx.moveTo(width, ry);
+              ctx.lineTo(width - 8, ry);
+              ctx.stroke();
+
+              ctx.save();
+              ctx.translate(width - 10, ry + 2);
+              ctx.rotate(-Math.PI / 2);
+              ctx.fillText(y.toString(), 2, 0);
+              ctx.restore();
+              
+              const subStep = step / 10;
+              for (let j = 1; j < 10; j++) {
+                const sy = ry + j * subStep * zoomLevel;
+                if (sy >= 0 && sy <= height) {
+                  ctx.beginPath();
+                  ctx.moveTo(width, sy);
+                  ctx.lineTo(width - (j === 5 ? 5 : 3), sy);
+                  ctx.stroke();
+                }
+              }
+            }
           }
 
           document.getElementById('zoom-in').addEventListener('click', () => { zoomLevel = Math.min(4, zoomLevel + 0.1); applyTransform(); });
@@ -1534,6 +1914,47 @@ export function getEditorHTML(port: number): string {
 
             const key = e.key;
             const ctrl = e.ctrlKey || e.metaKey;
+
+            // Toggle grid: Ctrl+G
+            if (ctrl && (key === 'g' || key === 'G')) {
+              e.preventDefault();
+              gridVisible = !gridVisible;
+              const btn = document.getElementById('btn-toggle-grid');
+              if (btn) btn.classList.toggle('active', gridVisible);
+              document.getElementById('grid-overlay').style.display = gridVisible ? 'block' : 'none';
+              return;
+            }
+
+            // Toggle guides: Ctrl+;
+            if (ctrl && key === ';') {
+              e.preventDefault();
+              guidesVisible = !guidesVisible;
+              const btn = document.getElementById('btn-toggle-guides');
+              if (btn) btn.classList.toggle('active', guidesVisible);
+              drawRulers();
+              drawOverlay();
+              return;
+            }
+
+            // Undo: Ctrl+Z
+            if (ctrl && (key === 'z' || key === 'Z')) {
+              e.preventDefault();
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'undo' }));
+                showToast('info', 'Undoing last change...');
+              }
+              return;
+            }
+
+            // Redo: Ctrl+Y
+            if (ctrl && (key === 'y' || key === 'Y')) {
+              e.preventDefault();
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'redo' }));
+                showToast('info', 'Redoing last change...');
+              }
+              return;
+            }
 
             // Tool shortcuts
             if (!ctrl && key === 'v') { setTool('select'); return; }
@@ -1679,6 +2100,28 @@ export function getEditorHTML(port: number): string {
               panY = e.clientY - panStart.y;
               applyTransform();
             }
+            if (draggingGuide) {
+              const container = document.getElementById('canvas-container');
+              const iframe = document.getElementById('app-iframe');
+              if (iframe) {
+                const fw = iframe.clientWidth;
+                const fh = iframe.clientHeight;
+                const cw = container.clientWidth;
+                const ch = container.clientHeight;
+                
+                const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
+                const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
+
+                if (draggingGuide.axis === 'x') {
+                  const pageX = Math.round((e.clientX - canvasContainerRect.left - originX) / zoomLevel);
+                  guides[draggingGuide.index].position = pageX;
+                } else {
+                  const pageY = Math.round((e.clientY - canvasContainerRect.top - originY) / zoomLevel);
+                  guides[draggingGuide.index].position = pageY;
+                }
+                drawOverlay();
+              }
+            }
             // Update cursor coords in status bar
             const cx = Math.round((e.clientX - canvasContainerRect.left - panX) / zoomLevel);
             const cy = Math.round((e.clientY - canvasContainerRect.top - panY) / zoomLevel);
@@ -1690,7 +2133,14 @@ export function getEditorHTML(port: number): string {
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
             }
-
+            if (draggingGuide) {
+              const g = guides[draggingGuide.index];
+              if (g && (g.position < -5000 || g.position > 5000)) {
+                guides.splice(draggingGuide.index, 1);
+              }
+              draggingGuide = null;
+              drawOverlay();
+            }
           });
 
           // Spacebar = temp hand tool
@@ -1753,6 +2203,9 @@ export function getEditorHTML(port: number): string {
             if (gGroup) {
               gGroup.innerHTML = '';
             }
+
+            // Clear distance measures
+            document.querySelectorAll('.glide-measure-element').forEach(el => el.remove());
           }
 
           function createSelectionGroup() {
@@ -1780,11 +2233,16 @@ export function getEditorHTML(port: number): string {
             container.appendChild(r);
 
             if (!isHover) {
+              // Add corners resize handles
               const handles = [
-                [rect.x, rect.y], [rect.x + rect.width/2, rect.y], [rect.x + rect.width, rect.y],
-                [rect.x + rect.width, rect.y + rect.height/2],
-                [rect.x + rect.width, rect.y + rect.height], [rect.x + rect.width/2, rect.y + rect.height],
-                [rect.x, rect.y + rect.height], [rect.x, rect.y + rect.height/2]
+                { x: rect.x, y: rect.y, cursor: 'nwse-resize' },
+                { x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize' },
+                { x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize' },
+                { x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize' },
+                { x: rect.x + rect.width/2, y: rect.y, cursor: 'ns-resize' },
+                { x: rect.x + rect.width, y: rect.y + rect.height/2, cursor: 'ew-resize' },
+                { x: rect.x + rect.width/2, y: rect.y + rect.height, cursor: 'ns-resize' },
+                { x: rect.x, y: rect.y + rect.height/2, cursor: 'ew-resize' },
               ];
               handles.forEach(([hx, hy]) => {
                 const h = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -1800,11 +2258,112 @@ export function getEditorHTML(port: number): string {
             }
           }
 
+          function drawDistanceIndicators(selRect, refRect) {
+            if (!selRect || !refRect) return;
+            const svgEl = document.getElementById('overlay-svg');
+            if (!svgEl) return;
+            
+            let lines = [];
+            
+            // horizontal distance
+            if (selRect.x + selRect.width <= refRect.x) {
+              const y = selRect.y + selRect.height / 2;
+              lines.push({ x1: selRect.x + selRect.width, y1: y, x2: refRect.x, y2: y, label: Math.round(refRect.x - (selRect.x + selRect.width)) });
+            } else if (refRect.x + refRect.width <= selRect.x) {
+              const y = selRect.y + selRect.height / 2;
+              lines.push({ x1: refRect.x + refRect.width, y1: y, x2: selRect.x, y2: y, label: Math.round(selRect.x - (refRect.x + refRect.width)) });
+            }
+
+            // vertical distance
+            if (selRect.y + selRect.height <= refRect.y) {
+              const x = selRect.x + selRect.width / 2;
+              lines.push({ x1: x, y1: selRect.y + selRect.height, x2: x, y2: refRect.y, label: Math.round(refRect.y - (selRect.y + selRect.height)) });
+            } else if (refRect.y + refRect.height <= selRect.y) {
+              const x = selRect.x + selRect.width / 2;
+              lines.push({ x1: x, y1: refRect.y + refRect.height, x2: x, y2: selRect.y, label: Math.round(selRect.y - (refRect.y + refRect.height)) });
+            }
+
+            lines.forEach(l => {
+              if (l.label <= 0) return;
+              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              line.setAttribute('x1', l.x1);
+              line.setAttribute('y1', l.y1);
+              line.setAttribute('x2', l.x2);
+              line.setAttribute('y2', l.y2);
+              line.setAttribute('stroke', '#ff4444');
+              line.setAttribute('stroke-width', '1.5');
+              line.classList.add('glide-measure-element');
+              svgEl.appendChild(line);
+
+              const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              txt.setAttribute('x', (l.x1 + l.x2) / 2);
+              txt.setAttribute('y', (l.y1 + l.y2) / 2 - 4);
+              txt.setAttribute('fill', '#ff4444');
+              txt.setAttribute('font-size', '10');
+              txt.setAttribute('font-family', 'monospace');
+              txt.setAttribute('font-weight', 'bold');
+              txt.setAttribute('text-anchor', 'middle');
+              txt.textContent = l.label + 'px';
+              txt.classList.add('glide-measure-element');
+              svgEl.appendChild(txt);
+            });
+          }
+
+          function drawGuides() {
+            const svgEl = document.getElementById('overlay-svg');
+            if (!svgEl) return;
+
+            document.querySelectorAll('.glide-guide-line').forEach(el => el.remove());
+            if (!guidesVisible) return;
+
+            guides.forEach((g, idx) => {
+              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              line.classList.add('glide-guide-line');
+              line.dataset.index = idx;
+              
+              if (g.axis === 'x') {
+                line.setAttribute('x1', g.position);
+                line.setAttribute('y1', -5000);
+                line.setAttribute('x2', g.position);
+                line.setAttribute('y2', 5000);
+                line.style.cursor = 'ew-resize';
+              } else {
+                line.setAttribute('x1', -5000);
+                line.setAttribute('y1', g.position);
+                line.setAttribute('x2', 5000);
+                line.setAttribute('y2', g.position);
+                line.style.cursor = 'ns-resize';
+              }
+              line.setAttribute('stroke', '#38bdf8'); // sky blue Figma style
+              line.setAttribute('stroke-width', '1.5');
+              line.setAttribute('pointer-events', 'auto');
+
+              line.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                draggingGuide = { index: idx, axis: g.axis };
+                line.setPointerCapture(e.pointerId);
+              });
+
+              line.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                guides.splice(idx, 1);
+                drawGuides();
+              });
+
+              svgEl.appendChild(line);
+            });
+          }
+
           function drawOverlay() {
             clearOverlay();
             if (selectedRects && selectedRects.length > 0) {
               if (selectedRects.length === 1) {
-                if (selectedRects[0]) drawSelectionBox(selectedRects[0], false);
+                if (selectedRects[0]) {
+                  drawSelectionBox(selectedRects[0], false);
+                  if (hoveredRect && hoveredElement && !selectedSources.includes(hoveredElement.source)) {
+                    drawDistanceIndicators(selectedRects[0], hoveredRect);
+                  }
+                }
               } else {
                 let minX = Infinity;
                 let minY = Infinity;
@@ -1831,6 +2390,7 @@ export function getEditorHTML(port: number): string {
             if (hoveredRect && (!hoveredElement || !selectedSources.includes(hoveredElement.source))) {
               drawSelectionBox(hoveredRect, true);
             }
+            drawGuides();
           }
 
           function renderSnapGuides(guides) {
@@ -2485,9 +3045,37 @@ export function getEditorHTML(port: number): string {
               document.getElementById('color-swatch-text').style.background = hex;
             }
 
-            // Fill
+            // Fill / Background
+            const bgImg = styles.backgroundImage || '';
             const bg = styles.backgroundColor;
-            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+            if (bgImg && bgImg.includes('gradient')) {
+              setFillMode('gradient');
+              if (bgImg.includes('radial-gradient')) {
+                gradType = 'radial';
+                setActiveBtn(['grad-linear', 'grad-radial'], 'grad-radial');
+              } else {
+                gradType = 'linear';
+                setActiveBtn(['grad-linear', 'grad-radial'], 'grad-linear');
+                const angleMatch = bgImg.match(/(\d+)deg/);
+                if (angleMatch) {
+                  document.getElementById('prop-grad-angle').value = angleMatch[1];
+                }
+              }
+              const colors = bgImg.match(/(#[0-9a-fA-F]{3,8}|rgba?\(.*?\))/g);
+              if (colors && colors.length >= 2) {
+                const startHex = rgbToHex(colors[0]);
+                const endHex = rgbToHex(colors[1]);
+                
+                document.getElementById('prop-grad-start').value = startHex;
+                document.getElementById('prop-grad-start-hex').value = startHex;
+                document.getElementById('color-swatch-grad-start').style.background = startHex;
+                
+                document.getElementById('prop-grad-end').value = endHex;
+                document.getElementById('prop-grad-end-hex').value = endHex;
+                document.getElementById('color-swatch-grad-end').style.background = endHex;
+              }
+              document.getElementById('grad-preview').style.background = bgImg;
+            } else if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
               const hex = rgbToHex(bg);
               document.getElementById('prop-bg-color').value = hex;
               document.getElementById('prop-bg-hex').value = hex;
@@ -2539,27 +3127,88 @@ export function getEditorHTML(port: number): string {
             return '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
           }
 
+          function updateGradientFill() {
+            const angle = document.getElementById('prop-grad-angle').value || '90';
+            const start = document.getElementById('prop-grad-start').value || '#000000';
+            const end = document.getElementById('prop-grad-end').value || '#ffffff';
+            
+            let gradVal = '';
+            if (gradType === 'linear') {
+              gradVal = 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')';
+            } else {
+              gradVal = 'radial-gradient(circle, ' + start + ', ' + end + ')';
+            }
+            
+            document.getElementById('grad-preview').style.background = gradVal;
+            sendMultiClassChange(selectedElement.source, {
+              backgroundImage: gradVal,
+              backgroundColor: 'transparent'
+            });
+          }
+
           // Fill mode buttons
-          ['fill-none','fill-solid','fill-gradient'].forEach(id => {
-            document.getElementById(id).addEventListener('click', () => setFillMode(id.replace('fill-','')) );
+          document.getElementById('fill-none').addEventListener('click', () => {
+            setFillMode('none');
+            sendMultiClassChange(selectedElement.source, {
+              backgroundImage: 'none',
+              backgroundColor: 'transparent'
+            });
           });
 
-          // Gradient type
-          document.getElementById('grad-linear').addEventListener('click', () => setActiveBtn(['grad-linear','grad-radial'],'grad-linear'));
-          document.getElementById('grad-radial').addEventListener('click', () => setActiveBtn(['grad-linear','grad-radial'],'grad-radial'));
-
-          // Color swatches sync
-          document.getElementById('prop-color').addEventListener('input', (e) => {
-            document.getElementById('prop-color-hex').value = e.target.value;
-            document.getElementById('color-swatch-text').style.background = e.target.value;
-            sendEdit({ type: 'class', property: 'color', value: e.target.value });
-          });
-          document.getElementById('prop-color-hex').addEventListener('change', (e) => {
-            document.getElementById('prop-color').value = e.target.value;
-            document.getElementById('color-swatch-text').style.background = e.target.value;
-            sendEdit({ type: 'class', property: 'color', value: e.target.value });
+          document.getElementById('fill-solid').addEventListener('click', () => {
+            setFillMode('solid');
+            const val = document.getElementById('prop-bg-color').value;
+            sendMultiClassChange(selectedElement.source, {
+              backgroundImage: 'none',
+              backgroundColor: val
+            });
           });
 
+          document.getElementById('fill-gradient').addEventListener('click', () => {
+            setFillMode('gradient');
+            updateGradientFill();
+          });
+
+          // Gradient type & angle
+          document.getElementById('grad-linear').addEventListener('click', () => {
+            gradType = 'linear';
+            setActiveBtn(['grad-linear','grad-radial'],'grad-linear');
+            updateGradientFill();
+          });
+          document.getElementById('grad-radial').addEventListener('click', () => {
+            gradType = 'radial';
+            setActiveBtn(['grad-linear','grad-radial'],'grad-radial');
+            updateGradientFill();
+          });
+          document.getElementById('prop-grad-angle').addEventListener('input', () => {
+            updateGradientFill();
+          });
+
+          // Gradient Start color
+          document.getElementById('prop-grad-start').addEventListener('input', (e) => {
+            document.getElementById('prop-grad-start-hex').value = e.target.value;
+            document.getElementById('color-swatch-grad-start').style.background = e.target.value;
+            updateGradientFill();
+          });
+          document.getElementById('prop-grad-start-hex').addEventListener('change', (e) => {
+            document.getElementById('prop-grad-start').value = e.target.value;
+            document.getElementById('color-swatch-grad-start').style.background = e.target.value;
+            updateGradientFill();
+          });
+
+          // Gradient End color
+          document.getElementById('prop-grad-end').addEventListener('input', (e) => {
+            document.getElementById('prop-grad-end-hex').value = e.target.value;
+            document.getElementById('color-swatch-grad-end').style.background = e.target.value;
+            updateGradientFill();
+          });
+          document.getElementById('prop-grad-end-hex').addEventListener('change', (e) => {
+            document.getElementById('prop-grad-end').value = e.target.value;
+            document.getElementById('color-swatch-grad-end').style.background = e.target.value;
+            updateGradientFill();
+          });
+
+          // Solid Background color
           document.getElementById('prop-bg-color').addEventListener('input', (e) => {
             document.getElementById('prop-bg-hex').value = e.target.value;
             document.getElementById('color-swatch-bg').style.background = e.target.value;
@@ -2813,6 +3462,140 @@ export function getEditorHTML(port: number): string {
 
           const mUngroup = document.getElementById('menu-ungroup');
           if (mUngroup) mUngroup.addEventListener('click', triggerUngroup);
+
+          // Grid overlay toggle
+          const btnToggleGrid = document.getElementById('btn-toggle-grid');
+          if (btnToggleGrid) {
+            btnToggleGrid.addEventListener('click', () => {
+              gridVisible = !gridVisible;
+              btnToggleGrid.classList.toggle('active', gridVisible);
+              document.getElementById('grid-overlay').style.display = gridVisible ? 'block' : 'none';
+            });
+          }
+
+          // Guides toggle
+          const btnToggleGuides = document.getElementById('btn-toggle-guides');
+          if (btnToggleGuides) {
+            btnToggleGuides.addEventListener('click', () => {
+              guidesVisible = !guidesVisible;
+              btnToggleGuides.classList.toggle('active', guidesVisible);
+              drawRulers();
+              drawOverlay();
+            });
+          }
+
+          // Branching modal click handlers
+          const btnBranching = document.getElementById('btn-branching');
+          if (btnBranching) {
+            btnBranching.addEventListener('click', () => {
+              if (!activeBranch) {
+                // Show create branch modal
+                document.getElementById('branch-name-input').value = 'glide/visual-edit-' + new Date().toISOString().slice(0, 10) + '-' + Math.floor(Math.random() * 1000);
+                document.getElementById('branching-modal').style.display = 'flex';
+              } else {
+                // Show finalize branch modal
+                document.getElementById('active-branch-label').textContent = activeBranch;
+                document.getElementById('commit-msg-input').value = 'Visual style updates';
+                document.getElementById('finalize-modal').style.display = 'flex';
+              }
+            });
+          }
+
+          document.getElementById('btn-modal-cancel').addEventListener('click', () => {
+            document.getElementById('branching-modal').style.display = 'none';
+          });
+
+          document.getElementById('btn-modal-confirm').addEventListener('click', () => {
+            const branchName = document.getElementById('branch-name-input').value.trim();
+            if (branchName) {
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'git-branch-create', branchName }));
+                showToast('info', 'Creating git branch ' + branchName + '...');
+              }
+            }
+            document.getElementById('branching-modal').style.display = 'none';
+          });
+
+          document.getElementById('btn-finalize-cancel').addEventListener('click', () => {
+            document.getElementById('finalize-modal').style.display = 'none';
+          });
+
+          document.getElementById('btn-finalize-confirm').addEventListener('click', () => {
+            const commitMessage = document.getElementById('commit-msg-input').value.trim();
+            if (commitMessage) {
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'git-branch-finalize', commitMessage }));
+                showToast('info', 'Finalizing git branch and committing...');
+              }
+            }
+            document.getElementById('finalize-modal').style.display = 'none';
+          });
+
+          // Rulers pointerdown drag to create guide lines
+          document.getElementById('glide-ruler-h').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const container = document.getElementById('canvas-container');
+            const iframe = document.getElementById('app-iframe');
+            if (iframe) {
+              const fh = iframe.clientHeight;
+              const ch = container.clientHeight;
+              const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
+              const pageY = Math.round((e.clientY - canvasContainerRect.top - originY) / zoomLevel);
+              
+              guides.push({ axis: 'y', position: pageY });
+              draggingGuide = { index: guides.length - 1, axis: 'y' };
+              drawOverlay();
+            }
+          });
+
+          document.getElementById('glide-ruler-v').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const container = document.getElementById('canvas-container');
+            const iframe = document.getElementById('app-iframe');
+            if (iframe) {
+              const fw = iframe.clientWidth;
+              const cw = container.clientWidth;
+              const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
+              const pageX = Math.round((e.clientX - canvasContainerRect.left - originX) / zoomLevel);
+              
+              guides.push({ axis: 'x', position: pageX });
+              draggingGuide = { index: guides.length - 1, axis: 'x' };
+              drawOverlay();
+            }
+          });
+
+          function showToast(type, text) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            
+            let icon = '💡';
+            if (type === 'success') icon = '✓';
+            if (type === 'error') icon = '❌';
+            if (type === 'info') icon = '⚡';
+
+            let undoHTML = '';
+            if (type === 'success' && text.includes('updated')) {
+              undoHTML = '<span class="toast-undo" onclick="triggerUndo()">Undo</span>';
+            }
+
+            toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;">' + text + '</span>' + undoHTML;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+              toast.style.animation = 'slideUp 0.2s ease-in reverse';
+              setTimeout(() => toast.remove(), 200);
+            }, 3000);
+          }
+
+          window.triggerUndo = function() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'undo' }));
+              showToast('info', 'Undoing last change...');
+            }
+          };
 
           connectSocket();
           // Load default url on start
