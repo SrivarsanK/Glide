@@ -1510,7 +1510,12 @@ export function getEditorHTML(port: number): string {
           let lockedIds = new Set();
           let hiddenIds = new Set();
           let shadowCount = 0;
-           let dragStartPos = null;
+          let isResizing = false;
+          let resizeDir = '';
+          let startPointerX = 0;
+          let startPointerY = 0;
+          let startRect = null;
+          let dragStartPos = null;
            let dragSource = null;
            let dragInitialML = 0;
            let dragInitialMT = 0;
@@ -2212,6 +2217,58 @@ export function getEditorHTML(port: number): string {
                 drawOverlay();
               }
             }
+            if (isResizing && startRect && selectedElement) {
+              const dx = (e.clientX - startPointerX) / zoomLevel;
+              const dy = (e.clientY - startPointerY) / zoomLevel;
+
+              let width = startRect.width;
+              let height = startRect.height;
+              let x = startRect.x;
+              let y = startRect.y;
+
+              if (resizeDir.includes('r')) {
+                width = Math.max(10, startRect.width + dx);
+              } else if (resizeDir.includes('l')) {
+                const targetWidth = startRect.width - dx;
+                if (targetWidth >= 10) {
+                  width = targetWidth;
+                  x = startRect.x + dx;
+                }
+              }
+
+              if (resizeDir.includes('b')) {
+                height = Math.max(10, startRect.height + dy);
+              } else if (resizeDir.includes('t')) {
+                const targetHeight = startRect.height - dy;
+                if (targetHeight >= 10) {
+                  height = targetHeight;
+                  y = startRect.y + dy;
+                }
+              }
+
+              const g = document.getElementById('selection-group');
+              if (g) {
+                g.innerHTML = '';
+                const outline = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                outline.setAttribute('x', x);
+                outline.setAttribute('y', y);
+                outline.setAttribute('width', width);
+                outline.setAttribute('height', height);
+                outline.setAttribute('fill', 'none');
+                outline.setAttribute('stroke', '#0d99ff');
+                outline.setAttribute('stroke-width', '1');
+                g.appendChild(outline);
+              }
+
+              const propX = document.getElementById('prop-x');
+              if (propX) propX.value = Math.round(x);
+              const propY = document.getElementById('prop-y');
+              if (propY) propY.value = Math.round(y);
+              const propW = document.getElementById('prop-w');
+              if (propW) propW.value = Math.round(width);
+              const propH = document.getElementById('prop-h');
+              if (propH) propH.value = Math.round(height);
+            }
             // Update cursor coords in status bar
             const cx = Math.round((e.clientX - canvasContainerRect.left - panX) / zoomLevel);
             const cy = Math.round((e.clientY - canvasContainerRect.top - panY) / zoomLevel);
@@ -2222,6 +2279,27 @@ export function getEditorHTML(port: number): string {
             if (isPanning) {
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+            }
+            if (isResizing && startRect && selectedElement) {
+              isResizing = false;
+              const propX = document.getElementById('prop-x');
+              const propY = document.getElementById('prop-y');
+              const propW = document.getElementById('prop-w');
+              const propH = document.getElementById('prop-h');
+
+              if (propX && propY && propW && propH) {
+                sendPositionChange(selectedElement.source, {
+                  left: propX.value + 'px',
+                  top: propY.value + 'px'
+                });
+                sendMultiClassChange(selectedElement.source, {
+                  width: propW.value + 'px',
+                  height: propH.value + 'px'
+                });
+              }
+              startRect = null;
+              resizeDir = '';
+              drawOverlay();
             }
             if (draggingGuide) {
               const g = guides[draggingGuide.index];
@@ -2325,24 +2403,37 @@ export function getEditorHTML(port: number): string {
             if (!isHover) {
               // Add corners resize handles
               const handles = [
-                { x: rect.x, y: rect.y, cursor: 'nwse-resize' },
-                { x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize' },
-                { x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize' },
-                { x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize' },
-                { x: rect.x + rect.width/2, y: rect.y, cursor: 'ns-resize' },
-                { x: rect.x + rect.width, y: rect.y + rect.height/2, cursor: 'ew-resize' },
-                { x: rect.x + rect.width/2, y: rect.y + rect.height, cursor: 'ns-resize' },
-                { x: rect.x, y: rect.y + rect.height/2, cursor: 'ew-resize' },
+                { x: rect.x, y: rect.y, cursor: 'nwse-resize', dir: 'tl' },
+                { x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize', dir: 'tr' },
+                { x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize', dir: 'br' },
+                { x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize', dir: 'bl' },
+                { x: rect.x + rect.width/2, y: rect.y, cursor: 'ns-resize', dir: 'tc' },
+                { x: rect.x + rect.width, y: rect.y + rect.height/2, cursor: 'ew-resize', dir: 'mr' },
+                { x: rect.x + rect.width/2, y: rect.y + rect.height, cursor: 'ns-resize', dir: 'bc' },
+                { x: rect.x, y: rect.y + rect.height/2, cursor: 'ew-resize', dir: 'ml' },
               ];
-              handles.forEach(([hx, hy]) => {
+              handles.forEach((pos) => {
                 const h = document.createElementNS('http://www.w3.org/2000/svg','rect');
-                h.setAttribute('x', hx - 4);
-                h.setAttribute('y', hy - 4);
+                h.setAttribute('x', pos.x - 4);
+                h.setAttribute('y', pos.y - 4);
                 h.setAttribute('width', '8');
                 h.setAttribute('height', '8');
                 h.setAttribute('fill', 'white');
                 h.setAttribute('stroke', '#0d99ff');
-                h.setAttribute('stroke-width', '1');
+                h.setAttribute('stroke-width', '1.5');
+                h.style.cursor = pos.cursor;
+                h.style.pointerEvents = 'auto';
+
+                h.addEventListener('pointerdown', (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  isResizing = true;
+                  resizeDir = pos.dir;
+                  startPointerX = e.clientX;
+                  startPointerY = e.clientY;
+                  startRect = { ...rect };
+                  h.setPointerCapture(e.pointerId);
+                });
                 container.appendChild(h);
               });
             }
@@ -3682,6 +3773,8 @@ export function getEditorHTML(port: number): string {
                 sources: selectedSources
               }
             }));
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
           }
 
           function triggerUngroup() {
@@ -3704,6 +3797,27 @@ export function getEditorHTML(port: number): string {
                 source: selectedElement.source
               }
             }));
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+          }
+
+          function triggerArrange(action) {
+            const target = selectedElement || (selectedSources.length > 0 ? { source: selectedSources[0] } : null);
+            if (!target || !target.source) {
+              alert('Select an element to arrange');
+              return;
+            }
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(target.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'arrange',
+              file: parsed.file,
+              targetId: target.source,
+              action: action
+            }));
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -3735,6 +3849,18 @@ export function getEditorHTML(port: number): string {
 
           const mUngroup = document.getElementById('menu-ungroup');
           if (mUngroup) mUngroup.addEventListener('click', triggerUngroup);
+
+          const mFront = document.getElementById('menu-front');
+          if (mFront) mFront.addEventListener('click', () => triggerArrange('front'));
+
+          const mBack = document.getElementById('menu-back');
+          if (mBack) mBack.addEventListener('click', () => triggerArrange('back'));
+
+          const mForward = document.getElementById('menu-forward');
+          if (mForward) mForward.addEventListener('click', () => triggerArrange('forward'));
+
+          const mBackward = document.getElementById('menu-backward');
+          if (mBackward) mBackward.addEventListener('click', () => triggerArrange('backward'));
 
           // Grid overlay toggle
           const btnToggleGrid = document.getElementById('btn-toggle-grid');
