@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { GlideServer } from '@glide-dev/server';
 import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@glide-dev/ast-writer';
 import { groupJSXElements, ungroupJSXElement } from '@glide-dev/ast-writer';
