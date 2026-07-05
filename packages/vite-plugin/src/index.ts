@@ -829,6 +829,7 @@ export function glideSourceStamping(): Plugin {
         const normChanged = changedFile.replace(/\\/g, '/').toLowerCase();
         const normPosFile = posFile.replace(/\\/g, '/').toLowerCase();
         if (normChanged === normPosFile) {
+          console.log('[Glide Plugin] glide-positions.json changed, broadcasting glide:positions-updated');
           // Send a custom HMR event with the updated CSS — no React reload needed
           const css = buildPositionCSS();
           server.ws.send({
