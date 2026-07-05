@@ -425,35 +425,36 @@ export function getEditorHTML(port: number): string {
           .sidebar.collapsed {
             display: none !important;
           }
+          /* ── SIDEBAR TOGGLE TAB ── */
           .sidebar-toggle-btn {
             position: absolute;
-            top: 20px;
-            width: 28px;
-            height: 28px;
+            right: -12px;
+            bottom: 48px;
+            width: 12px;
+            height: 44px;
             background: var(--bg-surface);
             border: 1px solid var(--border-color);
+            border-left: none;
             color: var(--text-secondary);
-            border-radius: 50%;
+            border-radius: 0 6px 6px 0;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            z-index: 100;
+            z-index: 20;
             transition: all 0.2s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            font-size: 10px;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+            padding: 0;
           }
           .sidebar-toggle-btn:hover {
             color: var(--text-primary);
-            border-color: var(--accent-color);
             background: var(--bg-element);
-            transform: scale(1.05);
+            width: 16px;
+            right: -16px;
           }
-          .left-toggle {
-            left: 20px;
-          }
-          .right-toggle {
-            right: 20px;
+          .sidebar-toggle-btn svg {
+            width: 10px;
+            height: 10px;
           }
 
           /* ── CONTEXT MENU ── */
@@ -982,12 +983,15 @@ export function getEditorHTML(port: number): string {
                 </div>
               </div>
             </div>
+            <!-- Sidebar Toggle Tab -->
+            <button id="toggle-left-sidebar" class="sidebar-toggle-btn" title="Toggle Layers Panel ( [ )" style="position: absolute;">
+              <i data-lucide="panel-left-close" id="icon-toggle-left" style="width: 10px; height: 10px;"></i>
+            </button>
           </div>
 
           <!-- CANVAS -->
           <div class="canvas-container" id="canvas-container" style="position: relative;">
-            <button id="toggle-left-sidebar" class="sidebar-toggle-btn left-toggle" title="Toggle Layers Sidebar ( [ )">◀</button>
-            <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )">▶</button>
+            <button id="toggle-right-sidebar" class="sidebar-toggle-btn right-toggle" title="Toggle Properties Sidebar ( ] )" style="position: absolute; right: -12px; bottom: 48px; border-radius: 6px 0 0 6px; border-right: none; border-left: 1px solid var(--border-color);">▶</button>
             
             <!-- RULERS -->
             <div id="glide-rulers-corner" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; z-index: 10;"></div>
@@ -1444,7 +1448,11 @@ export function getEditorHTML(port: number): string {
             function toggleLeft() {
               if (!leftSidebar) return;
               const isCollapsed = leftSidebar.classList.toggle('collapsed');
-              btnLeft.textContent = isCollapsed ? '▶' : '◀';
+              const icon = document.getElementById('icon-toggle-left');
+              if (icon) {
+                icon.setAttribute('data-lucide', isCollapsed ? 'panel-left-open' : 'panel-left-close');
+                if (window.lucide) window.lucide.createIcons();
+              }
             }
 
             function toggleRight() {
