@@ -3,6 +3,17 @@ import traverseModule from '@babel/traverse';
 import * as t from '@babel/types';
 import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
+import getBabelOptions from 'recast/parsers/_babel_options.js';
+
+const tsxParser = {
+  parse(source: string, options?: any) {
+    const getOpts = (getBabelOptions as any).default || getBabelOptions;
+    const babelOptions = getOpts(options);
+    babelOptions.plugins = babelOptions.plugins.filter((p: string) => p !== 'flow');
+    babelOptions.plugins.push('jsx', 'typescript', 'decoratorAutoAccessors');
+    return babelParser.parser.parse(source, babelOptions);
+  }
+};
 
 const traverse = (traverseModule as any).default || traverseModule;
 
@@ -13,7 +24,7 @@ export function reorderJSXElement(
   siblingId: string | null,
   position: 'before' | 'after'
 ): string {
-  const ast = recastParse(code, { parser: babelParser });
+  const ast = recastParse(code, { parser: tsxParser });
 
   let targetPath: any = null;
   let oldParentPath: any = null;
@@ -92,7 +103,7 @@ export function insertJSXElement(
   parentId: string,
   elementType: 'rectangle' | 'ellipse' | 'frame' | 'text'
 ): string {
-  const ast = recastParse(code, { parser: babelParser });
+  const ast = recastParse(code, { parser: tsxParser });
 
   let parentPath: any = null;
 
@@ -171,7 +182,7 @@ export function insertJSXElement(
 export function groupJSXElements(code: string, selectedIds: string[]): string {
   if (selectedIds.length === 0) return code;
 
-  const ast = recastParse(code, { parser: babelParser });
+  const ast = recastParse(code, { parser: tsxParser });
 
   const selectedPaths: any[] = [];
   let parentPath: any = null;
@@ -270,7 +281,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
 }
 
 export function ungroupJSXElement(code: string, groupId: string): string {
-  const ast = recastParse(code, { parser: babelParser });
+  const ast = recastParse(code, { parser: tsxParser });
 
   let targetPath: any = null;
   let parentPath: any = null;
@@ -333,7 +344,7 @@ export function arrangeJSXElement(
   targetId: string,
   action: 'front' | 'back' | 'forward' | 'backward'
 ): string {
-  const ast = recastParse(code, { parser: babelParser });
+  const ast = recastParse(code, { parser: tsxParser });
 
   let targetPath: any = null;
   let parentPath: any = null;

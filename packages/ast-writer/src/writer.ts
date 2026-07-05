@@ -6,6 +6,17 @@ import * as crypto from 'crypto';
 import ts from 'typescript';
 import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
+import getBabelOptions from 'recast/parsers/_babel_options.js';
+
+const tsxParser = {
+  parse(source: string, options?: any) {
+    const getOpts = (getBabelOptions as any).default || getBabelOptions;
+    const babelOptions = getOpts(options);
+    babelOptions.plugins = babelOptions.plugins.filter((p: string) => p !== 'flow');
+    babelOptions.plugins.push('jsx', 'typescript', 'decoratorAutoAccessors');
+    return babelParser.parser.parse(source, babelOptions);
+  }
+};
 
 const traverse = (traverseModule as any).default || traverseModule;
 const generate = (_generate as any).default || _generate;
@@ -309,7 +320,7 @@ export function updateClassName(
   }
 
   // Now parse with recast for CST mutation and print
-  const ast = recastParse(sourceCode, { parser: babelParser });
+  const ast = recastParse(sourceCode, { parser: tsxParser });
 
   let targetPath: any = null;
   traverse(ast, {
@@ -380,7 +391,7 @@ export function updateClassName(
   validateTypeScript(updatedSourceCode);
 
   const newJSXCode = recastPrint(targetPath.node).code;
-  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
+  const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXOpeningElement(path: any) {
@@ -436,7 +447,7 @@ export function updateJSXText(
   }
 
   // Now parse with recast for CST mutation and print
-  const ast = recastParse(sourceCode, { parser: babelParser });
+  const ast = recastParse(sourceCode, { parser: tsxParser });
 
   let targetPath: any = null;
   traverse(ast, {
@@ -465,7 +476,7 @@ export function updateJSXText(
   validateTypeScript(updatedSourceCode);
 
   const newJSXCode = recastPrint(targetPath.node).code;
-  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
+  const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXText(path: any) {
@@ -518,7 +529,7 @@ export function updateJSXStyleProp(
   }
 
   // Now parse with recast for CST mutation and print
-  const ast = recastParse(sourceCode, { parser: babelParser });
+  const ast = recastParse(sourceCode, { parser: tsxParser });
 
   let targetPath: any = null;
   traverse(ast, {
@@ -571,7 +582,7 @@ export function updateJSXStyleProp(
   validateTypeScript(updatedSourceCode);
 
   const newJSXCode = recastPrint(targetPath.node).code;
-  const confirmAst = recastParse(newJSXCode, { parser: babelParser });
+  const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXAttribute(path: any) {
