@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { reorderJSXElement } from '../../packages/ast-writer/src/reorder.js';
 
+const clean = (s: string) => s.replace(/\s+/g, '').trim();
+
 describe('AST Layer Reordering', () => {
   test('should reorder sibling elements within the same parent', () => {
     const code = `
@@ -18,7 +20,7 @@ describe('AST Layer Reordering', () => {
     // Move item-3 before item-1
     const updated = reorderJSXElement(code, 'item-3', 'parent', 'item-1', 'before');
 
-    expect(updated).toContain('<li data-gl-source="item-3">Item Three</li><li data-gl-source="item-1">Item One</li>');
+    expect(clean(updated)).toContain(clean('<li data-gl-source="item-3">Item Three</li><li data-gl-source="item-1">Item One</li>'));
   });
 
   test('should move element to a different parent container', () => {
@@ -40,8 +42,8 @@ describe('AST Layer Reordering', () => {
     // Move target element to be a child of main container
     const updated = reorderJSXElement(code, 'target', 'main', null, 'after');
 
-    expect(updated).not.toContain('<header data-gl-source="header">\n              <span data-gl-source="target">Target Text</span>\n            </header>');
-    expect(updated).toContain('<main data-gl-source="main">\n              <p>Main content</p>\n            <span data-gl-source="target">Target Text</span></main>');
+    expect(clean(updated)).not.toContain(clean('<header data-gl-source="header"><span data-gl-source="target">Target Text</span></header>'));
+    expect(clean(updated)).toContain(clean('<main data-gl-source="main"><p>Main content</p><span data-gl-source="target">Target Text</span></main>'));
   });
 
   test('should keep comments and unrelated variables untouched', () => {
@@ -63,10 +65,10 @@ describe('AST Layer Reordering', () => {
     // Reorder subtitle (p) before h1
     const updated = reorderJSXElement(code, 'p', 'banner', 'h1', 'before');
 
-    expect(updated).toContain('const title = "Welcome";');
-    expect(updated).toContain('// Helper variable');
-    expect(updated).toContain('// Render banner');
-    expect(updated).toContain('<p data-gl-source="p">Subtitle</p>');
+    expect(clean(updated)).toContain(clean('const title = "Welcome";'));
+    expect(clean(updated)).toContain(clean('// Helper variable'));
+    expect(clean(updated)).toContain(clean('// Render banner'));
+    expect(clean(updated)).toContain(clean('<p data-gl-source="p">Subtitle</p>'));
   });
 });
 
@@ -86,10 +88,10 @@ describe('AST Group & Ungroup', () => {
     `;
 
     const updated = groupJSXElements(code, ['h1', 'p']);
-    expect(updated).toContain('style={{');
-    expect(updated).toContain('position: "relative"');
-    expect(updated).toContain('<h1 data-gl-source="h1">Title</h1>');
-    expect(updated).toContain('<p data-gl-source="p">Subtitle</p>');
+    expect(clean(updated)).toContain(clean('style={{'));
+    expect(clean(updated)).toContain(clean('position: "relative"'));
+    expect(clean(updated)).toContain(clean('<h1 data-gl-source="h1">Title</h1>'));
+    expect(clean(updated)).toContain(clean('<p data-gl-source="p">Subtitle</p>'));
   });
 
   test('should ungroup nested children back into parent container', () => {
@@ -107,8 +109,8 @@ describe('AST Group & Ungroup', () => {
     `;
 
     const updated = ungroupJSXElement(code, 'group-1');
-    expect(updated).not.toContain('group-1');
-    expect(updated).toContain('<div data-gl-source="banner">');
-    expect(updated).toContain('<h1 data-gl-source="h1">Title</h1>');
+    expect(clean(updated)).not.toContain(clean('group-1'));
+    expect(clean(updated)).toContain(clean('<div data-gl-source="banner">'));
+    expect(clean(updated)).toContain(clean('<h1 data-gl-source="h1">Title</h1>'));
   });
 });

@@ -1,10 +1,10 @@
-import { parse } from '@babel/parser';
-import _traverse from '@babel/traverse';
-import _generate from '@babel/generator';
+import { parse as babelParse } from '@babel/parser';
+import traverseModule from '@babel/traverse';
 import * as t from '@babel/types';
+import { parse as recastParse, print as recastPrint } from 'recast';
+import * as babelParser from 'recast/parsers/babel.js';
 
-const traverse = (_traverse as any).default || _traverse;
-const generate = (_generate as any).default || _generate;
+const traverse = (traverseModule as any).default || traverseModule;
 
 export function reorderJSXElement(
   code: string,
@@ -13,10 +13,7 @@ export function reorderJSXElement(
   siblingId: string | null,
   position: 'before' | 'after'
 ): string {
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const ast = recastParse(code, { parser: babelParser });
 
   let targetPath: any = null;
   let oldParentPath: any = null;
@@ -67,16 +64,7 @@ export function reorderJSXElement(
     throw new Error(`Target element has no parent JSXElement.`);
   }
 
-  const targetNode = t.cloneNode(targetPath.node);
-
-  let rootJSXPath = targetPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
-  }
+  const targetNode = targetPath.node;
 
   // Remove target node from old parent's children
   oldParentPath.node.children = oldParentPath.node.children.filter((child: any) => {
@@ -96,20 +84,7 @@ export function reorderJSXElement(
     }
   }
 
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
-
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
-  }
-
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return code.substring(0, start) + newJSXCode + code.substring(end);
+  return recastPrint(ast).code;
 }
 
 export function insertJSXElement(
@@ -117,10 +92,7 @@ export function insertJSXElement(
   parentId: string,
   elementType: 'rectangle' | 'ellipse' | 'frame' | 'text'
 ): string {
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const ast = recastParse(code, { parser: babelParser });
 
   let parentPath: any = null;
 
@@ -147,7 +119,6 @@ export function insertJSXElement(
   }
 
   let newElement: t.JSXElement;
-
   if (elementType === 'text') {
     const opening = t.jsxOpeningElement(t.jsxIdentifier('span'), [
       t.jsxAttribute(t.jsxIdentifier('style'), t.jsxExpressionContainer(
@@ -194,38 +165,13 @@ export function insertJSXElement(
 
   parentPath.node.children.push(newElement);
 
-  let rootJSXPath = parentPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
-  }
-
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
-
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
-  }
-
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return code.substring(0, start) + newJSXCode + code.substring(end);
+  return recastPrint(ast).code;
 }
 
 export function groupJSXElements(code: string, selectedIds: string[]): string {
   if (selectedIds.length === 0) return code;
 
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const ast = recastParse(code, { parser: babelParser });
 
   const selectedPaths: any[] = [];
   let parentPath: any = null;
@@ -298,7 +244,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
   const insertIndex = childIndices[0];
 
   // Group children elements in their original order
-  const groupedChildrenNodes = childIndices.map(idx => parentNode.children[idx]).map(node => t.cloneNode(node));
+  const groupedChildrenNodes = childIndices.map(idx => parentNode.children[idx]);
 
   // Remove selected children from parent
   parentNode.children = parentNode.children.filter((child: any, idx: number) => !childIndices.includes(idx));
@@ -320,37 +266,11 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
   // Insert group element into parent's children
   parentNode.children.splice(insertIndex, 0, groupElement);
 
-  // Get root JSX element path
-  let rootJSXPath = parentPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
-  }
-
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
-
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
-  }
-
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return code.substring(0, start) + newJSXCode + code.substring(end);
+  return recastPrint(ast).code;
 }
 
 export function ungroupJSXElement(code: string, groupId: string): string {
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const ast = recastParse(code, { parser: babelParser });
 
   let targetPath: any = null;
   let parentPath: any = null;
@@ -400,35 +320,12 @@ export function ungroupJSXElement(code: string, groupId: string): string {
   }
 
   // Extract children from group element
-  const innerChildren = groupNode.children.map((child: any) => t.cloneNode(child));
+  const innerChildren = groupNode.children;
 
   // Remove group element and splice in the inner children
   parentNode.children.splice(index, 1, ...innerChildren);
 
-  // Get root JSX element path
-  let rootJSXPath = parentPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
-  }
-
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
-
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
-  }
-
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return code.substring(0, start) + newJSXCode + code.substring(end);
+  return recastPrint(ast).code;
 }
 
 export function arrangeJSXElement(
@@ -436,10 +333,7 @@ export function arrangeJSXElement(
   targetId: string,
   action: 'front' | 'back' | 'forward' | 'backward'
 ): string {
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  const ast = recastParse(code, { parser: babelParser });
 
   let targetPath: any = null;
   let parentPath: any = null;
@@ -508,28 +402,5 @@ export function arrangeJSXElement(
   // Re-insert at new index
   parentNode.children.splice(newIndex, 0, targetNode);
 
-  // Get root JSX element path
-  let rootJSXPath = parentPath;
-  while (rootJSXPath.parentPath) {
-    if (rootJSXPath.parentPath.isJSXElement()) {
-      rootJSXPath = rootJSXPath.parentPath;
-    } else {
-      break;
-    }
-  }
-
-  const start = rootJSXPath.node.start;
-  const end = rootJSXPath.node.end;
-
-  if (start === undefined || end === undefined || start === null || end === null) {
-    throw new Error('AST node position ranges are missing.');
-  }
-
-  const { code: newJSXCode } = generate(rootJSXPath.node, {
-    retainLines: false,
-    compact: false,
-    comments: true,
-  });
-
-  return code.substring(0, start) + newJSXCode + code.substring(end);
+  return recastPrint(ast).code;
 }
