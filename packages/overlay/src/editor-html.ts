@@ -1325,6 +1325,7 @@ export function getEditorHTML(port: number): string {
                     <div class="color-swatch" id="color-swatch-text"></div>
                     <input type="color" id="prop-color" value="#ffffff" title="Text Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
                     <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family:monospace;">
+                    <button id="eyedrop-text" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                 </div>
               </div>
@@ -1344,6 +1345,7 @@ export function getEditorHTML(port: number): string {
                     <div class="color-swatch" id="color-swatch-bg"></div>
                     <input type="color" id="prop-bg-color" value="#000000" title="Background Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
                     <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family:monospace;">
+                    <button id="eyedrop-bg" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                     <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="width:52px;" title="Opacity %">
                     <span style="font-size:11px;color:var(--text-secondary);">%</span>
                   </div>
@@ -1365,12 +1367,14 @@ export function getEditorHTML(port: number): string {
                     <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;"></div>
                     <input type="color" id="prop-grad-start" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
                     <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="flex:1;font-family:monospace;">
+                    <button id="eyedrop-grad-start" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                   <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">End</span>
                     <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;"></div>
                     <input type="color" id="prop-grad-end" value="#ffffff" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
                     <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="flex:1;font-family:monospace;">
+                    <button id="eyedrop-grad-end" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                   <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
                 </div>
@@ -1382,6 +1386,7 @@ export function getEditorHTML(port: number): string {
                 <div class="props-row" style="margin-bottom:6px;">
                   <div class="color-swatch" id="color-swatch-border"></div>
                   <input type="color" id="prop-border-color" value="#374151" title="Border Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
+                  <button id="eyedrop-border" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   <input class="props-input" id="prop-border-width" type="number" placeholder="0" style="width:52px;" title="Width">
                   <select class="props-select" id="prop-border-style" style="flex:1;">
                     <option value="solid">Solid</option>
@@ -3678,6 +3683,84 @@ export function getEditorHTML(port: number): string {
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
           bindColorPicker('prop-border-color', 'color-swatch-border', 'borderColor');
+
+          // ─── Eyedropper buttons (🧪) ──────────────────────────────────────────
+          // After EyeDropper.open() resolves, we apply the colour AND force-close
+          // the native colour picker dialog by cloning+replacing the hidden input.
+          function wireEyedropper(btnId, inputId, swatchId, styleProp, hexInputId, isGradient, isGradEnd) {
+            const btn = document.getElementById(btnId);
+            if (!btn || !('EyeDropper' in window)) {
+              if (btn) btn.style.display = 'none';
+              return;
+            }
+            btn.addEventListener('click', async () => {
+              try {
+                // Force-close any open native picker BEFORE opening eyedropper
+                // (some browsers can't have both open simultaneously)
+                const existingInput = document.getElementById(inputId);
+                if (existingInput) existingInput.blur();
+
+                const eyeDropper = new window.EyeDropper();
+                const result = await eyeDropper.open();
+                const hex = result.sRGBHex;
+
+                // Apply colour to swatch and hex field
+                const swatch = document.getElementById(swatchId);
+                if (swatch) swatch.style.background = hex;
+                if (hexInputId) {
+                  const hexEl = document.getElementById(hexInputId);
+                  if (hexEl) hexEl.value = hex;
+                }
+
+                // Commit to code
+                if (selectedElement) {
+                  if (isGradient) {
+                    const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+                    const startHex = isGradEnd ? getVal('prop-grad-start-hex') : hex;
+                    const endHex   = isGradEnd ? hex : getVal('prop-grad-end-hex');
+                    const angle    = getVal('prop-grad-angle') || '90';
+                    const type     = typeof gradType !== 'undefined' ? gradType : 'linear';
+                    const gradVal  = type === 'linear'
+                      ? 'linear-gradient(' + angle + 'deg, ' + startHex + ', ' + endHex + ')'
+                      : 'radial-gradient(circle, ' + startHex + ', ' + endHex + ')';
+                    const preview = document.getElementById('grad-preview');
+                    if (preview) preview.style.background = gradVal;
+                    sendStylePropsChange(selectedElement.source, {
+                      backgroundImage: gradVal,
+                      backgroundColor: 'transparent'
+                    });
+                  } else {
+                    sendStylePropsChange(selectedElement.source, { [styleProp]: hex });
+                  }
+                }
+
+                // ── Force-close the native OS colour picker popup ──────────────
+                // Replacing the hidden <input type="color"> with a clone breaks
+                // Chrome's internal reference to the popup, dismissing it.
+                const oldInput = document.getElementById(inputId);
+                if (oldInput) {
+                  const newInput = oldInput.cloneNode(true);
+                  newInput.value = hex;
+                  oldInput.parentNode.replaceChild(newInput, oldInput);
+                  // Re-bind the picker on the fresh element so it still works
+                  if (!isGradient) {
+                    bindColorPicker(inputId, swatchId, styleProp, hexInputId);
+                  } else {
+                    bindGradientPicker(inputId, swatchId, !isGradEnd, hexInputId);
+                  }
+                }
+              } catch (err) {
+                // User cancelled the eyedropper — no action needed
+              }
+            });
+          }
+
+          // Wire each eyedropper button
+          wireEyedropper('eyedrop-text',       'prop-color',       'color-swatch-text',       'color',            'prop-color-hex',      false, false);
+          wireEyedropper('eyedrop-bg',         'prop-bg-color',    'color-swatch-bg',          'backgroundColor',  'prop-bg-hex',         false, false);
+          wireEyedropper('eyedrop-border',     'prop-border-color','color-swatch-border',      'borderColor',      null,                  false, false);
+          wireEyedropper('eyedrop-grad-start', 'prop-grad-start',  'color-swatch-grad-start',  null,               'prop-grad-start-hex', true,  false);
+          wireEyedropper('eyedrop-grad-end',   'prop-grad-end',    'color-swatch-grad-end',    null,               'prop-grad-end-hex',   true,  true);
 
           // Shadow management
           document.getElementById('add-shadow-btn').addEventListener('click', () => {
