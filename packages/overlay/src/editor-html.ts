@@ -1699,7 +1699,7 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           function parseSource(source) {
             if (!source) return null;
-            const match = source.match(/^(.*):(\\d+):(\\d+)(?::([a-f0-9]+))?$/);
+            const match = source.match(/^(.*):(\\d+):(\\d+)(?::([a-fA-F0-9]+))?$/);
             if (!match) return null;
             return {
               file: match[1],
@@ -1710,7 +1710,7 @@ export function getEditorHTML(port: number): string {
           }
 
           function convertNodeIdToSource(nodeId, file) {
-            const match = nodeId.match(/^line:(\\d+):col:(\\d+)(?::([a-f0-9]+))?$/);
+            const match = nodeId.match(/^line:(\\d+):col:(\\d+)(?::([a-fA-F0-9]+))?$/);
             if (match) {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
