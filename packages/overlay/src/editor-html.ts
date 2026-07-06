@@ -2406,7 +2406,7 @@ export function getEditorHTML(port: number): string {
               g.innerHTML = '';
               g.removeAttribute('transform');
             }
-            const hoverRects = Array.from(svg.querySelectorAll('svg > rect'));
+            const hoverRects = Array.from(svg.querySelectorAll(':scope > rect'));
             hoverRects.forEach(r => svg.removeChild(r));
             
             const gGroup = document.getElementById('snap-guides-group');
