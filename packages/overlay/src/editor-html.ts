@@ -3779,11 +3779,11 @@ export function getEditorHTML(port: number): string {
             }));
           }
 
-          function bindColorPicker(inputId: string, swatchId: string, styleProp: string, hexInputId?: string) {
-            const input = document.getElementById(inputId) as HTMLInputElement;
+          function bindColorPicker(inputId, swatchId, styleProp, hexInputId) {
+            const input = document.getElementById(inputId);
             if (!input) return;
             const swatch = document.getElementById(swatchId);
-            const hexInput = hexInputId ? (document.getElementById(hexInputId) as HTMLInputElement) : null;
+            const hexInput = hexInputId ? document.getElementById(hexInputId) : null;
             
             function closePicker() {
               const oldInput = document.getElementById(inputId);
@@ -3793,13 +3793,13 @@ export function getEditorHTML(port: number): string {
               bindColorPicker(inputId, swatchId, styleProp, hexInputId);
             }
             
-            const onInput = (e: any) => {
+            const onInput = (e) => {
               const val = e.target.value;
               if (hexInput) hexInput.value = val;
               if (swatch) swatch.style.background = val;
               
               if (selectedElement) {
-                const iframe = document.getElementById('app-iframe') as HTMLIFrameElement;
+                const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
                     type: 'glide:preview-style',
@@ -3810,7 +3810,7 @@ export function getEditorHTML(port: number): string {
               }
             };
             
-            const onChange = (e: any) => {
+            const onChange = (e) => {
               const val = e.target.value;
               if (selectedElement) {
                 sendStylePropsChange(selectedElement.source, { [styleProp]: val });
@@ -3822,11 +3822,11 @@ export function getEditorHTML(port: number): string {
             input.addEventListener('change', onChange);
             
             if (hexInput) {
-              const newHexInput = hexInput.cloneNode(true) as HTMLInputElement;
+              const newHexInput = hexInput.cloneNode(true);
               hexInput.parentNode.replaceChild(newHexInput, hexInput);
-              newHexInput.addEventListener('change', (e: any) => {
+              newHexInput.addEventListener('change', (e) => {
                 const val = e.target.value;
-                const freshInput = document.getElementById(inputId) as HTMLInputElement;
+                const freshInput = document.getElementById(inputId);
                 if (freshInput) freshInput.value = val;
                 if (swatch) swatch.style.background = val;
                 if (selectedElement) {
@@ -3836,11 +3836,11 @@ export function getEditorHTML(port: number): string {
             }
           }
 
-          function bindGradientPicker(inputId: string, swatchId: string, isStart: boolean, hexInputId: string) {
-            const input = document.getElementById(inputId) as HTMLInputElement;
+          function bindGradientPicker(inputId, swatchId, isStart, hexInputId) {
+            const input = document.getElementById(inputId);
             if (!input) return;
             const swatch = document.getElementById(swatchId);
-            const hexInput = document.getElementById(hexInputId) as HTMLInputElement;
+            const hexInput = document.getElementById(hexInputId);
             
             function closePicker() {
               const oldInput = document.getElementById(inputId);
@@ -3850,12 +3850,12 @@ export function getEditorHTML(port: number): string {
               bindGradientPicker(inputId, swatchId, isStart, hexInputId);
             }
             
-            function getVal(id: string): string {
-              const el = document.getElementById(id) as HTMLInputElement;
+            function getVal(id) {
+              const el = document.getElementById(id);
               return el ? el.value : '';
             }
             
-            const onInput = (e: any) => {
+            const onInput = (e) => {
               const val = e.target.value;
               if (hexInput) hexInput.value = val;
               if (swatch) swatch.style.background = val;
@@ -3870,7 +3870,7 @@ export function getEditorHTML(port: number): string {
                 const preview = document.getElementById('grad-preview');
                 if (preview) preview.style.background = gradVal;
                 
-                const iframe = document.getElementById('app-iframe') as HTMLIFrameElement;
+                const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
                     type: 'glide:preview-style',
@@ -3881,7 +3881,7 @@ export function getEditorHTML(port: number): string {
               }
             };
             
-            const onChange = (e: any) => {
+            const onChange = (e) => {
               if (selectedElement) {
                 const start = isStart ? e.target.value : getVal('prop-grad-start');
                 const end = isStart ? getVal('prop-grad-end') : e.target.value;
@@ -3901,11 +3901,11 @@ export function getEditorHTML(port: number): string {
             input.addEventListener('change', onChange);
             
             if (hexInput) {
-              const newHexInput = hexInput.cloneNode(true) as HTMLInputElement;
+              const newHexInput = hexInput.cloneNode(true);
               hexInput.parentNode.replaceChild(newHexInput, hexInput);
-              newHexInput.addEventListener('change', (e: any) => {
+              newHexInput.addEventListener('change', (e) => {
                 const val = e.target.value;
-                const freshInput = document.getElementById(inputId) as HTMLInputElement;
+                const freshInput = document.getElementById(inputId);
                 if (freshInput) freshInput.value = val;
                 if (swatch) swatch.style.background = val;
                 if (selectedElement) {
