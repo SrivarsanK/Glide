@@ -1,7 +1,7 @@
 <h1 align="center"><img src="./.github/assets/logo.png" alt="Glide Logo" width="60" align="middle"> &nbsp; Glide</h1>
 
 <p align="center">
-  <i align="center">Code-native visual design workspace for React, Vue, and Svelte components 🚀</i>
+  <i>Edit your React, Vue, or Svelte app visually — changes write back to your source code automatically.</i>
 </p>
 
 <h4 align="center">
@@ -17,16 +17,78 @@
     <img src="./.github/assets/dashboard.png" alt="Glide Visual Designer Workspace" width="100%"/>
 </p>
 
-## Introduction
+---
 
-`Glide` is a code-native visual design tool that runs a web editor inside your local development environment and writes changes directly back to React (JSX/TSX), Vue SFC, Svelte, or HTML source files using AST transformations.
+## What is Glide?
 
-Unlike traditional low-code platforms or visual builders that output proprietary code or lock you into a cloud platform, Glide operates directly on your source code. You own the code, the layout, and the environment.
+**Glide** is a local visual design tool that sits on top of your existing frontend app. You open it in your browser, click on any element on screen, and edit its styles, layout, and position — just like Figma. The difference? **Every edit is written directly back to your source code** (JSX, TSX, Vue SFC, Svelte, or HTML) as real code.
 
-<details open>
-<summary>
- ⚡ Features
-</summary> <br />
+No cloud. No proprietary formats. No lock-in. Just your code, edited visually.
+
+---
+
+## How It Works
+
+```
+Your App (port 5173)  ←──→  Glide Server (port 7777)  ←──→  Your Source Files
+     ↑                              ↑
+  Browser iframe           Visual Editor UI
+```
+
+1. Your app runs normally (e.g., `npm run dev` on port 5173)
+2. Glide's server connects to it and opens a visual editor at `localhost:7777`
+3. You click elements on the canvas → Glide highlights them and shows their styles
+4. You change a value → Glide rewrites the source file using AST transformations
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** v18+
+- **npm** v8+
+
+### Step 1 — Clone and install
+
+```bash
+git clone https://github.com/srivarsank/glide.git
+cd glide
+npm install
+```
+
+### Step 2 — Build Glide
+
+```bash
+npm run build
+```
+
+### Step 3 — Start your frontend app
+
+In a separate terminal, start your React/Vue/Svelte app as you normally would:
+
+```bash
+# Example (Vite app on port 5173)
+npm run dev
+```
+
+### Step 4 — Start Glide
+
+From the Glide folder, run:
+
+```bash
+node packages/cli/dist/index.js 5173
+```
+
+> Replace `5173` with whatever port your app is running on.
+
+### Step 5 — Open the editor
+
+Go to **http://localhost:7777** in your browser. Your app will appear inside the visual canvas. Click any element to start editing it.
+
+---
+
+## Features
 
 <p align="center">
     <img width="49%" src="./.github/assets/layers.png" alt="Figma-like Layers Panel"/>
@@ -34,88 +96,82 @@ Unlike traditional low-code platforms or visual builders that output proprietary
     <img width="49%" src="./.github/assets/properties.png" alt="Properties panel"/>
 </p>
 
-- **Visual Canvas:** Figma-like workspace supporting element selection, zoom/pan, and drag/resize.
-- **Figma-Style Snapping:** Automatically aligns dragged elements to sibling edges (left, right, center, top, bottom, vertical center) and the pixel grid with visual line guides.
-- **AST Write-back:** Inline edits are written back to React (JSX/TSX), Vue SFC, Svelte, or HTML source files.
-- **Zero-Flicker Dragging:** Element positions are saved to a local `glide-positions.json` file to bypass full framework HMR page refreshes.
-- **Tighter Layers Panel:** Figma-style hierarchical tree structure with type-specific monochrome SVG icons, element labels, and hover-only visibility controls.
-- **Properties Control:** Direct styling for geometry (X, Y, W, H), margin, padding, border, radius, shadow, background/fills (solid, gradient), and typography.
-- **Device Preview:** Predefined breakpoints (320px to 4K) and custom width inputs.
-- **Undo/Redo History:** Stack-based undo/redo operations preserved across the server session.
-</details>
+| Feature | Description |
+|---|---|
+| 🎨 **Visual Canvas** | Figma-like workspace — select, drag, resize, zoom, and pan elements |
+| 📐 **Smart Snapping** | Automatically snaps to sibling edges, centers, and the pixel grid with guide lines |
+| ✍️ **Live Code Write-back** | Every change is saved directly to your JSX/TSX/Vue/Svelte source files |
+| ⚡ **Zero-Flicker Drag** | Positions are saved to `glide-positions.json` so dragging doesn't trigger a full HMR reload |
+| 🗂️ **Layers Panel** | Hierarchical tree view of all elements, with icons and hover controls (like Figma) |
+| 🎛️ **Properties Panel** | Edit geometry (X, Y, W, H), spacing (margin/padding), border, radius, shadows, fills, and typography |
+| 🌈 **Color Picker** | Custom popup color picker with presets and hex input — no native OS dialog |
+| 📱 **Device Preview** | Switch between preset breakpoints (320px → 4K) or enter a custom width |
+| ↩️ **Undo / Redo** | Full undo/redo history for the entire session |
 
-## Setup
+---
 
-<details open>
-<summary>Prerequisites</summary> <br />
+## Color Picker
 
-Make sure you have the following prerequisites installed:
-- **Node.js:** v18.0.0 or higher
-- **TypeScript:** v5.0.0 or higher
-- **Vite:** v5.0.0 or higher (for dev-time plugin and HMR)
-</details>
+<p align="center">
+    <img src="./.github/assets/color_picker.png" alt="Color Picker" width="60%"/>
+</p>
 
-<details open>
-<summary>Installation</summary> <br />
+Glide uses a **custom popup color picker** (not the native OS dialog). Click any color swatch to open it. You can:
+- Pick from 16 preset colors
+- Type a hex code directly
+- Use the **🧪 eyedropper button** to sample a color from the screen
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/srivarsank/glide.git
-   cd glide
-   ```
+> ⚠️ **Known Bug — Eyedropper Tool:** The eyedropper button (`🧪`) is currently buggy in some Chromium versions. It may not close the color picker after picking, or it may fail to register the sampled color. **Avoid using it for now.** Use hex input or presets instead.
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+---
 
-3. **Build the compiler and server:**
-   ```bash
-   npm run build
-   ```
-</details>
+## Keyboard Shortcuts
 
-## Usage
+| Key | Tool |
+|---|---|
+| `V` | Select tool |
+| `H` | Hand / Pan tool |
+| `F` | Frame |
+| `R` | Rectangle |
+| `O` | Ellipse |
+| `T` | Text |
+| `C` | Comment |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
+| `Escape` | Deselect / Close popup |
 
-1. **Start your client application** (e.g., on port `5173`).
-2. **Start the Glide designer server** in a separate terminal from the root of the Glide workspace:
-   ```bash
-   node dist/cli.js 5173
-   ```
-   This launches the WebSocket server on port `7777` and exposes the visual editor.
-3. **Open the editor:** Navigate to `http://localhost:7777` in your browser.
-4. **Connect:** Click the **Connect** button in the header to synchronize the visual designer canvas with your running client application.
+---
 
 ## Project Structure
 
-<details>
-<summary>Repository Directory Map</summary> <br />
-
 ```
 Glide/
-├── .agents/                    # Local agent settings, hooks, and execution profiles
-├── .planning/                  # Project requirements and agent memory states
-├── docs/                       # Visual designer documentation and specifications
-├── logo/                       # Repository logo assets
-├── packages/                   # Monorepo packages
-│   ├── ast-writer/             # Babel AST writer engine for JSX/TSX
-│   ├── cli/                    # CLI execution entry point
-│   ├── core/                   # Shared types and core utilities
-│   ├── overlay/                # Visual designer web interface overlay page
-│   ├── server/                 # Dev-time HTTP & WebSocket server
-│   └── vite-plugin/            # Vite plugin for AST source stamping
-├── README.md                   # Project documentation
-└── package.json                # Root package configuration
+├── packages/
+│   ├── cli/            # Entry point — run this to start Glide
+│   ├── overlay/        # The visual editor UI (HTML/JS served at localhost:7777)
+│   ├── server/         # WebSocket + HTTP server that connects to your app
+│   ├── core/           # Shared types, AST scanner utilities
+│   ├── ast-writer/     # Writes style changes back to JSX/TSX/Vue/Svelte source
+│   └── vite-plugin/    # Vite plugin that stamps elements with source locations
+├── docs/               # Extra documentation and design specs
+├── logo/               # Logo assets
+└── README.md
 ```
-</details>
 
-## Known Limitations
+---
 
-- **Stamping Requirement:** Snapping and editing only apply to elements tagged with `data-gl-source` attributes.
-- **Non-React Editing:** CSS adjustments for Vue and Svelte template blocks are limited to className string replacements.
-- **Positional Dragging:** Absolute coordinate dragging depends on writing layout offsets to a local `glide-positions.json` file in the project.
-- **Resizing Bug:** Element resizing on the canvas is currently bugged and does not consistently apply.
+## Known Issues
+
+| Issue | Status |
+|---|---|
+| 🐛 **Eyedropper tool** — may not close or apply the picked color correctly | **Bugged — avoid for now** |
+| 🐛 **Element resizing** — canvas resize handles don't consistently apply changes | **Bugged** |
+| ⚠️ **Vue / Svelte editing** — only className string replacements are supported, not full style objects | Partial support |
+| ⚠️ **Stamping required** — snapping and editing only work on elements tagged with `data-gl-source` by the Vite plugin | By design |
+| ⚠️ **Absolute drag positions** — dragged positions are stored in `glide-positions.json`, not written to source layout | By design |
+
+---
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the [Apache License 2.0](LICENSE).
