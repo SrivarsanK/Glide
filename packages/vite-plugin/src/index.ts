@@ -55,21 +55,26 @@ const BRIDGE_SCRIPT = `
   };
 
   window.__glide_update_selection_node__ = function() {
+    var all = document.querySelectorAll('[data-gl-source]');
     if (selected) {
       var src = selected.getAttribute('data-gl-source');
       if (src) {
-        var newEl = document.querySelector('[data-gl-source="' + src + '"]');
-        if (newEl) {
-          selected = newEl;
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].getAttribute('data-gl-source') === src) {
+            selected = all[i];
+            break;
+          }
         }
       }
     }
     if (hovered) {
       var src = hovered.getAttribute('data-gl-source');
       if (src) {
-        var newEl = document.querySelector('[data-gl-source="' + src + '"]');
-        if (newEl) {
-          hovered = newEl;
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].getAttribute('data-gl-source') === src) {
+            hovered = all[i];
+            break;
+          }
         }
       }
     }
@@ -971,7 +976,8 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
   });
 }
 
-if (import.meta.hot) {
+if (import.meta.hot && !window.__glide_after_update_registered__) {
+  window.__glide_after_update_registered__ = true;
   import.meta.hot.on('vite:afterUpdate', function() {
     if (typeof window.__glide_update_selection_node__ === 'function') {
       window.__glide_update_selection_node__();
