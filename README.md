@@ -7,7 +7,7 @@ Glide is a code-native visual design tool that runs a web editor inside a local 
 Glide is functional for local development.
 
 ### What works:
-* **Visual Canvas:** Figma-like workspace supporting element selection, zoom/pan, and drag/resize.
+* **Visual Canvas:** Figma-like workspace supporting element selection and zoom/pan (Note: Drag/resize is currently bugged/inconsistent).
 * **Figma-Style Snapping:** Automatically aligns dragged elements to sibling edges (left, right, center, top, bottom, vertical center) and the pixel grid with visual line guides. Can be toggled on/off.
 * **AST Write-back:** Inline edits are written back to React (JSX/TSX), Vue SFC, Svelte, or HTML source files.
 * **Zero-Flicker Dragging:** Element positions are saved to a local `glide-positions.json` file to bypass full framework HMR page refreshes.
@@ -94,6 +94,7 @@ Glide is functional for local development.
 * **Stamping Requirement:** Snapping and editing only apply to elements tagged with `data-gl-source` attributes.
 * **Non-React Editing:** CSS adjustments for Vue and Svelte template blocks are limited to className string replacements.
 * **Positional Dragging:** Absolute coordinate dragging depends on writing layout offsets to a local `glide-positions.json` file in the project.
+* **Resizing Bug:** Element resizing on the canvas is currently bugged and does not consistently apply.
 
 ## License
 
