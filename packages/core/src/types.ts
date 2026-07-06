@@ -147,6 +147,9 @@ export interface HistoryEntry {
   timestamp: number;
   description: string;
   diffs: FileDiff[];
+  /** If set, consecutive pushes with same squashKey within squashWindowMs are merged. */
+  squashKey?: string;
+  squashWindowMs?: number;
 }
 
 export interface JumpToHistoryMessage {

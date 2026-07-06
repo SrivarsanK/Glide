@@ -23,10 +23,36 @@ export function pushHistory(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void
   // Discard everything after currentIndex (new action kills future states)
   stack = stack.slice(0, currentIndex + 1);
 
+  const now = Date.now();
+
+  // Squash: if last entry has same squashKey and is within squashWindowMs, merge
+  if (entry.squashKey && stack.length > 0) {
+    const last = stack[stack.length - 1];
+    const windowMs = entry.squashWindowMs ?? 2000;
+    if (
+      last.squashKey === entry.squashKey &&
+      now - last.timestamp < windowMs
+    ) {
+      // Update the 'after' content and description, keep original 'before'
+      last.description = entry.description;
+      last.timestamp = now;
+      for (const newDiff of entry.diffs) {
+        const existing = last.diffs.find(d => d.file === newDiff.file);
+        if (existing) {
+          existing.after = newDiff.after;
+        } else {
+          last.diffs.push(newDiff);
+        }
+      }
+      currentIndex = stack.length - 1;
+      return;
+    }
+  }
+
   // Build full entry
   const full: HistoryEntry = {
     id: crypto.randomUUID(),
-    timestamp: Date.now(),
+    timestamp: now,
     ...entry
   };
 
