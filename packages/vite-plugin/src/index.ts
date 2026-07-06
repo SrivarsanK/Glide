@@ -54,6 +54,27 @@ const BRIDGE_SCRIPT = `
     }
   };
 
+  window.__glide_update_selection_node__ = function() {
+    if (selected) {
+      var src = selected.getAttribute('data-gl-source');
+      if (src) {
+        var newEl = document.querySelector('[data-gl-source="' + src + '"]');
+        if (newEl) {
+          selected = newEl;
+        }
+      }
+    }
+    if (hovered) {
+      var src = hovered.getAttribute('data-gl-source');
+      if (src) {
+        var newEl = document.querySelector('[data-gl-source="' + src + '"]');
+        if (newEl) {
+          hovered = newEl;
+        }
+      }
+    }
+  };
+
   function sendMsg(type, el, isShift) {
     var src = el.getAttribute('data-gl-source') || '';
     var r = el.getBoundingClientRect();
@@ -944,6 +965,17 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
       });
     });
 
+    if (typeof window.__glide_refresh_selection__ === 'function') {
+      setTimeout(window.__glide_refresh_selection__, 0);
+    }
+  });
+}
+
+if (import.meta.hot) {
+  import.meta.hot.afterUpdate(function() {
+    if (typeof window.__glide_update_selection_node__ === 'function') {
+      window.__glide_update_selection_node__();
+    }
     if (typeof window.__glide_refresh_selection__ === 'function') {
       setTimeout(window.__glide_refresh_selection__, 0);
     }
