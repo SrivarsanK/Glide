@@ -2406,7 +2406,7 @@ export function getEditorHTML(port: number): string {
               g.innerHTML = '';
               g.removeAttribute('transform');
             }
-            const hoverRects = Array.from(svg.querySelectorAll(':scope > rect'));
+            const hoverRects = Array.from(svg.querySelectorAll('.glide-hover-rect'));
             hoverRects.forEach(r => svg.removeChild(r));
             
             const gGroup = document.getElementById('snap-guides-group');
@@ -2439,6 +2439,7 @@ export function getEditorHTML(port: number): string {
             if (isHover) {
               r.setAttribute('stroke-dasharray', '4 2');
               r.setAttribute('opacity', '0.5');
+              r.setAttribute('class', 'glide-hover-rect');
             }
             container.appendChild(r);
 
