@@ -309,6 +309,13 @@ const BRIDGE_SCRIPT = `
     var isCmdClick = e.metaKey || e.ctrlKey;
 
     if (el) {
+      // Clear hover when starting a drag
+      if (hovered) {
+        hovered.removeAttribute('data-glide-hover');
+        hovered = null;
+        window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      }
+
       var selectTarget = resolveSelectTarget(el, isCmdClick);
       isDragging = true;
       dragEl = selectTarget;
@@ -371,6 +378,13 @@ const BRIDGE_SCRIPT = `
       e.preventDefault();
       e.stopPropagation();
     } else {
+      // Clear hover when starting a marquee selection
+      if (hovered) {
+        hovered.removeAttribute('data-glide-hover');
+        hovered = null;
+        window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      }
+
       isMarqueeing = true;
       marqueeStartX = e.clientX;
       marqueeStartY = e.clientY;
@@ -673,6 +687,14 @@ const BRIDGE_SCRIPT = `
     // Prevent text selection highlight during active element dragging
     if (isDragging) {
       e.preventDefault();
+    }
+  }, true);
+
+  document.addEventListener('pointerleave', function(e) {
+    if (hovered) {
+      hovered.removeAttribute('data-glide-hover');
+      hovered = null;
+      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
   }, true);
 
