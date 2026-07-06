@@ -2309,8 +2309,6 @@ export function getEditorHTML(port: number): string {
 
               // Commit resize — use tracked final dimensions
               if (resizeFinalW > 0 || resizeFinalH > 0) {
-                // Position shift (top-left handle dragged) — use canvas delta
-                const totalDx = (startPointerX - startPointerX); // always 0 on right/bottom handles
                 const movedDx = resizeDir.includes('l') ? (startRect.width - resizeFinalW) : 0;
                 const movedDy = resizeDir.includes('t') ? (startRect.height - resizeFinalH) : 0;
 
@@ -2339,6 +2337,27 @@ export function getEditorHTML(port: number): string {
                       change: { type: 'style', value: { width: resizeFinalW + 'px', height: resizeFinalH + 'px' } }
                     }));
                   }
+                }
+
+                // ── Immediately update local rects so canvas handles redraw
+                // at the correct new size (before HMR fires). This prevents
+                // a second resize from starting with stale startRect dimensions.
+                const newX = resizeDir.includes('l') ? startRect.x + (startRect.width - resizeFinalW) : startRect.x;
+                const newY = resizeDir.includes('t') ? startRect.y + (startRect.height - resizeFinalH) : startRect.y;
+                const freshRect = { x: newX, y: newY, width: resizeFinalW, height: resizeFinalH };
+                selectedRect = freshRect;
+                if (selectedRects.length > 0) selectedRects[0] = freshRect;
+
+                // Ask iframe to re-report the element after HMR settles (gives
+                // fresh computed styles and confirms actual rendered dimensions)
+                const rIframe = document.getElementById('app-iframe');
+                if (rIframe && rIframe.contentWindow && selectedElement) {
+                  setTimeout(() => {
+                    rIframe.contentWindow.postMessage({
+                      type: 'glide:select-element-by-id',
+                      id: selectedElement.source
+                    }, '*');
+                  }, 500);
                 }
               }
               startRect = null;
