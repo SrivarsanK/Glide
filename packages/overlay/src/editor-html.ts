@@ -1714,8 +1714,8 @@ export function getEditorHTML(port: number): string {
             if (match) {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
-              const hash = match[3] || 'nohash';
-              return file + ':' + line + ':' + col + ':' + hash;
+              // Omit hash — DOM data-gl-source is stamped as "file:line:col" only
+              return file + ':' + line + ':' + col;
             }
             return nodeId;
           }

@@ -86,6 +86,8 @@ export class GlideBridge {
         this.selectedElement = el;
         el.setAttribute('data-glide-selected', '');
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Send telemetry so the editor gets glide:overlay with rect + computedStyles
+        // This drives the canvas overlay highlight and properties panel population.
         this.sendTelemetry('glide:element-selected', el);
       }
     }
