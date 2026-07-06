@@ -3580,81 +3580,12 @@ export function getEditorHTML(port: number): string {
             updateGradientFill();
           });
 
-          // Gradient Start color
-          document.getElementById('prop-grad-start').addEventListener('input', (e) => {
-            document.getElementById('prop-grad-start-hex').value = e.target.value;
-            document.getElementById('color-swatch-grad-start').style.background = e.target.value;
-            updateGradientFill();
-          });
-          document.getElementById('prop-grad-start-hex').addEventListener('change', (e) => {
-            document.getElementById('prop-grad-start').value = e.target.value;
-            document.getElementById('color-swatch-grad-start').style.background = e.target.value;
-            updateGradientFill();
-          });
-
-          // Gradient End color
-          document.getElementById('prop-grad-end').addEventListener('input', (e) => {
-            document.getElementById('prop-grad-end-hex').value = e.target.value;
-            document.getElementById('color-swatch-grad-end').style.background = e.target.value;
-            updateGradientFill();
-          });
-          document.getElementById('prop-grad-end-hex').addEventListener('change', (e) => {
-            document.getElementById('prop-grad-end').value = e.target.value;
-            document.getElementById('color-swatch-grad-end').style.background = e.target.value;
-            updateGradientFill();
-          });
-
-           // Typography color — write inline style, not Tailwind class
-          document.getElementById('prop-color').addEventListener('input', (e) => {
-            const val = e.target.value;
-            document.getElementById('prop-color-hex').value = val;
-            document.getElementById('color-swatch-text').style.background = val;
-            if (selectedElement) {
-              const iframe = document.getElementById('app-iframe');
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({
-                  type: 'glide:preview-style',
-                  source: selectedElement.source,
-                  styles: { color: val }
-                }, '*');
-              }
-            }
-          });
-          document.getElementById('prop-color').addEventListener('change', (e) => {
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: e.target.value });
-          });
-          document.getElementById('prop-color-hex').addEventListener('change', (e) => {
-            const val = e.target.value;
-            document.getElementById('prop-color').value = val;
-            document.getElementById('color-swatch-text').style.background = val;
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: val });
-          });
-
-          // Solid Background color — write inline style
-          document.getElementById('prop-bg-color').addEventListener('input', (e) => {
-            const val = e.target.value;
-            document.getElementById('prop-bg-hex').value = val;
-            document.getElementById('color-swatch-bg').style.background = val;
-            if (selectedElement) {
-              const iframe = document.getElementById('app-iframe');
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({
-                  type: 'glide:preview-style',
-                  source: selectedElement.source,
-                  styles: { backgroundColor: val }
-                }, '*');
-              }
-            }
-          });
-          document.getElementById('prop-bg-color').addEventListener('change', (e) => {
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: e.target.value });
-          });
-          document.getElementById('prop-bg-hex').addEventListener('change', (e) => {
-            const val = e.target.value;
-            document.getElementById('prop-bg-color').value = val;
-            document.getElementById('color-swatch-bg').style.background = val;
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: val });
-          });
+          // Initialize color picker bindings
+          bindColorPicker('prop-color', 'color-swatch-text', 'color', 'prop-color-hex');
+          bindColorPicker('prop-bg-color', 'color-swatch-bg', 'backgroundColor', 'prop-bg-hex');
+          
+          bindGradientPicker('prop-grad-start', 'color-swatch-grad-start', true, 'prop-grad-start-hex');
+          bindGradientPicker('prop-grad-end', 'color-swatch-grad-end', false, 'prop-grad-end-hex');
 
           // Opacity sync — write inline style
           document.getElementById('prop-opacity-slider').addEventListener('input', (e) => {
@@ -3746,10 +3677,7 @@ export function getEditorHTML(port: number): string {
 
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
-          document.getElementById('prop-border-color').addEventListener('input', (e) => {
-            document.getElementById('color-swatch-border').style.background = e.target.value;
-            sendEdit({type:'class',property:'borderColor',value:e.target.value});
-          });
+          bindColorPicker('prop-border-color', 'color-swatch-border', 'borderColor');
 
           // Shadow management
           document.getElementById('add-shadow-btn').addEventListener('click', () => {
@@ -3849,6 +3777,150 @@ export function getEditorHTML(port: number): string {
               viewportWidth: iframeWidth.current,
               change: { type: 'class', property, value }
             }));
+          }
+
+          function bindColorPicker(inputId: string, swatchId: string, styleProp: string, hexInputId?: string) {
+            const input = document.getElementById(inputId) as HTMLInputElement;
+            if (!input) return;
+            const swatch = document.getElementById(swatchId);
+            const hexInput = hexInputId ? (document.getElementById(hexInputId) as HTMLInputElement) : null;
+            
+            function closePicker() {
+              const oldInput = document.getElementById(inputId);
+              if (!oldInput) return;
+              const newInput = oldInput.cloneNode(true);
+              oldInput.parentNode.replaceChild(newInput, oldInput);
+              bindColorPicker(inputId, swatchId, styleProp, hexInputId);
+            }
+            
+            const onInput = (e: any) => {
+              const val = e.target.value;
+              if (hexInput) hexInput.value = val;
+              if (swatch) swatch.style.background = val;
+              
+              if (selectedElement) {
+                const iframe = document.getElementById('app-iframe') as HTMLIFrameElement;
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:preview-style',
+                    source: selectedElement.source,
+                    styles: { [styleProp]: val }
+                  }, '*');
+                }
+              }
+            };
+            
+            const onChange = (e: any) => {
+              const val = e.target.value;
+              if (selectedElement) {
+                sendStylePropsChange(selectedElement.source, { [styleProp]: val });
+              }
+              closePicker();
+            };
+            
+            input.addEventListener('input', onInput);
+            input.addEventListener('change', onChange);
+            
+            if (hexInput) {
+              const newHexInput = hexInput.cloneNode(true) as HTMLInputElement;
+              hexInput.parentNode.replaceChild(newHexInput, hexInput);
+              newHexInput.addEventListener('change', (e: any) => {
+                const val = e.target.value;
+                const freshInput = document.getElementById(inputId) as HTMLInputElement;
+                if (freshInput) freshInput.value = val;
+                if (swatch) swatch.style.background = val;
+                if (selectedElement) {
+                  sendStylePropsChange(selectedElement.source, { [styleProp]: val });
+                }
+              });
+            }
+          }
+
+          function bindGradientPicker(inputId: string, swatchId: string, isStart: boolean, hexInputId: string) {
+            const input = document.getElementById(inputId) as HTMLInputElement;
+            if (!input) return;
+            const swatch = document.getElementById(swatchId);
+            const hexInput = document.getElementById(hexInputId) as HTMLInputElement;
+            
+            function closePicker() {
+              const oldInput = document.getElementById(inputId);
+              if (!oldInput) return;
+              const newInput = oldInput.cloneNode(true);
+              oldInput.parentNode.replaceChild(newInput, oldInput);
+              bindGradientPicker(inputId, swatchId, isStart, hexInputId);
+            }
+            
+            function getVal(id: string): string {
+              const el = document.getElementById(id) as HTMLInputElement;
+              return el ? el.value : '';
+            }
+            
+            const onInput = (e: any) => {
+              const val = e.target.value;
+              if (hexInput) hexInput.value = val;
+              if (swatch) swatch.style.background = val;
+              
+              if (selectedElement) {
+                const start = isStart ? val : getVal('prop-grad-start');
+                const end = isStart ? getVal('prop-grad-end') : val;
+                const angle = getVal('prop-grad-angle');
+                const type = gradType;
+                const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
+                
+                const preview = document.getElementById('grad-preview');
+                if (preview) preview.style.background = gradVal;
+                
+                const iframe = document.getElementById('app-iframe') as HTMLIFrameElement;
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:preview-style',
+                    source: selectedElement.source,
+                    styles: { backgroundImage: gradVal, backgroundColor: 'transparent' }
+                  }, '*');
+                }
+              }
+            };
+            
+            const onChange = (e: any) => {
+              if (selectedElement) {
+                const start = isStart ? e.target.value : getVal('prop-grad-start');
+                const end = isStart ? getVal('prop-grad-end') : e.target.value;
+                const angle = getVal('prop-grad-angle');
+                const type = gradType;
+                const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
+                
+                sendStylePropsChange(selectedElement.source, {
+                  backgroundImage: gradVal,
+                  backgroundColor: 'transparent'
+                });
+              }
+              closePicker();
+            };
+            
+            input.addEventListener('input', onInput);
+            input.addEventListener('change', onChange);
+            
+            if (hexInput) {
+              const newHexInput = hexInput.cloneNode(true) as HTMLInputElement;
+              hexInput.parentNode.replaceChild(newHexInput, hexInput);
+              newHexInput.addEventListener('change', (e: any) => {
+                const val = e.target.value;
+                const freshInput = document.getElementById(inputId) as HTMLInputElement;
+                if (freshInput) freshInput.value = val;
+                if (swatch) swatch.style.background = val;
+                if (selectedElement) {
+                  const start = isStart ? val : getVal('prop-grad-start');
+                  const end = isStart ? getVal('prop-grad-end') : val;
+                  const angle = getVal('prop-grad-angle');
+                  const type = gradType;
+                  const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
+                  sendStylePropsChange(selectedElement.source, {
+                    backgroundImage: gradVal,
+                    backgroundColor: 'transparent'
+                  });
+                }
+              });
+            }
           }
 
           let _styleTimer = null;
