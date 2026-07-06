@@ -3696,9 +3696,30 @@ export function getEditorHTML(port: number): string {
             const swatch = row.querySelector('.shadow-swatch');
             const colorInput = row.querySelector('.shadow-color-input');
             swatch.addEventListener('click', () => colorInput.click());
+
+            // Throttle shadow color input with rAF to prevent browser crash
+            let _shadowRaf = false;
+            let _shadowLastVal = null;
             colorInput.addEventListener('input', (e) => {
-              swatch.style.background = e.target.value;
+              _shadowLastVal = e.target.value;
+              if (_shadowRaf) return;
+              _shadowRaf = true;
+              requestAnimationFrame(() => {
+                _shadowRaf = false;
+                if (_shadowLastVal) swatch.style.background = _shadowLastVal;
+              });
             });
+
+            // Close picker on blur (Escape / click-outside)
+            let _shadowClosed = false;
+            colorInput.addEventListener('change', () => { _shadowClosed = true; });
+            colorInput.addEventListener('blur', () => {
+              if (_shadowClosed) { _shadowClosed = false; return; }
+              // Force-close by blur (no change fired = Escape pressed)
+              const clone = colorInput.cloneNode(true);
+              colorInput.parentNode.replaceChild(clone, colorInput);
+            });
+
             row.querySelector('button').addEventListener('click', () => row.remove());
             document.getElementById('shadows-list').appendChild(row);
           });
@@ -3784,32 +3805,50 @@ export function getEditorHTML(port: number): string {
             if (!input) return;
             const swatch = document.getElementById(swatchId);
             const hexInput = hexInputId ? document.getElementById(hexInputId) : null;
-            
+
+            // Guard against double-close (change fires then blur fires)
+            let pickerClosed = false;
+
             function closePicker() {
+              if (pickerClosed) return;
+              pickerClosed = true;
+              // Replace the element with a clone to force-dismiss the native OS dialog
               const oldInput = document.getElementById(inputId);
               if (!oldInput) return;
               const newInput = oldInput.cloneNode(true);
               oldInput.parentNode.replaceChild(newInput, oldInput);
+              // Rebind on the fresh element
               bindColorPicker(inputId, swatchId, styleProp, hexInputId);
             }
-            
+
+            // ─── Throttle input events with rAF to prevent event-flood crash ───
+            let rafPending = false;
+            let lastInputVal = null;
+
             const onInput = (e) => {
-              const val = e.target.value;
-              if (hexInput) hexInput.value = val;
-              if (swatch) swatch.style.background = val;
-              
-              if (selectedElement) {
-                const iframe = document.getElementById('app-iframe');
-                if (iframe && iframe.contentWindow) {
-                  iframe.contentWindow.postMessage({
-                    type: 'glide:preview-style',
-                    source: selectedElement.source,
-                    styles: { [styleProp]: val }
-                  }, '*');
+              lastInputVal = e.target.value;
+              if (rafPending) return;
+              rafPending = true;
+              requestAnimationFrame(() => {
+                rafPending = false;
+                const val = lastInputVal;
+                if (val === null) return;
+                if (hexInput) hexInput.value = val;
+                if (swatch) swatch.style.background = val;
+                if (selectedElement) {
+                  const iframe = document.getElementById('app-iframe');
+                  if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                      type: 'glide:preview-style',
+                      source: selectedElement.source,
+                      styles: { [styleProp]: val }
+                    }, '*');
+                  }
                 }
-              }
+              });
             };
-            
+
+            // ─── change = user confirmed a colour (OK / click) → commit + close ───
             const onChange = (e) => {
               const val = e.target.value;
               if (selectedElement) {
@@ -3817,10 +3856,17 @@ export function getEditorHTML(port: number): string {
               }
               closePicker();
             };
-            
+
+            // ─── blur = picker dismissed via Escape / click-outside → just close ──
+            const onBlur = () => {
+              // Small delay so that if 'change' fired first, it wins
+              setTimeout(closePicker, 80);
+            };
+
             input.addEventListener('input', onInput);
             input.addEventListener('change', onChange);
-            
+            input.addEventListener('blur', onBlur);
+
             if (hexInput) {
               const newHexInput = hexInput.cloneNode(true);
               hexInput.parentNode.replaceChild(newHexInput, hexInput);
@@ -3841,46 +3887,58 @@ export function getEditorHTML(port: number): string {
             if (!input) return;
             const swatch = document.getElementById(swatchId);
             const hexInput = document.getElementById(hexInputId);
-            
+
+            let pickerClosed = false;
+
             function closePicker() {
+              if (pickerClosed) return;
+              pickerClosed = true;
               const oldInput = document.getElementById(inputId);
               if (!oldInput) return;
               const newInput = oldInput.cloneNode(true);
               oldInput.parentNode.replaceChild(newInput, oldInput);
               bindGradientPicker(inputId, swatchId, isStart, hexInputId);
             }
-            
+
             function getVal(id) {
               const el = document.getElementById(id);
               return el ? el.value : '';
             }
-            
+
+            // ─── Throttle gradient input with rAF ─────────────────────────────
+            let rafPending = false;
+            let lastInputVal = null;
+
             const onInput = (e) => {
-              const val = e.target.value;
-              if (hexInput) hexInput.value = val;
-              if (swatch) swatch.style.background = val;
-              
-              if (selectedElement) {
-                const start = isStart ? val : getVal('prop-grad-start');
-                const end = isStart ? getVal('prop-grad-end') : val;
-                const angle = getVal('prop-grad-angle');
-                const type = gradType;
-                const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
-                
-                const preview = document.getElementById('grad-preview');
-                if (preview) preview.style.background = gradVal;
-                
-                const iframe = document.getElementById('app-iframe');
-                if (iframe && iframe.contentWindow) {
-                  iframe.contentWindow.postMessage({
-                    type: 'glide:preview-style',
-                    source: selectedElement.source,
-                    styles: { backgroundImage: gradVal, backgroundColor: 'transparent' }
-                  }, '*');
+              lastInputVal = e.target.value;
+              if (rafPending) return;
+              rafPending = true;
+              requestAnimationFrame(() => {
+                rafPending = false;
+                const val = lastInputVal;
+                if (val === null) return;
+                if (hexInput) hexInput.value = val;
+                if (swatch) swatch.style.background = val;
+                if (selectedElement) {
+                  const start = isStart ? val : getVal('prop-grad-start');
+                  const end = isStart ? getVal('prop-grad-end') : val;
+                  const angle = getVal('prop-grad-angle');
+                  const type = gradType;
+                  const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
+                  const preview = document.getElementById('grad-preview');
+                  if (preview) preview.style.background = gradVal;
+                  const iframe = document.getElementById('app-iframe');
+                  if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                      type: 'glide:preview-style',
+                      source: selectedElement.source,
+                      styles: { backgroundImage: gradVal, backgroundColor: 'transparent' }
+                    }, '*');
+                  }
                 }
-              }
+              });
             };
-            
+
             const onChange = (e) => {
               if (selectedElement) {
                 const start = isStart ? e.target.value : getVal('prop-grad-start');
@@ -3888,7 +3946,6 @@ export function getEditorHTML(port: number): string {
                 const angle = getVal('prop-grad-angle');
                 const type = gradType;
                 const gradVal = type === 'linear' ? 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')' : 'radial-gradient(circle, ' + start + ', ' + end + ')';
-                
                 sendStylePropsChange(selectedElement.source, {
                   backgroundImage: gradVal,
                   backgroundColor: 'transparent'
@@ -3896,10 +3953,15 @@ export function getEditorHTML(port: number): string {
               }
               closePicker();
             };
-            
+
+            const onBlur = () => {
+              setTimeout(closePicker, 80);
+            };
+
             input.addEventListener('input', onInput);
             input.addEventListener('change', onChange);
-            
+            input.addEventListener('blur', onBlur);
+
             if (hexInput) {
               const newHexInput = hexInput.cloneNode(true);
               hexInput.parentNode.replaceChild(newHexInput, hexInput);
