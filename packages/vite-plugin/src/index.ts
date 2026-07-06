@@ -62,6 +62,7 @@ const BRIDGE_SCRIPT = `
         for (var i = 0; i < all.length; i++) {
           if (all[i].getAttribute('data-gl-source') === src) {
             selected = all[i];
+            selected.setAttribute('data-glide-selected', '');
             break;
           }
         }
@@ -976,12 +977,14 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
   });
 }
 
-if (import.meta.hot && !window.__glide_after_update_registered__) {
-  window.__glide_after_update_registered__ = true;
+if (import.meta.hot) {
   import.meta.hot.on('vite:afterUpdate', function() {
+    if (window.__glide_refresh_pending__) return;
+    window.__glide_refresh_pending__ = true;
     var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
     raf(function() {
       raf(function() {
+        window.__glide_refresh_pending__ = false;
         if (typeof window.__glide_update_selection_node__ === 'function') {
           window.__glide_update_selection_node__();
         }
