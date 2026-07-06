@@ -33,6 +33,16 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   function buildDescription(change: any, file: string, line?: number): string {
     const shortFile = path.basename(file);
     const locSuffix = line ? `:${line}` : '';
+    if (change.type === 'style' && typeof change.value === 'object') {
+      // Format: "backgroundColor: #ff0000 on App.tsx:68"
+      const entries = Object.entries(change.value as Record<string, string>);
+      if (entries.length === 1) {
+        const [prop, val] = entries[0];
+        return `${prop}: ${val} on ${shortFile}${locSuffix}`;
+      }
+      const props = entries.map(([p]) => p).join(', ');
+      return `${props} on ${shortFile}${locSuffix}`;
+    }
     const prop = change.property || change.type || 'style';
     const val = typeof change.value === 'object' ? JSON.stringify(change.value) : change.value;
     return `${prop}: ${val} on ${shortFile}${locSuffix}`;
@@ -93,6 +103,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   if (change.type === 'multi-class') {
     let updated = code;
     const edits = change.value as Record<string, string>;
+    let currentHash = hash;
     for (const [property, value] of Object.entries(edits)) {
       if (file.endsWith('.vue')) {
         const existing = getElementClass(updated, targetId);
@@ -107,7 +118,8 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         const newClasses = updateClassString(existing, property, value);
         updated = updateHTMLClass(updated, targetId, newClasses);
       } else {
-        updated = updateClassName(updated, line, column, property, value, hash);
+        updated = updateClassName(updated, line, column, property, value, undefined, currentHash);
+        currentHash = undefined;
       }
     }
     fs.writeFileSync(file, updated, 'utf-8');
@@ -120,9 +132,12 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     // Write inline style prop directly to JSX — works with any CSS setup
     const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>, hash);
     fs.writeFileSync(file, updated, 'utf-8');
+    // Squash consecutive style edits on same element within 2s into one history entry
     pushHistory({
       description: buildDescription(change, file, line),
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      diffs: [{ file: path.resolve(file), before: code, after: updated }],
+      squashKey: `style:${path.resolve(file)}:${line}:${column}`,
+      squashWindowMs: 2000
     });
     console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
   } else if (change.type === 'class') {
@@ -140,7 +155,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       const newClasses = updateClassString(existing, change.property!, change.value);
       updated = updateHTMLClass(code, targetId, newClasses);
     } else {
-      updated = updateClassName(code, line, column, change.property!, change.value, hash);
+      updated = updateClassName(code, line, column, change.property!, change.value, undefined, hash);
     }
     fs.writeFileSync(file, updated, 'utf-8');
     pushHistory({
