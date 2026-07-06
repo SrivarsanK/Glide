@@ -3594,26 +3594,54 @@ export function getEditorHTML(port: number): string {
 
            // Typography color — write inline style, not Tailwind class
           document.getElementById('prop-color').addEventListener('input', (e) => {
-            document.getElementById('prop-color-hex').value = e.target.value;
-            document.getElementById('color-swatch-text').style.background = e.target.value;
+            const val = e.target.value;
+            document.getElementById('prop-color-hex').value = val;
+            document.getElementById('color-swatch-text').style.background = val;
+            if (selectedElement) {
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:preview-style',
+                  source: selectedElement.source,
+                  styles: { color: val }
+                }, '*');
+              }
+            }
+          });
+          document.getElementById('prop-color').addEventListener('change', (e) => {
             if (selectedElement) sendStylePropsChange(selectedElement.source, { color: e.target.value });
           });
           document.getElementById('prop-color-hex').addEventListener('change', (e) => {
-            document.getElementById('prop-color').value = e.target.value;
-            document.getElementById('color-swatch-text').style.background = e.target.value;
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: e.target.value });
+            const val = e.target.value;
+            document.getElementById('prop-color').value = val;
+            document.getElementById('color-swatch-text').style.background = val;
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: val });
           });
 
           // Solid Background color — write inline style
           document.getElementById('prop-bg-color').addEventListener('input', (e) => {
-            document.getElementById('prop-bg-hex').value = e.target.value;
-            document.getElementById('color-swatch-bg').style.background = e.target.value;
+            const val = e.target.value;
+            document.getElementById('prop-bg-hex').value = val;
+            document.getElementById('color-swatch-bg').style.background = val;
+            if (selectedElement) {
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:preview-style',
+                  source: selectedElement.source,
+                  styles: { backgroundColor: val }
+                }, '*');
+              }
+            }
+          });
+          document.getElementById('prop-bg-color').addEventListener('change', (e) => {
             if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: e.target.value });
           });
           document.getElementById('prop-bg-hex').addEventListener('change', (e) => {
-            document.getElementById('prop-bg-color').value = e.target.value;
-            document.getElementById('color-swatch-bg').style.background = e.target.value;
-            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: e.target.value });
+            const val = e.target.value;
+            document.getElementById('prop-bg-color').value = val;
+            document.getElementById('color-swatch-bg').style.background = val;
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: val });
           });
 
           // Opacity sync — write inline style
