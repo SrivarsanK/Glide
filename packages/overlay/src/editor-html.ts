@@ -1322,9 +1322,8 @@ export function getEditorHTML(port: number): string {
                 <div class="props-field">
                   <span class="props-label">Color</span>
                   <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-text">
-                      <input type="color" id="prop-color" value="#ffffff" title="Text Color">
-                    </div>
+                    <div class="color-swatch" id="color-swatch-text"></div>
+                    <input type="color" id="prop-color" value="#ffffff" title="Text Color" style="display: none;">
                     <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family:monospace;">
                   </div>
                 </div>
@@ -1342,9 +1341,8 @@ export function getEditorHTML(port: number): string {
                 </div>
                 <div id="fill-solid-controls">
                   <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-bg">
-                      <input type="color" id="prop-bg-color" value="#000000" title="Background Color">
-                    </div>
+                    <div class="color-swatch" id="color-swatch-bg"></div>
+                    <input type="color" id="prop-bg-color" value="#000000" title="Background Color" style="display: none;">
                     <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family:monospace;">
                     <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="width:52px;" title="Opacity %">
                     <span style="font-size:11px;color:var(--text-secondary);">%</span>
@@ -1364,16 +1362,14 @@ export function getEditorHTML(port: number): string {
                   </div>
                   <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">Start</span>
-                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;">
-                      <input type="color" id="prop-grad-start" value="#000000">
-                    </div>
+                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;"></div>
+                    <input type="color" id="prop-grad-start" value="#000000" style="display: none;">
                     <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="flex:1;font-family:monospace;">
                   </div>
                   <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">End</span>
-                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;">
-                      <input type="color" id="prop-grad-end" value="#ffffff">
-                    </div>
+                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;"></div>
+                    <input type="color" id="prop-grad-end" value="#ffffff" style="display: none;">
                     <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="flex:1;font-family:monospace;">
                   </div>
                   <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
@@ -1384,9 +1380,8 @@ export function getEditorHTML(port: number): string {
               <div class="props-section">
                 <div class="props-section-title">Border</div>
                 <div class="props-row" style="margin-bottom:6px;">
-                  <div class="color-swatch" id="color-swatch-border">
-                    <input type="color" id="prop-border-color" value="#374151" title="Border Color">
-                  </div>
+                  <div class="color-swatch" id="color-swatch-border"></div>
+                  <input type="color" id="prop-border-color" value="#374151" title="Border Color" style="display: none;">
                   <input class="props-input" id="prop-border-width" type="number" placeholder="0" style="width:52px;" title="Width">
                   <select class="props-select" id="prop-border-style" style="flex:1;">
                     <option value="solid">Solid</option>
@@ -3531,6 +3526,23 @@ export function getEditorHTML(port: number): string {
           }
 
           // Fill mode buttons
+          // Swatch click triggers hidden color input
+          document.getElementById('color-swatch-text').addEventListener('click', () => {
+            document.getElementById('prop-color').click();
+          });
+          document.getElementById('color-swatch-bg').addEventListener('click', () => {
+            document.getElementById('prop-bg-color').click();
+          });
+          document.getElementById('color-swatch-grad-start').addEventListener('click', () => {
+            document.getElementById('prop-grad-start').click();
+          });
+          document.getElementById('color-swatch-grad-end').addEventListener('click', () => {
+            document.getElementById('prop-grad-end').click();
+          });
+          document.getElementById('color-swatch-border').addEventListener('click', () => {
+            document.getElementById('prop-border-color').click();
+          });
+
           document.getElementById('fill-none').addEventListener('click', () => {
             setFillMode('none');
             sendMultiClassChange(selectedElement.source, {
@@ -3750,8 +3762,15 @@ export function getEditorHTML(port: number): string {
               '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
               '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
               '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
-              '<div class="color-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;"><input type="color" value="#000000"></div>' +
+              '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;cursor:pointer;"></div>' +
+              '<input type="color" class="shadow-color-input" value="#000000" style="display:none;">' +
               '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
+            const swatch = row.querySelector('.shadow-swatch');
+            const colorInput = row.querySelector('.shadow-color-input');
+            swatch.addEventListener('click', () => colorInput.click());
+            colorInput.addEventListener('input', (e) => {
+              swatch.style.background = e.target.value;
+            });
             row.querySelector('button').addEventListener('click', () => row.remove());
             document.getElementById('shadows-list').appendChild(row);
           });
