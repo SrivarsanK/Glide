@@ -47,6 +47,10 @@ export type EditCallback = (
   hash?: string
 ) => void | Promise<void>;
 
+function normalizePathKey(filePath: string): string {
+  return path.resolve(filePath).replace(/\\/g, '/').toLowerCase();
+}
+
 export class GlideServer {
   private wss: WebSocketServer | null = null;
   private server: Server | null = null;
@@ -59,8 +63,9 @@ export class GlideServer {
   private lastSelfWrites = new Map<string, number>();
 
   public recordSelfWrite(filePath: string) {
-    const normPath = filePath.replace(/\\/g, '/');
+    const normPath = normalizePathKey(filePath);
     this.lastSelfWrites.set(normPath, Date.now());
+    this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
   }
 
   constructor(port = 7777, targetPort = 5173) {
@@ -93,9 +98,9 @@ export class GlideServer {
         const srcPath = path.resolve(process.cwd(), 'src');
         this.watcher = chokidar.watch(srcPath, { persistent: true });
         this.watcher.on('change', (filePath: string) => {
-          const normPath = filePath.replace(/\\/g, '/');
+          const normPath = normalizePathKey(filePath);
           const lastWrite = this.lastSelfWrites.get(normPath) || 0;
-          if (Date.now() - lastWrite < 500) {
+          if (Date.now() - lastWrite < 3000) {
             console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
             return;
           }
@@ -115,7 +120,7 @@ export class GlideServer {
                 if (fs.existsSync(file)) {
                   const code = fs.readFileSync(file, 'utf-8');
                   const tree = buildComponentTree(code);
-                  const normPath = path.resolve(file).replace(/\\/g, '/');
+                  const normPath = normalizePathKey(file);
                   ws.send(JSON.stringify({
                     type: 'tree',
                     file,
@@ -153,7 +158,8 @@ export class GlideServer {
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
-                      tree
+                      tree,
+                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({
@@ -229,7 +235,8 @@ export class GlideServer {
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
-                      tree
+                      tree,
+                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({
@@ -268,7 +275,8 @@ export class GlideServer {
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
-                      tree
+                      tree,
+                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({
@@ -307,7 +315,8 @@ export class GlideServer {
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
-                      tree
+                      tree,
+                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({
@@ -387,7 +396,8 @@ export class GlideServer {
                         ws.send(JSON.stringify({
                           type: 'tree',
                           file: diff.file,
-                          tree
+                          tree,
+                          generation: this.fileGenerations.get(normalizePathKey(diff.file)) || 0
                         }));
                       }
                     }
@@ -428,7 +438,8 @@ export class GlideServer {
                         ws.send(JSON.stringify({
                           type: 'tree',
                           file: diff.file,
-                          tree
+                          tree,
+                          generation: this.fileGenerations.get(normalizePathKey(diff.file)) || 0
                         }));
                       }
                     }
@@ -467,7 +478,8 @@ export class GlideServer {
                       ws.send(JSON.stringify({
                         type: 'tree',
                         file: w.file,
-                        tree
+                        tree,
+                        generation: this.fileGenerations.get(normalizePathKey(w.file)) || 0
                       }));
                     }
                   }
@@ -511,22 +523,24 @@ export class GlideServer {
                   return;
                 }
 
-                // Invalidate on drift check
-                const normPath = path.resolve(file).replace(/\\/g, '/');
-                const currentGen = this.fileGenerations.get(normPath) || 0;
-                if (generation !== undefined && generation !== currentGen) {
-                  ws.send(
-                    JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: `STALE_GENERATION: File has drifted since selection (expected generation ${generation}, current is ${currentGen})`,
-                    })
-                  );
-                  return;
+                // Invalidate on drift check — skip for position edits
+                // (they write to glide-positions.json, not source files)
+                if (change.type !== 'position') {
+                  const normPath = normalizePathKey(file);
+                  const currentGen = this.fileGenerations.get(normPath) || 0;
+                  if (generation !== undefined && generation !== currentGen) {
+                    ws.send(
+                      JSON.stringify({
+                        type: 'status',
+                        success: false,
+                        error: `STALE_GENERATION: File has drifted since selection (expected generation ${generation}, current is ${currentGen})`,
+                      })
+                    );
+                    return;
+                  }
                 }
 
                 // Call registered edit callbacks
-                this.recordSelfWrite(file);
                 for (const callback of this.editCallbacks) {
                   try {
                     await callback(file, line, column, change, hash);
@@ -541,6 +555,12 @@ export class GlideServer {
                     );
                     return;
                   }
+                }
+
+                // Only bump generation for edits that modify the source file.
+                // Position edits write to glide-positions.json, NOT the source file.
+                if (change.type !== 'position') {
+                  this.recordSelfWrite(file);
                 }
 
                 ws.send(
