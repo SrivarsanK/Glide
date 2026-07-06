@@ -3356,6 +3356,7 @@ export function getEditorHTML(port: number): string {
 
           function populatePropsFromComputed(styles, rect) {
             showPropsPanel(styles.tagName);
+            const activeEl = document.activeElement;
 
             // Position & Size
             if (rect) {
@@ -3405,8 +3406,12 @@ export function getEditorHTML(port: number): string {
 
             if (styles.color) {
               const hex = rgbToHex(styles.color);
-              document.getElementById('prop-color').value = hex;
-              document.getElementById('prop-color-hex').value = hex;
+              if (activeEl?.id !== 'prop-color') {
+                document.getElementById('prop-color').value = hex;
+              }
+              if (activeEl?.id !== 'prop-color-hex') {
+                document.getElementById('prop-color-hex').value = hex;
+              }
               document.getElementById('color-swatch-text').style.background = hex;
             }
 
@@ -3431,19 +3436,31 @@ export function getEditorHTML(port: number): string {
                 const startHex = rgbToHex(colors[0]);
                 const endHex = rgbToHex(colors[1]);
                 
-                document.getElementById('prop-grad-start').value = startHex;
-                document.getElementById('prop-grad-start-hex').value = startHex;
+                if (activeEl?.id !== 'prop-grad-start') {
+                  document.getElementById('prop-grad-start').value = startHex;
+                }
+                if (activeEl?.id !== 'prop-grad-start-hex') {
+                  document.getElementById('prop-grad-start-hex').value = startHex;
+                }
                 document.getElementById('color-swatch-grad-start').style.background = startHex;
                 
-                document.getElementById('prop-grad-end').value = endHex;
-                document.getElementById('prop-grad-end-hex').value = endHex;
+                if (activeEl?.id !== 'prop-grad-end') {
+                  document.getElementById('prop-grad-end').value = endHex;
+                }
+                if (activeEl?.id !== 'prop-grad-end-hex') {
+                  document.getElementById('prop-grad-end-hex').value = endHex;
+                }
                 document.getElementById('color-swatch-grad-end').style.background = endHex;
               }
               document.getElementById('grad-preview').style.background = bgImg;
             } else if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
               const hex = rgbToHex(bg);
-              document.getElementById('prop-bg-color').value = hex;
-              document.getElementById('prop-bg-hex').value = hex;
+              if (activeEl?.id !== 'prop-bg-color') {
+                document.getElementById('prop-bg-color').value = hex;
+              }
+              if (activeEl?.id !== 'prop-bg-hex') {
+                document.getElementById('prop-bg-hex').value = hex;
+              }
               document.getElementById('color-swatch-bg').style.background = hex;
               setFillMode('solid');
             } else {
@@ -3453,7 +3470,9 @@ export function getEditorHTML(port: number): string {
             // Border
             if (styles.borderColor) {
               const hex = rgbToHex(styles.borderColor);
-              document.getElementById('prop-border-color').value = hex;
+              if (activeEl?.id !== 'prop-border-color') {
+                document.getElementById('prop-border-color').value = hex;
+              }
               document.getElementById('color-swatch-border').style.background = hex;
             }
             document.getElementById('prop-border-width').value = parsePixels(styles.borderWidth) || 0;
