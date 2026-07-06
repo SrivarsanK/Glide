@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="./.github/assets/logo.png" alt="Glide Logo" width="80" align="middle"> &nbsp; Glide
+  <img src="./.github/assets/logo.png" alt="Glide Logo" width="80" align="middle"> &nbsp; <font size="7">Glide</font>
 </h1>
 
 <p align="center">
