@@ -91,34 +91,22 @@ Make sure you have the following prerequisites installed:
 <details>
 <summary>Repository Directory Map</summary> <br />
 
-- **.agents/** — Local agent settings, hooks, and execution profiles.
-- **.planning/** — Project requirements and agent memory states.
-- **dist/** — Compiled JavaScript build output.
-- **docs/** — Visual designer documentation and specifications.
-- **scratch/** — Temporary scratch files and experiment logs.
-- **src/** — Core source code.
-  - **__tests__/** — Vitest unit test suites.
-  - **assets.ts** — Local asset upload and management pipelines.
-  - **bridge.ts** — Injected client script for editor iframe synchronization.
-  - **cli.ts** — Command-line interface entry point.
-  - **css.ts** — CSS parser and class helper.
-  - **editor-html.ts** — Main editor page layout and frontend logic.
-  - **history.ts** — Undo/redo stack management.
-  - **html.ts** — HTML parser and AST modifier.
-  - **index.ts** — Main module exports.
-  - **meta.ts** — HTML metadata and responsive parser.
-  - **overlay.ts** — Selection outline overlay calculations.
-  - **plugin.ts** — Vite plugin for dev-time AST source stamping.
-  - **properties.ts** — Property controls and CSS translators.
-  - **reorder.ts** — JSX/TSX hierarchy reordering.
-  - **server.ts** — HTTP server and WebSocket communication.
-  - **snap.ts** — Canvas element and pixel grid snapping logic.
-  - **svelte.ts** — Svelte template class modifier.
-  - **text.ts** — JSX text node writer.
-  - **tree.ts** — JSX parent-child component tree parser.
-  - **viewport.ts** — Viewport responsive breakpoint resolver.
-  - **vue.ts** — Vue SFC template class modifier.
-  - **writer.ts** — Babel AST writer engine for JSX/TSX.
+```
+Glide/
+├── .agents/                    # Local agent settings, hooks, and execution profiles
+├── .planning/                  # Project requirements and agent memory states
+├── docs/                       # Visual designer documentation and specifications
+├── logo/                       # Repository logo assets
+├── packages/                   # Monorepo packages
+│   ├── ast-writer/             # Babel AST writer engine for JSX/TSX
+│   ├── cli/                    # CLI execution entry point
+│   ├── core/                   # Shared types and core utilities
+│   ├── overlay/                # Visual designer web interface overlay page
+│   ├── server/                 # Dev-time HTTP & WebSocket server
+│   └── vite-plugin/            # Vite plugin for AST source stamping
+├── README.md                   # Project documentation
+└── package.json                # Root package configuration
+```
 </details>
 
 ## Known Limitations
