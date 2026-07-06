@@ -979,12 +979,17 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
 if (import.meta.hot && !window.__glide_after_update_registered__) {
   window.__glide_after_update_registered__ = true;
   import.meta.hot.on('vite:afterUpdate', function() {
-    if (typeof window.__glide_update_selection_node__ === 'function') {
-      window.__glide_update_selection_node__();
-    }
-    if (typeof window.__glide_refresh_selection__ === 'function') {
-      setTimeout(window.__glide_refresh_selection__, 0);
-    }
+    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
+    raf(function() {
+      raf(function() {
+        if (typeof window.__glide_update_selection_node__ === 'function') {
+          window.__glide_update_selection_node__();
+        }
+        if (typeof window.__glide_refresh_selection__ === 'function') {
+          window.__glide_refresh_selection__();
+        }
+      });
+    });
   });
 }
 `;
