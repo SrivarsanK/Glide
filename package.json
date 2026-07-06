@@ -31,7 +31,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc",
+    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/ast-writer && npm run build --workspace=packages/overlay && npm run build --workspace=packages/server && npm run build --workspace=packages/vite-plugin && npm run build --workspace=packages/babel-plugin && npm run build --workspace=packages/cli && tsc",
     "test": "vitest run",
     "build:packages": "turbo run build"
   },
