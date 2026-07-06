@@ -972,7 +972,7 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
 }
 
 if (import.meta.hot) {
-  import.meta.hot.afterUpdate(function() {
+  import.meta.hot.on('vite:afterUpdate', function() {
     if (typeof window.__glide_update_selection_node__ === 'function') {
       window.__glide_update_selection_node__();
     }
