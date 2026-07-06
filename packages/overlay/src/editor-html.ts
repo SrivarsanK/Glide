@@ -1079,6 +1079,8 @@ export function getEditorHTML(port: number): string {
                   <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
                 </div>
                 <iframe id="app-iframe" title="App Preview"></iframe>
+                <!-- Transparent blocker shown during resize/drag to prevent iframe eating pointer events -->
+                <div id="iframe-blocker" style="position:absolute;inset:0;z-index:9;display:none;cursor:inherit;"></div>
                 <svg id="overlay-svg" style="position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:10;">
                   <defs>
                     <filter id="shadow-filter">
@@ -1517,6 +1519,8 @@ export function getEditorHTML(port: number): string {
           let startRect = null;
           let resizeInitialLeft = 0;
           let resizeInitialTop = 0;
+          let resizeFinalW = 0;
+          let resizeFinalH = 0;
           let dragStartPos = null;
            let dragSource = null;
            let dragInitialML = 0;
@@ -2268,14 +2272,18 @@ export function getEditorHTML(port: number): string {
                 g.appendChild(outline);
               }
 
+              // Track final dimensions for commit on pointerup
+              resizeFinalW = Math.round(width);
+              resizeFinalH = Math.round(height);
+
               const propX = document.getElementById('prop-x');
               if (propX) propX.value = Math.round(x);
               const propY = document.getElementById('prop-y');
               if (propY) propY.value = Math.round(y);
               const propW = document.getElementById('prop-w');
-              if (propW) propW.value = Math.round(width);
+              if (propW) propW.value = resizeFinalW;
               const propH = document.getElementById('prop-h');
-              if (propH) propH.value = Math.round(height);
+              if (propH) propH.value = resizeFinalH;
             }
             // Update cursor coords in status bar
             const cx = Math.round((e.clientX - canvasContainerRect.left - panX) / zoomLevel);
@@ -2291,33 +2299,31 @@ export function getEditorHTML(port: number): string {
             }
             if (isResizing && startRect && selectedElement) {
               isResizing = false;
-              const propX = document.getElementById('prop-x');
-              const propY = document.getElementById('prop-y');
-              const propW = document.getElementById('prop-w');
-              const propH = document.getElementById('prop-h');
+              // Hide iframe blocker
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker) blocker.style.display = 'none';
 
-              if (propX && propY && propW && propH) {
-                const px = parseInt(propX.value, 10) || 0;
-                const py = parseInt(propY.value, 10) || 0;
-                const dx = px - startRect.x;
-                const dy = py - startRect.y;
+              // Commit resize — use tracked final dimensions
+              if (resizeFinalW > 0 || resizeFinalH > 0) {
+                // Position shift (top-left handle dragged) — use canvas delta
+                const totalDx = (startPointerX - startPointerX); // always 0 on right/bottom handles
+                const movedDx = resizeDir.includes('l') ? (startRect.width - resizeFinalW) : 0;
+                const movedDy = resizeDir.includes('t') ? (startRect.height - resizeFinalH) : 0;
 
-                if (dx !== 0 || dy !== 0) {
-                  const newLeft = resizeInitialLeft + dx;
-                  const newTop = resizeInitialTop + dy;
+                if ((movedDx !== 0 || movedDy !== 0) && selectedElement) {
+                  const newLeft = resizeInitialLeft - movedDx;
+                  const newTop = resizeInitialTop - movedDy;
                   sendPositionChange(selectedElement.source, {
                     position: 'relative',
                     left: Math.round(newLeft) + 'px',
                     top: Math.round(newTop) + 'px'
                   });
                 }
-                // Resize commits once on mouseup — send immediately (no debounce)
-                // to avoid _styleTimer cancellation race with colour picker.
+
+                // Commit size to source via style prop
                 if (socket && socket.readyState === WebSocket.OPEN) {
                   const resizeParsed = parseSource(selectedElement.source);
                   if (resizeParsed) {
-                    const w = Math.round(parseInt(propW.value, 10) || 0);
-                    const h = Math.round(parseInt(propH.value, 10) || 0);
                     socket.send(JSON.stringify({
                       type: 'edit',
                       file: resizeParsed.file,
@@ -2326,13 +2332,15 @@ export function getEditorHTML(port: number): string {
                       hash: resizeParsed.hash,
                       generation: currentGeneration,
                       viewportWidth: iframeWidth.current,
-                      change: { type: 'style', value: { width: w + 'px', height: h + 'px' } }
+                      change: { type: 'style', value: { width: resizeFinalW + 'px', height: resizeFinalH + 'px' } }
                     }));
                   }
                 }
               }
               startRect = null;
               resizeDir = '';
+              resizeFinalW = 0;
+              resizeFinalH = 0;
               drawOverlay();
             }
             if (draggingGuide) {
@@ -2466,12 +2474,18 @@ export function getEditorHTML(port: number): string {
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
-                  
+                  resizeFinalW = Math.round(rect.width);
+                  resizeFinalH = Math.round(rect.height);
+
                   const styleLeft = selectedComputedStyles ? selectedComputedStyles.left : 'auto';
                   const styleTop = selectedComputedStyles ? selectedComputedStyles.top : 'auto';
                   resizeInitialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft, 10) || 0);
                   resizeInitialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop, 10) || 0);
-                  
+
+                  // Block iframe from stealing pointer events during drag
+                  const blocker = document.getElementById('iframe-blocker');
+                  if (blocker) blocker.style.display = 'block';
+
                   h.setPointerCapture(e.pointerId);
                 });
                 container.appendChild(h);
