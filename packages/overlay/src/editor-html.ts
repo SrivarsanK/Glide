@@ -1322,10 +1322,8 @@ export function getEditorHTML(port: number): string {
                 <div class="props-field">
                   <span class="props-label">Color</span>
                   <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-text"></div>
-                    <input type="color" id="prop-color" value="#ffffff" title="Text Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
+                    <div class="color-swatch" id="color-swatch-text" style="cursor:pointer;"></div>
                     <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family:monospace;">
-                    <button id="eyedrop-text" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                 </div>
               </div>
@@ -1342,10 +1340,8 @@ export function getEditorHTML(port: number): string {
                 </div>
                 <div id="fill-solid-controls">
                   <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-bg"></div>
-                    <input type="color" id="prop-bg-color" value="#000000" title="Background Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
+                    <div class="color-swatch" id="color-swatch-bg" style="cursor:pointer;"></div>
                     <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family:monospace;">
-                    <button id="eyedrop-bg" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                     <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="width:52px;" title="Opacity %">
                     <span style="font-size:11px;color:var(--text-secondary);">%</span>
                   </div>
@@ -1364,17 +1360,13 @@ export function getEditorHTML(port: number): string {
                   </div>
                   <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">Start</span>
-                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;"></div>
-                    <input type="color" id="prop-grad-start" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
+                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;cursor:pointer;"></div>
                     <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="flex:1;font-family:monospace;">
-                    <button id="eyedrop-grad-start" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                   <div class="props-row" style="margin-bottom:8px;">
                     <span class="props-label" style="min-width:50px;">End</span>
-                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;"></div>
-                    <input type="color" id="prop-grad-end" value="#ffffff" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
+                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;cursor:pointer;"></div>
                     <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="flex:1;font-family:monospace;">
-                    <button id="eyedrop-grad-end" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
                   </div>
                   <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
                 </div>
@@ -1384,9 +1376,7 @@ export function getEditorHTML(port: number): string {
               <div class="props-section">
                 <div class="props-section-title">Border</div>
                 <div class="props-row" style="margin-bottom:6px;">
-                  <div class="color-swatch" id="color-swatch-border"></div>
-                  <input type="color" id="prop-border-color" value="#374151" title="Border Color" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">
-                  <button id="eyedrop-border" title="Pick colour from screen" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text-secondary);flex-shrink:0;">🧪</button>
+                  <div class="color-swatch" id="color-swatch-border" style="cursor:pointer;"></div>
                   <input class="props-input" id="prop-border-width" type="number" placeholder="0" style="width:52px;" title="Width">
                   <select class="props-select" id="prop-border-style" style="flex:1;">
                     <option value="solid">Solid</option>
@@ -3531,21 +3521,21 @@ export function getEditorHTML(port: number): string {
           }
 
           // Fill mode buttons
-          // Swatch click triggers hidden color input
-          document.getElementById('color-swatch-text').addEventListener('click', () => {
-            document.getElementById('prop-color').click();
+          // Swatch click → custom colour popup (no native OS dialog = no crash)
+          document.getElementById('color-swatch-text').addEventListener('click', (e) => {
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-text', styleProp:'color', hexInputId:'prop-color-hex', isGradient:false, isGradEnd:false });
           });
-          document.getElementById('color-swatch-bg').addEventListener('click', () => {
-            document.getElementById('prop-bg-color').click();
+          document.getElementById('color-swatch-bg').addEventListener('click', (e) => {
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-bg', styleProp:'backgroundColor', hexInputId:'prop-bg-hex', isGradient:false, isGradEnd:false });
           });
-          document.getElementById('color-swatch-grad-start').addEventListener('click', () => {
-            document.getElementById('prop-grad-start').click();
+          document.getElementById('color-swatch-grad-start').addEventListener('click', (e) => {
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-grad-start', styleProp:null, hexInputId:'prop-grad-start-hex', isGradient:true, isGradEnd:false });
           });
-          document.getElementById('color-swatch-grad-end').addEventListener('click', () => {
-            document.getElementById('prop-grad-end').click();
+          document.getElementById('color-swatch-grad-end').addEventListener('click', (e) => {
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-grad-end', styleProp:null, hexInputId:'prop-grad-end-hex', isGradient:true, isGradEnd:true });
           });
-          document.getElementById('color-swatch-border').addEventListener('click', () => {
-            document.getElementById('prop-border-color').click();
+          document.getElementById('color-swatch-border').addEventListener('click', (e) => {
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:null, isGradient:false, isGradEnd:false });
           });
 
           document.getElementById('fill-none').addEventListener('click', () => {
@@ -3586,11 +3576,37 @@ export function getEditorHTML(port: number): string {
           });
 
           // Initialize color picker bindings
-          bindColorPicker('prop-color', 'color-swatch-text', 'color', 'prop-color-hex');
-          bindColorPicker('prop-bg-color', 'color-swatch-bg', 'backgroundColor', 'prop-bg-hex');
-          
-          bindGradientPicker('prop-grad-start', 'color-swatch-grad-start', true, 'prop-grad-start-hex');
-          bindGradientPicker('prop-grad-end', 'color-swatch-grad-end', false, 'prop-grad-end-hex');
+          // Hex text inputs — allow direct hex typing and apply on change
+          [
+            ['prop-color-hex',      'color-swatch-text',       'color',            false, false],
+            ['prop-bg-hex',         'color-swatch-bg',          'backgroundColor',  false, false],
+            ['prop-grad-start-hex', 'color-swatch-grad-start',  null,               true,  false],
+            ['prop-grad-end-hex',   'color-swatch-grad-end',    null,               true,  true],
+          ].forEach(([hexId, swatchId, styleProp, isGradient, isGradEnd]) => {
+            const hexEl = document.getElementById(hexId);
+            if (!hexEl) return;
+            hexEl.addEventListener('change', (e) => {
+              const hex = e.target.value.trim();
+              if (!/^#[0-9a-fA-F]{3,6}$/.test(hex)) return;
+              const swatch = document.getElementById(swatchId);
+              if (swatch) swatch.style.background = hex;
+              if (!selectedElement) return;
+              if (isGradient) {
+                const startHex = isGradEnd ? document.getElementById('prop-grad-start-hex')?.value : hex;
+                const endHex   = isGradEnd ? hex : document.getElementById('prop-grad-end-hex')?.value;
+                const angle    = document.getElementById('prop-grad-angle')?.value || '90';
+                const type     = typeof gradType !== 'undefined' ? gradType : 'linear';
+                const gradVal  = type === 'linear'
+                  ? 'linear-gradient(' + angle + 'deg, ' + startHex + ', ' + endHex + ')'
+                  : 'radial-gradient(circle, ' + startHex + ', ' + endHex + ')';
+                const gp = document.getElementById('grad-preview');
+                if (gp) gp.style.background = gradVal;
+                sendStylePropsChange(selectedElement.source, { backgroundImage: gradVal, backgroundColor: 'transparent' });
+              } else {
+                sendStylePropsChange(selectedElement.source, { [styleProp]: hex });
+              }
+            });
+          });
 
           // Opacity sync — write inline style
           document.getElementById('prop-opacity-slider').addEventListener('input', (e) => {
@@ -3682,85 +3698,147 @@ export function getEditorHTML(port: number): string {
 
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
-          bindColorPicker('prop-border-color', 'color-swatch-border', 'borderColor');
+          // (border colour is handled by the custom popup + hex input above)
 
-          // ─── Eyedropper buttons (🧪) ──────────────────────────────────────────
-          // After EyeDropper.open() resolves, we apply the colour AND force-close
-          // the native colour picker dialog by cloning+replacing the hidden input.
-          function wireEyedropper(btnId, inputId, swatchId, styleProp, hexInputId, isGradient, isGradEnd) {
-            const btn = document.getElementById(btnId);
-            if (!btn || !('EyeDropper' in window)) {
-              if (btn) btn.style.display = 'none';
-              return;
+          // ─── Custom Colour Picker Popup JS ────────────────────────────────────
+          // NEVER use <input type="color">.click() — that opens the OS dialog which
+          // blocks Chrome's event loop and crashes the browser.
+          let _cpTarget = null;
+
+          function cssColorToHex(color) {
+            if (!color || color === 'transparent' || color === 'initial') return '#000000';
+            color = color.trim();
+            if (/^#[0-9a-fA-F]{3,8}$/.test(color)) {
+              if (color.length === 4) return '#'+color[1]+color[1]+color[2]+color[2]+color[3]+color[3];
+              return color.substring(0, 7);
             }
-            btn.addEventListener('click', async () => {
-              try {
-                // Force-close any open native picker BEFORE opening eyedropper
-                // (some browsers can't have both open simultaneously)
-                const existingInput = document.getElementById(inputId);
-                if (existingInput) existingInput.blur();
-
-                const eyeDropper = new window.EyeDropper();
-                const result = await eyeDropper.open();
-                const hex = result.sRGBHex;
-
-                // Apply colour to swatch and hex field
-                const swatch = document.getElementById(swatchId);
-                if (swatch) swatch.style.background = hex;
-                if (hexInputId) {
-                  const hexEl = document.getElementById(hexInputId);
-                  if (hexEl) hexEl.value = hex;
-                }
-
-                // Commit to code
-                if (selectedElement) {
-                  if (isGradient) {
-                    const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-                    const startHex = isGradEnd ? getVal('prop-grad-start-hex') : hex;
-                    const endHex   = isGradEnd ? hex : getVal('prop-grad-end-hex');
-                    const angle    = getVal('prop-grad-angle') || '90';
-                    const type     = typeof gradType !== 'undefined' ? gradType : 'linear';
-                    const gradVal  = type === 'linear'
-                      ? 'linear-gradient(' + angle + 'deg, ' + startHex + ', ' + endHex + ')'
-                      : 'radial-gradient(circle, ' + startHex + ', ' + endHex + ')';
-                    const preview = document.getElementById('grad-preview');
-                    if (preview) preview.style.background = gradVal;
-                    sendStylePropsChange(selectedElement.source, {
-                      backgroundImage: gradVal,
-                      backgroundColor: 'transparent'
-                    });
-                  } else {
-                    sendStylePropsChange(selectedElement.source, { [styleProp]: hex });
-                  }
-                }
-
-                // ── Force-close the native OS colour picker popup ──────────────
-                // Replacing the hidden <input type="color"> with a clone breaks
-                // Chrome's internal reference to the popup, dismissing it.
-                const oldInput = document.getElementById(inputId);
-                if (oldInput) {
-                  const newInput = oldInput.cloneNode(true);
-                  newInput.value = hex;
-                  oldInput.parentNode.replaceChild(newInput, oldInput);
-                  // Re-bind the picker on the fresh element so it still works
-                  if (!isGradient) {
-                    bindColorPicker(inputId, swatchId, styleProp, hexInputId);
-                  } else {
-                    bindGradientPicker(inputId, swatchId, !isGradEnd, hexInputId);
-                  }
-                }
-              } catch (err) {
-                // User cancelled the eyedropper — no action needed
-              }
-            });
+            const m = color.match(/\d+(\.\d+)?/g);
+            if (m && m.length >= 3) {
+              return '#' + [m[0],m[1],m[2]].map(n => Math.round(parseFloat(n)).toString(16).padStart(2,'0')).join('');
+            }
+            return '#000000';
           }
 
-          // Wire each eyedropper button
-          wireEyedropper('eyedrop-text',       'prop-color',       'color-swatch-text',       'color',            'prop-color-hex',      false, false);
-          wireEyedropper('eyedrop-bg',         'prop-bg-color',    'color-swatch-bg',          'backgroundColor',  'prop-bg-hex',         false, false);
-          wireEyedropper('eyedrop-border',     'prop-border-color','color-swatch-border',      'borderColor',      null,                  false, false);
-          wireEyedropper('eyedrop-grad-start', 'prop-grad-start',  'color-swatch-grad-start',  null,               'prop-grad-start-hex', true,  false);
-          wireEyedropper('eyedrop-grad-end',   'prop-grad-end',    'color-swatch-grad-end',    null,               'prop-grad-end-hex',   true,  true);
+          function _applyColorToTarget(hex) {
+            if (!_cpTarget) return;
+            const { swatchId, styleProp, hexInputId, isGradient, isGradEnd } = _cpTarget;
+            const swatch = document.getElementById(swatchId);
+            if (swatch) swatch.style.background = hex;
+            if (hexInputId) {
+              const hexEl = document.getElementById(hexInputId);
+              if (hexEl) hexEl.value = hex;
+            }
+            document.getElementById('color-popup-preview').style.background = hex;
+            document.getElementById('color-popup-hex').value = hex;
+            if (selectedElement) {
+              if (isGradient) {
+                const gv = (id) => document.getElementById(id)?.value || '';
+                const startHex = isGradEnd ? gv('prop-grad-start-hex') : hex;
+                const endHex   = isGradEnd ? hex : gv('prop-grad-end-hex');
+                const angle    = gv('prop-grad-angle') || '90';
+                const type     = typeof gradType !== 'undefined' ? gradType : 'linear';
+                const gradVal  = type === 'linear'
+                  ? 'linear-gradient(' + angle + 'deg, ' + startHex + ', ' + endHex + ')'
+                  : 'radial-gradient(circle, ' + startHex + ', ' + endHex + ')';
+                const gp = document.getElementById('grad-preview');
+                if (gp) gp.style.background = gradVal;
+                sendStylePropsChange(selectedElement.source, { backgroundImage: gradVal, backgroundColor: 'transparent' });
+              } else {
+                sendStylePropsChange(selectedElement.source, { [styleProp]: hex });
+              }
+            }
+          }
+
+          function applyAndClosePopup() {
+            const hex = document.getElementById('color-popup-hex').value.trim();
+            if (/^#[0-9a-fA-F]{3,6}$/.test(hex)) _applyColorToTarget(hex);
+            closeColorPopup();
+          }
+
+          function closeColorPopup() {
+            document.getElementById('glide-color-popup').style.display = 'none';
+          }
+
+          function openColorPopup(anchorEl, config) {
+            _cpTarget = config;
+            const popup  = document.getElementById('glide-color-popup');
+            const hexInp = document.getElementById('color-popup-hex');
+            const prev   = document.getElementById('color-popup-preview');
+            const swatch = document.getElementById(config.swatchId);
+            const cur    = cssColorToHex(swatch ? swatch.style.background : '#000000');
+            hexInp.value = cur;
+            prev.style.background = cur;
+            const rect = anchorEl.getBoundingClientRect();
+            const pw = 220;
+            popup.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - pw - 8)) + 'px';
+            popup.style.top  = (rect.bottom + 6) + 'px';
+            popup.style.display = 'block';
+            setTimeout(() => { hexInp.select(); hexInp.focus(); }, 30);
+          }
+
+          // Init popup: preset grid, input live preview, apply/close wiring
+          (function initColorPopup() {
+            const presets = [
+              '#000000','#ffffff','#f8fafc','#94a3b8','#ef4444','#f97316',
+              '#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6',
+              '#f59e0b','#0ea5e9','#a855f7','#f43f5e'
+            ];
+            const grid = document.getElementById('color-popup-presets');
+            presets.forEach(c => {
+              const s = document.createElement('div');
+              s.style.cssText = 'width:100%;aspect-ratio:1/1;border-radius:3px;background:'+c+';cursor:pointer;border:1px solid rgba(255,255,255,0.1);box-sizing:border-box;transition:transform .1s;';
+              s.title = c;
+              s.addEventListener('mouseenter', () => s.style.transform = 'scale(1.15)');
+              s.addEventListener('mouseleave', () => s.style.transform = '');
+              s.addEventListener('click', () => {
+                document.getElementById('color-popup-hex').value = c;
+                document.getElementById('color-popup-preview').style.background = c;
+                _applyColorToTarget(c);
+              });
+              grid.appendChild(s);
+            });
+
+            const hexInp = document.getElementById('color-popup-hex');
+            hexInp.addEventListener('input', (e) => {
+              const v = e.target.value.trim();
+              if (/^#[0-9a-fA-F]{3,6}$/.test(v))
+                document.getElementById('color-popup-preview').style.background = v;
+            });
+            hexInp.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter')  { e.preventDefault(); applyAndClosePopup(); }
+              if (e.key === 'Escape') { e.preventDefault(); closeColorPopup(); }
+            });
+
+            document.getElementById('color-popup-apply').addEventListener('click', applyAndClosePopup);
+
+            // EyeDropper inside popup
+            const dropBtn = document.getElementById('color-popup-drop');
+            if (!('EyeDropper' in window)) {
+              dropBtn.style.display = 'none';
+            } else {
+              dropBtn.addEventListener('click', async () => {
+                const savedTarget = _cpTarget;
+                closeColorPopup(); // dismiss popup first so dropper can see full screen
+                try {
+                  const result = await new window.EyeDropper().open();
+                  _cpTarget = savedTarget; // restore target after async
+                  _applyColorToTarget(result.sRGBHex);
+                  _cpTarget = null;
+                } catch(e) { _cpTarget = null; }
+              });
+            }
+
+            // Click outside → close
+            document.addEventListener('pointerdown', (e) => {
+              const popup = document.getElementById('glide-color-popup');
+              if (popup && popup.style.display !== 'none' && !popup.contains(e.target)) {
+                // Don't close if click was on a colour swatch (it re-opens)
+                if (!e.target.classList.contains('color-swatch') && !e.target.closest('.color-swatch')) {
+                  closeColorPopup();
+                }
+              }
+            }, true);
+          })();
 
           // Shadow management
           document.getElementById('add-shadow-btn').addEventListener('click', () => {
@@ -4421,6 +4499,20 @@ export function getEditorHTML(port: number): string {
             lucide.createIcons();
           }
         </script>
+
+        <!-- ── Custom Colour Picker Popup (replaces native OS dialog) ─────────── -->
+        <div id="glide-color-popup" style="display:none;position:fixed;z-index:99999;background:#18182b;border:1px solid rgba(255,255,255,0.13);border-radius:10px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,0.7);width:220px;box-sizing:border-box;">
+          <div id="color-popup-presets" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+            <div id="color-popup-preview" style="width:30px;height:30px;border-radius:5px;border:1px solid rgba(255,255,255,0.18);flex-shrink:0;"></div>
+            <input id="color-popup-hex" type="text" maxlength="7" placeholder="#000000" autocomplete="off" spellcheck="false"
+              style="flex:1;background:#0d0d1a;border:1px solid rgba(255,255,255,0.14);color:#e2e8f0;padding:5px 8px;border-radius:5px;font-family:monospace;font-size:12px;outline:none;">
+            <button id="color-popup-drop" title="Pick colour from screen"
+              style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:5px;cursor:pointer;font-size:15px;padding:4px 7px;color:#e2e8f0;">&#x1F9EA;</button>
+          </div>
+          <button id="color-popup-apply"
+            style="width:100%;background:#6366f1;border:none;color:#fff;padding:7px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.4px;">Apply</button>
+        </div>
       </body>
     </html>
   `;
