@@ -1447,6 +1447,20 @@ export function getEditorHTML(port: number): string {
           <span id="shortcut-hint" style="color:var(--text-secondary)">V=Select H=Hand F=Frame R=Rect O=Ellipse T=Text C=Comment</span>
         </div>
 
+        <!-- ── Custom Colour Picker Popup (replaces native OS dialog) ─────────── -->
+        <div id="glide-color-popup" style="display:none;position:fixed;z-index:99999;background:#18182b;border:1px solid rgba(255,255,255,0.13);border-radius:10px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,0.7);width:220px;box-sizing:border-box;">
+          <div id="color-popup-presets" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+            <div id="color-popup-preview" style="width:30px;height:30px;border-radius:5px;border:1px solid rgba(255,255,255,0.18);flex-shrink:0;"></div>
+            <input id="color-popup-hex" type="text" maxlength="7" placeholder="#000000" autocomplete="off" spellcheck="false"
+              style="flex:1;background:#0d0d1a;border:1px solid rgba(255,255,255,0.14);color:#e2e8f0;padding:5px 8px;border-radius:5px;font-family:monospace;font-size:12px;outline:none;">
+            <button id="color-popup-drop" title="Pick colour from screen"
+              style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:5px;cursor:pointer;font-size:15px;padding:4px 7px;color:#e2e8f0;">&#x1F9EA;</button>
+          </div>
+          <button id="color-popup-apply"
+            style="width:100%;background:#6366f1;border:none;color:#fff;padding:7px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.4px;">Apply</button>
+        </div>
+
         <script>
           // ═══════════════════════════════════════════════════════════════
           // STATE
@@ -3348,61 +3362,66 @@ export function getEditorHTML(port: number): string {
             showPropsPanel(styles.tagName);
             const activeEl = document.activeElement;
 
+            const setVal = (id, val) => {
+              const el = document.getElementById(id);
+              if (el) el.value = val;
+            };
+
             // Position & Size
             if (rect) {
-              document.getElementById('prop-x').value = Math.round(rect.x || 0);
-              document.getElementById('prop-y').value = Math.round(rect.y || 0);
-              document.getElementById('prop-w').value = Math.round(rect.width || 0);
-              document.getElementById('prop-h').value = Math.round(rect.height || 0);
+              setVal('prop-x', Math.round(rect.x || 0));
+              setVal('prop-y', Math.round(rect.y || 0));
+              setVal('prop-w', Math.round(rect.width || 0));
+              setVal('prop-h', Math.round(rect.height || 0));
             }
 
             // Rotation
             const transform = styles.transform || '';
-            const rotMatch = transform.match(/rotate\\(([\\d.-]+)deg\\)/);
-            document.getElementById('prop-rotation').value = rotMatch ? parseFloat(rotMatch[1]) : 0;
+            const rotMatch = transform.match(/rotate\(([\d.-]+)deg\)/);
+            setVal('prop-rotation', rotMatch ? parseFloat(rotMatch[1]) : 0);
 
             // Flex section
             const isFlexContainer = styles.display === 'flex' || styles.display === 'inline-flex';
-            document.getElementById('section-flex').style.display = isFlexContainer ? 'block' : 'none';
+            const flexSec = document.getElementById('section-flex');
+            if (flexSec) flexSec.style.display = isFlexContainer ? 'block' : 'none';
             if (isFlexContainer) {
               setActiveBtn(['flex-row','flex-col'], styles.flexDirection === 'column' ? 'flex-col' : 'flex-row');
               const jcMap = {'flex-start':'jc-start','center':'jc-center','flex-end':'jc-end','space-between':'jc-between','space-around':'jc-around'};
               setActiveBtn(Object.values(jcMap), jcMap[styles.justifyContent] || '');
               const aiMap = {'flex-start':'ai-start','center':'ai-center','flex-end':'ai-end','stretch':'ai-stretch'};
               setActiveBtn(Object.values(aiMap), aiMap[styles.alignItems] || '');
-              document.getElementById('prop-gap').value = parsePixels(styles.gap) || '';
-              document.getElementById('prop-row-gap').value = parsePixels(styles.rowGap) || '';
+              setVal('prop-gap', parsePixels(styles.gap) || '');
+              setVal('prop-row-gap', parsePixels(styles.rowGap) || '');
             }
 
             // Spacing
-            document.getElementById('prop-mt').value = parsePixels(styles.marginTop);
-            document.getElementById('prop-mb').value = parsePixels(styles.marginBottom);
-            document.getElementById('prop-ml').value = parsePixels(styles.marginLeft);
-            document.getElementById('prop-mr').value = parsePixels(styles.marginRight);
-            document.getElementById('prop-pt').value = parsePixels(styles.paddingTop);
-            document.getElementById('prop-pb').value = parsePixels(styles.paddingBottom);
-            document.getElementById('prop-pl').value = parsePixels(styles.paddingLeft);
-            document.getElementById('prop-pr').value = parsePixels(styles.paddingRight);
+            setVal('prop-mt', parsePixels(styles.marginTop));
+            setVal('prop-mb', parsePixels(styles.marginBottom));
+            setVal('prop-ml', parsePixels(styles.marginLeft));
+            setVal('prop-mr', parsePixels(styles.marginRight));
+            setVal('prop-pt', parsePixels(styles.paddingTop));
+            setVal('prop-pb', parsePixels(styles.paddingBottom));
+            setVal('prop-pl', parsePixels(styles.paddingLeft));
+            setVal('prop-pr', parsePixels(styles.paddingRight));
 
             // Typography
-            if (styles.fontFamily) document.getElementById('prop-font-family').value = styles.fontFamily;
-            if (styles.fontSize)   document.getElementById('prop-font-size').value = parsePixels(styles.fontSize);
-            if (styles.fontWeight) document.getElementById('prop-font-weight').value = styles.fontWeight;
-            if (styles.lineHeight) document.getElementById('prop-line-height').value = parseFloat(styles.lineHeight) || '';
-            if (styles.letterSpacing) document.getElementById('prop-letter-spacing').value = parsePixels(styles.letterSpacing);
+            if (styles.fontFamily) setVal('prop-font-family', styles.fontFamily);
+            if (styles.fontSize)   setVal('prop-font-size', parsePixels(styles.fontSize));
+            if (styles.fontWeight) setVal('prop-font-weight', styles.fontWeight);
+            if (styles.lineHeight) setVal('prop-line-height', parseFloat(styles.lineHeight) || '');
+            if (styles.letterSpacing) setVal('prop-letter-spacing', parsePixels(styles.letterSpacing));
 
             const taMap = {'left':'ta-left','center':'ta-center','right':'ta-right','justify':'ta-justify'};
             setActiveBtn(Object.values(taMap), taMap[styles.textAlign] || 'ta-left');
 
             if (styles.color) {
               const hex = rgbToHex(styles.color);
-              if (activeEl?.id !== 'prop-color') {
-                document.getElementById('prop-color').value = hex;
-              }
-              if (activeEl?.id !== 'prop-color-hex') {
-                document.getElementById('prop-color-hex').value = hex;
-              }
-              document.getElementById('color-swatch-text').style.background = hex;
+              const elColor = document.getElementById('prop-color');
+              if (elColor && activeEl?.id !== 'prop-color') elColor.value = hex;
+              const elColorHex = document.getElementById('prop-color-hex');
+              if (elColorHex && activeEl?.id !== 'prop-color-hex') elColorHex.value = hex;
+              const swatchText = document.getElementById('color-swatch-text');
+              if (swatchText) swatchText.style.background = hex;
             }
 
             // Fill / Background
@@ -3417,8 +3436,9 @@ export function getEditorHTML(port: number): string {
                 gradType = 'linear';
                 setActiveBtn(['grad-linear', 'grad-radial'], 'grad-linear');
                 const angleMatch = bgImg.match(/(\d+)deg/);
-                if (angleMatch) {
-                  document.getElementById('prop-grad-angle').value = angleMatch[1];
+                const angleEl = document.getElementById('prop-grad-angle');
+                if (angleMatch && angleEl) {
+                  angleEl.value = angleMatch[1];
                 }
               }
               const colors = bgImg.match(/(#[0-9a-fA-F]{3,8}|rgba?\(.*?\))/g);
@@ -3426,32 +3446,30 @@ export function getEditorHTML(port: number): string {
                 const startHex = rgbToHex(colors[0]);
                 const endHex = rgbToHex(colors[1]);
                 
-                if (activeEl?.id !== 'prop-grad-start') {
-                  document.getElementById('prop-grad-start').value = startHex;
-                }
-                if (activeEl?.id !== 'prop-grad-start-hex') {
-                  document.getElementById('prop-grad-start-hex').value = startHex;
-                }
-                document.getElementById('color-swatch-grad-start').style.background = startHex;
+                const elStart = document.getElementById('prop-grad-start');
+                if (elStart && activeEl?.id !== 'prop-grad-start') elStart.value = startHex;
+                const elStartHex = document.getElementById('prop-grad-start-hex');
+                if (elStartHex && activeEl?.id !== 'prop-grad-start-hex') elStartHex.value = startHex;
+                const swatchStart = document.getElementById('color-swatch-grad-start');
+                if (swatchStart) swatchStart.style.background = startHex;
                 
-                if (activeEl?.id !== 'prop-grad-end') {
-                  document.getElementById('prop-grad-end').value = endHex;
-                }
-                if (activeEl?.id !== 'prop-grad-end-hex') {
-                  document.getElementById('prop-grad-end-hex').value = endHex;
-                }
-                document.getElementById('color-swatch-grad-end').style.background = endHex;
+                const elEnd = document.getElementById('prop-grad-end');
+                if (elEnd && activeEl?.id !== 'prop-grad-end') elEnd.value = endHex;
+                const elEndHex = document.getElementById('prop-grad-end-hex');
+                if (elEndHex && activeEl?.id !== 'prop-grad-end-hex') elEndHex.value = endHex;
+                const swatchEnd = document.getElementById('color-swatch-grad-end');
+                if (swatchEnd) swatchEnd.style.background = endHex;
               }
-              document.getElementById('grad-preview').style.background = bgImg;
+              const preview = document.getElementById('grad-preview');
+              if (preview) preview.style.background = bgImg;
             } else if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
               const hex = rgbToHex(bg);
-              if (activeEl?.id !== 'prop-bg-color') {
-                document.getElementById('prop-bg-color').value = hex;
-              }
-              if (activeEl?.id !== 'prop-bg-hex') {
-                document.getElementById('prop-bg-hex').value = hex;
-              }
-              document.getElementById('color-swatch-bg').style.background = hex;
+              const elBg = document.getElementById('prop-bg-color');
+              if (elBg && activeEl?.id !== 'prop-bg-color') elBg.value = hex;
+              const elBgHex = document.getElementById('prop-bg-hex');
+              if (elBgHex && activeEl?.id !== 'prop-bg-hex') elBgHex.value = hex;
+              const swatchBg = document.getElementById('color-swatch-bg');
+              if (swatchBg) swatchBg.style.background = hex;
               setFillMode('solid');
             } else {
               setFillMode('none');
@@ -3460,24 +3478,32 @@ export function getEditorHTML(port: number): string {
             // Border
             if (styles.borderColor) {
               const hex = rgbToHex(styles.borderColor);
-              if (activeEl?.id !== 'prop-border-color') {
-                document.getElementById('prop-border-color').value = hex;
-              }
-              document.getElementById('color-swatch-border').style.background = hex;
+              const elBorderColor = document.getElementById('prop-border-color');
+              if (elBorderColor && activeEl?.id !== 'prop-border-color') elBorderColor.value = hex;
+              const swatchBorder = document.getElementById('color-swatch-border');
+              if (swatchBorder) swatchBorder.style.background = hex;
             }
-            document.getElementById('prop-border-width').value = parsePixels(styles.borderWidth) || 0;
-            if (styles.borderStyle) document.getElementById('prop-border-style').value = styles.borderStyle;
+            const elBorderWidth = document.getElementById('prop-border-width');
+            if (elBorderWidth) elBorderWidth.value = parsePixels(styles.borderWidth) || 0;
+            const elBorderStyle = document.getElementById('prop-border-style');
+            if (styles.borderStyle && elBorderStyle) elBorderStyle.value = styles.borderStyle;
 
             // Radius
-            document.getElementById('prop-br-tl').value = parsePixels(styles.borderTopLeftRadius) || 0;
-            document.getElementById('prop-br-tr').value = parsePixels(styles.borderTopRightRadius) || 0;
-            document.getElementById('prop-br-br').value = parsePixels(styles.borderBottomRightRadius) || 0;
-            document.getElementById('prop-br-bl').value = parsePixels(styles.borderBottomLeftRadius) || 0;
+            const elBrTl = document.getElementById('prop-br-tl');
+            if (elBrTl) elBrTl.value = parsePixels(styles.borderTopLeftRadius) || 0;
+            const elBrTr = document.getElementById('prop-br-tr');
+            if (elBrTr) elBrTr.value = parsePixels(styles.borderTopRightRadius) || 0;
+            const elBrBr = document.getElementById('prop-br-br');
+            if (elBrBr) elBrBr.value = parsePixels(styles.borderBottomRightRadius) || 0;
+            const elBrBl = document.getElementById('prop-br-bl');
+            if (elBrBl) elBrBl.value = parsePixels(styles.borderBottomLeftRadius) || 0;
 
             // Opacity
             const opacity = styles.opacity !== undefined ? Math.round(parseFloat(styles.opacity || 1) * 100) : 100;
-            document.getElementById('prop-opacity').value = opacity;
-            document.getElementById('prop-opacity-slider').value = opacity;
+            const elOpacity = document.getElementById('prop-opacity');
+            if (elOpacity) elOpacity.value = opacity;
+            const elOpacitySlider = document.getElementById('prop-opacity-slider');
+            if (elOpacitySlider) elOpacitySlider.value = opacity;
           }
 
           function setActiveBtn(ids, activeId) {
@@ -3502,9 +3528,14 @@ export function getEditorHTML(port: number): string {
           }
 
           function updateGradientFill() {
-            const angle = document.getElementById('prop-grad-angle').value || '90';
-            const start = document.getElementById('prop-grad-start').value || '#000000';
-            const end = document.getElementById('prop-grad-end').value || '#ffffff';
+            const angleEl = document.getElementById('prop-grad-angle');
+            const angle = (angleEl ? angleEl.value : '90') || '90';
+            const startEl = document.getElementById('prop-grad-start');
+            const startHexEl = document.getElementById('prop-grad-start-hex');
+            const start = (startEl ? startEl.value : (startHexEl ? startHexEl.value : '#000000')) || '#000000';
+            const endEl = document.getElementById('prop-grad-end');
+            const endHexEl = document.getElementById('prop-grad-end-hex');
+            const end = (endEl ? endEl.value : (endHexEl ? endHexEl.value : '#ffffff')) || '#ffffff';
             
             let gradVal = '';
             if (gradType === 'linear') {
@@ -3513,7 +3544,8 @@ export function getEditorHTML(port: number): string {
               gradVal = 'radial-gradient(circle, ' + start + ', ' + end + ')';
             }
             
-            document.getElementById('grad-preview').style.background = gradVal;
+            const previewEl = document.getElementById('grad-preview');
+            if (previewEl) previewEl.style.background = gradVal;
             sendMultiClassChange(selectedElement.source, {
               backgroundImage: gradVal,
               backgroundColor: 'transparent'
@@ -3548,7 +3580,9 @@ export function getEditorHTML(port: number): string {
 
           document.getElementById('fill-solid').addEventListener('click', () => {
             setFillMode('solid');
-            const val = document.getElementById('prop-bg-color').value;
+            const bgEl = document.getElementById('prop-bg-color');
+            const bgHexEl = document.getElementById('prop-bg-hex');
+            const val = (bgEl ? bgEl.value : (bgHexEl ? bgHexEl.value : '#000000')) || '#000000';
             sendMultiClassChange(selectedElement.source, {
               backgroundImage: 'none',
               backgroundColor: val
@@ -4499,20 +4533,6 @@ export function getEditorHTML(port: number): string {
             lucide.createIcons();
           }
         </script>
-
-        <!-- ── Custom Colour Picker Popup (replaces native OS dialog) ─────────── -->
-        <div id="glide-color-popup" style="display:none;position:fixed;z-index:99999;background:#18182b;border:1px solid rgba(255,255,255,0.13);border-radius:10px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,0.7);width:220px;box-sizing:border-box;">
-          <div id="color-popup-presets" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:10px;"></div>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-            <div id="color-popup-preview" style="width:30px;height:30px;border-radius:5px;border:1px solid rgba(255,255,255,0.18);flex-shrink:0;"></div>
-            <input id="color-popup-hex" type="text" maxlength="7" placeholder="#000000" autocomplete="off" spellcheck="false"
-              style="flex:1;background:#0d0d1a;border:1px solid rgba(255,255,255,0.14);color:#e2e8f0;padding:5px 8px;border-radius:5px;font-family:monospace;font-size:12px;outline:none;">
-            <button id="color-popup-drop" title="Pick colour from screen"
-              style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:5px;cursor:pointer;font-size:15px;padding:4px 7px;color:#e2e8f0;">&#x1F9EA;</button>
-          </div>
-          <button id="color-popup-apply"
-            style="width:100%;background:#6366f1;border:none;color:#fff;padding:7px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.4px;">Apply</button>
-        </div>
       </body>
     </html>
   `;
