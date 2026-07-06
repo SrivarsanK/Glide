@@ -1515,6 +1515,8 @@ export function getEditorHTML(port: number): string {
           let startPointerX = 0;
           let startPointerY = 0;
           let startRect = null;
+          let resizeInitialLeft = 0;
+          let resizeInitialTop = 0;
           let dragStartPos = null;
            let dragSource = null;
            let dragInitialML = 0;
@@ -1634,8 +1636,6 @@ export function getEditorHTML(port: number): string {
                     }
                     if (message.action === 'undo' || message.action === 'redo') {
                       showToast('success', message.message || 'Action completed');
-                    } else if (currentFile) {
-                      showToast('success', currentFile.split('/').pop() + ' updated successfully.');
                     }
                   } else {
                     console.error('[Glide] Server error:', message.error);
@@ -1671,20 +1671,27 @@ export function getEditorHTML(port: number): string {
             });
           }
 
+          let _editTimer = null;
           function sendEdit(change) {
             if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(selectedElement.source);
-            if (!parsed) return;
-            socket.send(JSON.stringify({
-              type: 'edit',
-              file: parsed.file,
-              line: parsed.line,
-              column: parsed.column,
-              hash: parsed.hash,
-              generation: currentGeneration,
-              viewportWidth: iframeWidth.current,
-              change
-            }));
+            // Debounce rapid-fire edits (e.g. color picker drag)
+            if (_editTimer) clearTimeout(_editTimer);
+            _editTimer = setTimeout(() => {
+              _editTimer = null;
+              if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
+              const parsed = parseSource(selectedElement.source);
+              if (!parsed) return;
+              socket.send(JSON.stringify({
+                type: 'edit',
+                file: parsed.file,
+                line: parsed.line,
+                column: parsed.column,
+                hash: parsed.hash,
+                generation: currentGeneration,
+                viewportWidth: iframeWidth.current,
+                change
+              }));
+            }, 150);
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -2175,11 +2182,12 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           const canvasContainer = document.getElementById('canvas-container');
 
-          canvasContainer.addEventListener('mousedown', (e) => {
+          canvasContainer.addEventListener('pointerdown', (e) => {
             if (currentTool === 'hand' || e.button === 1) {
               isPanning = true;
               panStart = { x: e.clientX - panX, y: e.clientY - panY };
               canvasContainer.style.cursor = 'grabbing';
+              try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
               e.preventDefault();
             }
           });
@@ -2189,7 +2197,7 @@ export function getEditorHTML(port: number): string {
             canvasContainerRect = canvasContainer.getBoundingClientRect();
           });
 
-          document.addEventListener('mousemove', (e) => {
+          document.addEventListener('pointermove', (e) => {
             if (isPanning) {
               panX = e.clientX - panStart.x;
               panY = e.clientY - panStart.y;
@@ -2275,10 +2283,11 @@ export function getEditorHTML(port: number): string {
             document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
           });
 
-          document.addEventListener('mouseup', () => {
+          document.addEventListener('pointerup', (e) => {
             if (isPanning) {
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+              try { canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
             }
             if (isResizing && startRect && selectedElement) {
               isResizing = false;
@@ -2288,14 +2297,39 @@ export function getEditorHTML(port: number): string {
               const propH = document.getElementById('prop-h');
 
               if (propX && propY && propW && propH) {
-                sendPositionChange(selectedElement.source, {
-                  left: propX.value + 'px',
-                  top: propY.value + 'px'
-                });
-                sendMultiClassChange(selectedElement.source, {
-                  width: propW.value + 'px',
-                  height: propH.value + 'px'
-                });
+                const px = parseInt(propX.value, 10) || 0;
+                const py = parseInt(propY.value, 10) || 0;
+                const dx = px - startRect.x;
+                const dy = py - startRect.y;
+
+                if (dx !== 0 || dy !== 0) {
+                  const newLeft = resizeInitialLeft + dx;
+                  const newTop = resizeInitialTop + dy;
+                  sendPositionChange(selectedElement.source, {
+                    position: 'relative',
+                    left: Math.round(newLeft) + 'px',
+                    top: Math.round(newTop) + 'px'
+                  });
+                }
+                // Resize commits once on mouseup — send immediately (no debounce)
+                // to avoid _styleTimer cancellation race with colour picker.
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                  const resizeParsed = parseSource(selectedElement.source);
+                  if (resizeParsed) {
+                    const w = Math.round(parseInt(propW.value, 10) || 0);
+                    const h = Math.round(parseInt(propH.value, 10) || 0);
+                    socket.send(JSON.stringify({
+                      type: 'edit',
+                      file: resizeParsed.file,
+                      line: resizeParsed.line,
+                      column: resizeParsed.column,
+                      hash: resizeParsed.hash,
+                      generation: currentGeneration,
+                      viewportWidth: iframeWidth.current,
+                      change: { type: 'style', value: { width: w + 'px', height: h + 'px' } }
+                    }));
+                  }
+                }
               }
               startRect = null;
               resizeDir = '';
@@ -2432,6 +2466,12 @@ export function getEditorHTML(port: number): string {
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
+                  
+                  const styleLeft = selectedComputedStyles ? selectedComputedStyles.left : 'auto';
+                  const styleTop = selectedComputedStyles ? selectedComputedStyles.top : 'auto';
+                  resizeInitialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft, 10) || 0);
+                  resizeInitialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop, 10) || 0);
+                  
                   h.setPointerCapture(e.pointerId);
                 });
                 container.appendChild(h);
@@ -2601,6 +2641,13 @@ export function getEditorHTML(port: number): string {
               gGroup.appendChild(line);
             });
           }
+
+          window.addEventListener('glide-jump-history', (e) => {
+            const index = e.detail?.index;
+            if (typeof index === 'number' && socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'JUMP_TO_HISTORY', index }));
+            }
+          });
 
           // ═══════════════════════════════════════════════════════════════
           // BRIDGE COMMUNICATION (postMessage from iframe)
@@ -3511,26 +3558,38 @@ export function getEditorHTML(port: number): string {
             updateGradientFill();
           });
 
-          // Solid Background color
+           // Typography color — write inline style, not Tailwind class
+          document.getElementById('prop-color').addEventListener('input', (e) => {
+            document.getElementById('prop-color-hex').value = e.target.value;
+            document.getElementById('color-swatch-text').style.background = e.target.value;
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: e.target.value });
+          });
+          document.getElementById('prop-color-hex').addEventListener('change', (e) => {
+            document.getElementById('prop-color').value = e.target.value;
+            document.getElementById('color-swatch-text').style.background = e.target.value;
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { color: e.target.value });
+          });
+
+          // Solid Background color — write inline style
           document.getElementById('prop-bg-color').addEventListener('input', (e) => {
             document.getElementById('prop-bg-hex').value = e.target.value;
             document.getElementById('color-swatch-bg').style.background = e.target.value;
-            sendEdit({ type: 'class', property: 'backgroundColor', value: e.target.value });
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: e.target.value });
           });
           document.getElementById('prop-bg-hex').addEventListener('change', (e) => {
             document.getElementById('prop-bg-color').value = e.target.value;
             document.getElementById('color-swatch-bg').style.background = e.target.value;
-            sendEdit({ type: 'class', property: 'backgroundColor', value: e.target.value });
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { backgroundColor: e.target.value });
           });
 
-          // Opacity sync
+          // Opacity sync — write inline style
           document.getElementById('prop-opacity-slider').addEventListener('input', (e) => {
             document.getElementById('prop-opacity').value = e.target.value;
-            sendEdit({ type: 'class', property: 'opacity', value: (e.target.value / 100).toString() });
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { opacity: (e.target.value / 100).toString() });
           });
           document.getElementById('prop-opacity').addEventListener('change', (e) => {
             document.getElementById('prop-opacity-slider').value = e.target.value;
-            sendEdit({ type: 'class', property: 'opacity', value: (e.target.value / 100).toString() });
+            if (selectedElement) sendStylePropsChange(selectedElement.source, { opacity: (e.target.value / 100).toString() });
           });
 
           // Flex direction
@@ -3569,24 +3628,30 @@ export function getEditorHTML(port: number): string {
           document.getElementById('td-italic').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
           document.getElementById('td-strike').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
 
-          // Numeric inputs — send on change
-          const numericInputMap = {
+          // Numeric inputs — typography/spacing via class, layout (w/h) via style
+          const numericClassMap = {
             'prop-font-size': 'fontSize',
             'prop-line-height': 'lineHeight',
             'prop-letter-spacing': 'letterSpacing',
             'prop-gap': 'gap',
             'prop-row-gap': 'rowGap',
-            'prop-w': 'width',
-            'prop-h': 'height',
             'prop-border-width': 'borderWidth',
             'prop-br-tl': 'borderTopLeftRadius',
             'prop-br-tr': 'borderTopRightRadius',
             'prop-br-br': 'borderBottomRightRadius',
             'prop-br-bl': 'borderBottomLeftRadius',
           };
-          Object.entries(numericInputMap).forEach(([id, prop]) => {
+          Object.entries(numericClassMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+          });
+          // Width/height — write as inline style (works with plain CSS, not just Tailwind)
+          ['prop-w', 'prop-h'].forEach((id) => {
+            const prop = id === 'prop-w' ? 'width' : 'height';
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', (e) => {
+              if (selectedElement) sendStylePropsChange(selectedElement.source, { [prop]: e.target.value + 'px' });
+            });
           });
 
           // Font family
@@ -3705,18 +3770,28 @@ export function getEditorHTML(port: number): string {
             }));
           }
 
+          let _styleTimer = null;
           function sendStylePropsChange(source, styles) {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(source);
-            if (!parsed) return;
-            socket.send(JSON.stringify({
-              type: 'edit',
-              file: parsed.file,
-              line: parsed.line,
-              column: parsed.column,
-              viewportWidth: iframeWidth.current,
-              change: { type: 'style', value: styles }
-            }));
+            if (_styleTimer) clearTimeout(_styleTimer);
+            const capturedSource = source;
+            const capturedStyles = styles;
+            _styleTimer = setTimeout(() => {
+              _styleTimer = null;
+              if (!socket || socket.readyState !== WebSocket.OPEN) return;
+              const parsed = parseSource(capturedSource);
+              if (!parsed) return;
+              socket.send(JSON.stringify({
+                type: 'edit',
+                file: parsed.file,
+                line: parsed.line,
+                column: parsed.column,
+                hash: parsed.hash,
+                generation: currentGeneration,
+                viewportWidth: iframeWidth.current,
+                change: { type: 'style', value: capturedStyles }
+              }));
+            }, 150);
           }
 
           function sendMultiClassChange(source, styles) {
@@ -3933,6 +4008,8 @@ export function getEditorHTML(port: number): string {
           // Rulers pointerdown drag to create guide lines
           document.getElementById('glide-ruler-h').addEventListener('pointerdown', (e) => {
             e.preventDefault();
+            const ruler = document.getElementById('glide-ruler-h');
+            try { ruler.setPointerCapture(e.pointerId); } catch (err) {}
             const container = document.getElementById('canvas-container');
             const iframe = document.getElementById('app-iframe');
             if (iframe) {
@@ -3949,6 +4026,8 @@ export function getEditorHTML(port: number): string {
 
           document.getElementById('glide-ruler-v').addEventListener('pointerdown', (e) => {
             e.preventDefault();
+            const ruler = document.getElementById('glide-ruler-v');
+            try { ruler.setPointerCapture(e.pointerId); } catch (err) {}
             const container = document.getElementById('canvas-container');
             const iframe = document.getElementById('app-iframe');
             if (iframe) {
