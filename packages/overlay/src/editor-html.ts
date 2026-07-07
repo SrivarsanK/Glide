@@ -1882,27 +1882,47 @@ export function getEditorHTML(port: number): string {
 
            const iframeWidth = { current: 1440 };
 
+          function updateConnectionState(state) {
+            const btn = document.getElementById('btn-load');
+            if (!btn) return;
+            btn.classList.remove('disconnected', 'connecting', 'connected');
+            if (state === 'disconnected') {
+              btn.classList.add('disconnected');
+              btn.textContent = 'Disconnected';
+            } else if (state === 'connecting') {
+              btn.classList.add('connecting');
+              btn.textContent = 'Connecting';
+            } else if (state === 'connected') {
+              btn.classList.add('connected');
+              btn.textContent = 'Connected';
+            }
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // WEBSOCKET
           // ═══════════════════════════════════════════════════════════════
           function connectSocket() {
+            updateConnectionState('connecting');
             socket = new WebSocket('ws://localhost:7777');
             const dot = document.getElementById('ws-dot');
             const statusEl = document.getElementById('ws-status');
 
             socket.addEventListener('open', () => {
+              updateConnectionState('connected');
               dot.classList.remove('error');
               statusEl.textContent = 'Connected to Glide server';
               setTimeout(() => { statusEl.textContent = 'Ready'; }, 2000);
             });
 
             socket.addEventListener('close', () => {
+              updateConnectionState('disconnected');
               dot.classList.add('error');
               statusEl.textContent = 'Disconnected — retrying…';
               setTimeout(connectSocket, 2000);
             });
 
             socket.addEventListener('error', () => {
+              updateConnectionState('disconnected');
               dot.classList.add('error');
               statusEl.textContent = 'Connection error';
             });
