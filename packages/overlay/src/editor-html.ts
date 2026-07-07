@@ -101,20 +101,20 @@ export function getEditorHTML(port: number): string {
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            width: 38px;
-            height: 38px;
+            width: 32px;
+            height: 32px;
             border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             transition: all 0.15s;
-            font-size: 16px;
+            font-size: 15px;
             position: relative;
           }
           .tool-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
-          .tool-btn.active { color: var(--accent-color); background: rgba(56,189,248,0.15); }
-          .tool-btn-sep { width: 1px; height: 26px; background: var(--border-color); margin: 0 2px; }
+          .tool-btn.active { color: #ffffff !important; background: var(--accent-color) !important; }
+          .tool-btn-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; }
 
           /* ── DEVICE PREVIEW TOOLBAR ── */
           .device-bar {
@@ -146,6 +146,46 @@ export function getEditorHTML(port: number): string {
             width: 60px;
             outline: none;
             font-family: inherit;
+          }
+
+          /* ── CONNECTION STATUS BUTTON ── */
+          .connection-btn {
+            height: 28px;
+            padding: 0 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid transparent;
+            user-select: none;
+            white-space: nowrap;
+          }
+          .connection-btn.disconnected {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.2);
+          }
+          .connection-btn.disconnected:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+          }
+          .connection-btn.connecting {
+            background: rgba(156, 163, 175, 0.1);
+            color: #d1d5db;
+            border-color: rgba(156, 163, 175, 0.2);
+          }
+          .connection-btn.connected {
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ade80;
+            border-color: rgba(34, 197, 94, 0.2);
+          }
+          .connection-btn.connected:hover {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: rgba(34, 197, 94, 0.3);
           }
 
           /* ── ZOOM CONTROLS ── */
@@ -506,17 +546,26 @@ export function getEditorHTML(port: number): string {
           }
 
           /* ── PROPERTIES PANEL ── */
+          /* ── PROPERTIES PANEL ── */
           .props-section {
             border-bottom: 1px solid var(--border-color);
-            padding: 12px 14px;
+            padding: 10px 14px;
           }
           .props-section-title {
             font-size: 10px;
             text-transform: uppercase;
-            color: var(--text-secondary);
+            color: #888888;
             font-weight: 700;
-            letter-spacing: 0.6px;
-            margin-bottom: 10px;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+          }
+          .props-subheader {
+            font-size: 9px;
+            text-transform: uppercase;
+            color: #888888;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin: 8px 0 4px 0;
           }
           .props-grid {
             display: grid;
@@ -538,8 +587,8 @@ export function getEditorHTML(port: number): string {
             display: flex;
             flex-direction: row;
             align-items: center;
-            background: var(--bg-element);
-            border: 1px solid var(--border-color);
+            background: #383838;
+            border: 1px solid transparent;
             border-radius: 4px;
             padding: 2px 6px;
             gap: 4px;
@@ -552,7 +601,7 @@ export function getEditorHTML(port: number): string {
           }
           .props-label {
             font-size: 10px;
-            color: var(--text-secondary);
+            color: #b3b3b3;
             font-weight: 600;
             user-select: none;
             flex-shrink: 0;
@@ -580,10 +629,15 @@ export function getEditorHTML(port: number): string {
             cursor: pointer;
             height: 100%;
             padding: 0;
+            color-scheme: dark;
+          }
+          .props-select option {
+            background-color: #2c2c2c;
+            color: #ffffff;
           }
           .icon-btn-group { display: flex; gap: 3px; }
           .icon-btn {
-            background: var(--bg-element);
+            background: #383838;
             border: 1px solid var(--border-color);
             color: var(--text-secondary);
             padding: 5px 8px;
@@ -597,7 +651,7 @@ export function getEditorHTML(port: number): string {
             justify-content: center;
           }
           .icon-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
-          .icon-btn.active { color: var(--accent-color); border-color: var(--accent-color); background: rgba(56,189,248,0.1); }
+          .icon-btn.active { color: var(--accent-color); border-color: var(--accent-color); background: rgba(13, 153, 255, 0.12); }
 
           /* Box model diagram */
           .box-model {
@@ -943,7 +997,9 @@ export function getEditorHTML(port: number): string {
         <header>
           <!-- Left top panel status -->
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="logo" style="margin-right: 4px;">⚡ <span>Glide</span></div>
+            <div class="logo" style="margin-right: 4px; display: flex; align-items: center;">
+            <img src="data:image/png;base64,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" alt="Glide" style="height: 18px; display: block;">
+          </div>
             <button id="toggle-left-sidebar" class="header-sidebar-btn active" title="Toggle Layers Panel ( [ )">
               <i data-lucide="panel-left" id="icon-toggle-left" style="width: 16px; height: 16px;"></i>
             </button>
@@ -955,22 +1011,45 @@ export function getEditorHTML(port: number): string {
             </button>
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
             <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2;">
-              <span id="header-file-name" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Untitled</span>
-              <span style="font-size: 10px; color: var(--text-secondary);">Team project</span>
+              <span id="header-file-name" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Glide</span>
+              <span id="branch-subtitle" style="font-size: 10px; color: var(--text-secondary); cursor: pointer; user-select: none;" title="Git Branching Mode">git: <strong id="active-branch-name" style="color: var(--accent-color); font-weight: 600;">main</strong> ▾</span>
             </div>
           </div>
 
-          <!-- App URL input -->
+          <!-- App URL & Connection Input -->
           <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
             <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
               <input type="text" id="app-url" value="http://localhost:5173/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
-            <button class="device-btn" id="btn-load" style="height: 30px; padding: 0 10px;">Connect</button>
+            
+            <!-- Three-state Connection Status Button -->
+            <button class="connection-btn disconnected" id="btn-load">Disconnected</button>
+
+            <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
+
+            <!-- Snapping & Editor Controls in Navbar -->
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <button class="header-sidebar-btn active" id="btn-snap-object-nav" title="Snap to Objects">
+                <i data-lucide="magnet" style="width: 14px; height: 14px;"></i>
+              </button>
+              <button class="header-sidebar-btn active" id="btn-snap-pixel-nav" title="Snap to Pixel Grid">
+                <i data-lucide="hash" style="width: 14px; height: 14px;"></i>
+              </button>
+              <button class="header-sidebar-btn" id="btn-toggle-grid-nav" title="Toggle Grid Overlay (Ctrl+G)">
+                <i data-lucide="grid" style="width: 14px; height: 14px;"></i>
+              </button>
+              <button class="header-sidebar-btn active" id="btn-toggle-guides-nav" title="Toggle Rulers & Guides (Ctrl+;)">
+                <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+              </button>
+              <button class="header-sidebar-btn" id="btn-branching-nav" title="Git Branching Mode">
+                <i data-lucide="git-branch" style="width: 14px; height: 14px;"></i>
+              </button>
+            </div>
           </div>
 
           <!-- Device preview -->
-          <div class="device-bar" id="device-bar">
+          <div class="device-bar" id="device-bar" style="display: none !important;">
             <button class="device-btn" data-width="320" title="Mobile S">📱 320</button>
             <button class="device-btn" data-width="375" title="Mobile M">375</button>
             <button class="device-btn" data-width="425" title="Mobile L">425</button>
@@ -982,7 +1061,7 @@ export function getEditorHTML(port: number): string {
           </div>
 
           <!-- Snapping, Grid, Guides, and Branch controls -->
-          <div class="device-bar" style="margin-right: 8px;">
+          <div class="device-bar" style="display: none !important; margin-right: 8px;">
             <button class="device-btn active" id="btn-snap-object" title="Snap to Sibling Objects">🎯 Snap Obj</button>
             <button class="device-btn active" id="btn-snap-pixel" title="Snap to Pixel Grid">🔢 Snap Pixel</button>
             <button class="device-btn" id="btn-toggle-grid" title="Toggle 8px Grid Overlay (Ctrl+G)">⊞ Grid</button>
@@ -990,12 +1069,29 @@ export function getEditorHTML(port: number): string {
             <button class="device-btn" id="btn-branching" title="Git Branching Mode">⎇ Branch</button>
           </div>
 
-          <!-- Present, Share & Zoom controls -->
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button class="device-btn" style="border: none; background: transparent; font-size: 14px; cursor: pointer; color: var(--text-secondary);" title="Present">▷</button>
-            <button class="device-btn" style="background: #0d99ff; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer;" title="Share">Share</button>
+          <!-- Present, Share & Avatar controls -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- Profile Avatar -->
+            <div style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+              <div style="width: 24px; height: 24px; border-radius: 50%; background: #e0245e; color: #fff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; font-family: inherit;">
+                S
+              </div>
+              <span style="font-size: 8px; color: var(--text-secondary);">▼</span>
+            </div>
 
-            <div class="zoom-control">
+            <!-- Present Button -->
+            <div style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: var(--text-secondary);" title="Present">
+              <i data-lucide="play" style="width: 14px; height: 14px; fill: currentColor;"></i>
+              <span style="font-size: 8px;">▼</span>
+            </div>
+
+            <!-- Blue Share Button -->
+            <button style="background: #0d99ff; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background='#0d99ff'" title="Share">
+              Share
+            </button>
+
+            <!-- Hidden zoom controls for compatibility -->
+            <div class="zoom-control" style="display: none !important;">
               <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
               <span id="zoom-label">100%</span>
               <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
@@ -1135,18 +1231,28 @@ export function getEditorHTML(port: number): string {
             <!-- Floating Bottom Toolbar -->
             <div class="figma-toolbar" id="figma-toolbar" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5); display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 10px; padding: 4px; gap: 2px;">
               <button class="tool-btn active" id="tool-select" data-tool="select" title="Select (V)">
-                <i data-lucide="mouse-pointer-2" style="width: 18px; height: 18px;"></i>
+                <i data-lucide="mouse-pointer-2" style="width: 16px; height: 16px;"></i>
               </button>
               <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">
-                <i data-lucide="hand" style="width: 18px; height: 18px;"></i>
+                <i data-lucide="hand" style="width: 16px; height: 16px;"></i>
               </button>
-              <div class="tool-btn-sep" style="width: 1px; height: 26px; background: var(--border-color); margin: 0 4px;"></div>
+              
+              <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
+              
+              <button class="tool-btn" id="tool-frame" data-tool="frame" title="Frame (F)">
+                <i data-lucide="frame" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="tool-btn" id="tool-rect" data-tool="rect" title="Rectangle (R)">
+                <i data-lucide="square" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="tool-btn" id="tool-text" data-tool="text" title="Text (T)">
+                <i data-lucide="type" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="tool-btn" id="tool-ellipse" data-tool="ellipse" title="Ellipse (O)">
+                <i data-lucide="circle" style="width: 16px; height: 16px;"></i>
+              </button>
               <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">
-                <i data-lucide="message-square" style="width: 18px; height: 18px;"></i>
-              </button>
-              <div class="tool-btn-sep" style="width: 1px; height: 26px; background: var(--border-color); margin: 0 4px;"></div>
-              <button class="tool-btn" id="tool-dev" title="Dev Mode" style="opacity: 0.6; display: flex; align-items: center; justify-content: center;">
-                <i data-lucide="code-2" style="width: 18px; height: 18px;"></i>
+                <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
               </button>
             </div>
           </div>
@@ -1158,9 +1264,102 @@ export function getEditorHTML(port: number): string {
               <span id="selected-tag" style="font-size:10px;color:var(--accent-color);font-weight:400;font-family:monospace"></span>
             </div>
 
-            <div id="no-selection-msg" class="no-selection">
-              <i data-lucide="target" style="width: 32px; height: 32px; opacity: 0.3; margin-bottom: 8px;"></i>
-              <div class="no-selection-text">Select an element on the canvas to edit its properties</div>
+            <div id="no-selection-msg" style="display: flex; flex-direction: column; height: calc(100% - 37px); text-align: left; align-items: stretch; justify-content: flex-start; gap: 0; padding: 0;">
+              <div style="flex-grow: 1;">
+                <!-- Draw section -->
+                <div class="props-section" style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; height: 38px;">
+                  <span style="font-size: 11px; font-weight: 600; color: #ffffff;">Draw</span>
+                  <select id="draw-zoom-select" class="props-select" style="width: auto; background: transparent; border: none; color: #b3b3b3; font-size: 11px; cursor: pointer; text-align: right; outline: none; padding: 0 4px; font-family: inherit;">
+                    <option value="50">50%</option>
+                    <option value="75">75%</option>
+                    <option value="100" selected>100%</option>
+                    <option value="150">150%</option>
+                    <option value="200">200%</option>
+                  </select>
+                </div>
+
+                <!-- Page section -->
+                <div class="props-section" style="padding: 12px 14px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px;">
+                  <div style="font-size: 11px; font-weight: 600; color: #ffffff;">Page</div>
+                  
+                  <!-- Viewport selector -->
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 11px; color: #b3b3b3;">Viewport</span>
+                    <select id="draw-viewport-select" class="props-select" style="width: 140px; font-size: 11px; font-family: inherit; height: 22px; padding: 0 4px; background: #383838; border: 1px solid var(--border-color); color: #fff; border-radius: 4px;">
+                      <option value="1440" selected>Desktop (1440px)</option>
+                      <option value="1024">Laptop (1024px)</option>
+                      <option value="768">Tablet (768px)</option>
+                      <option value="425">Mobile L (425px)</option>
+                      <option value="375">Mobile M (375px)</option>
+                      <option value="320">Mobile S (320px)</option>
+                    </select>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div class="color-swatch" id="color-swatch-page" style="width: 24px; height: 24px; border-radius: 4px; background: #1e1e1e; cursor: pointer; border: 1px solid rgba(255,255,255,0.15);"></div>
+                      <div style="display: flex; flex-direction: column; line-height: 1.2;">
+                        <input type="text" id="prop-page-bg-hex" value="#1E1E1E" style="background: transparent; border: none; color: #ffffff; font-family: inherit; font-size: 11px; font-weight: 500; outline: none; width: 60px; text-transform: uppercase;">
+                        <span style="font-size: 9px; color: #888;">100% · Solid</span>
+                      </div>
+                    </div>
+                    <button id="btn-toggle-page-visibility" style="background: none; border: none; color: #b3b3b3; cursor: pointer; display: flex; align-items: center;" title="Toggle Page Visibility">
+                      <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                    </button>
+                  </div>
+
+                  <!-- Snapping settings -->
+                  <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <input type="checkbox" id="chk-snap-object" checked style="accent-color: var(--accent-color); cursor: pointer; width: 12px; height: 12px;">
+                      <label for="chk-snap-object" style="font-size: 11px; color: #b3b3b3; cursor: pointer; user-select: none;">Snap to sibling elements</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <input type="checkbox" id="chk-snap-pixel" checked style="accent-color: var(--accent-color); cursor: pointer; width: 12px; height: 12px;">
+                      <label for="chk-snap-pixel" style="font-size: 11px; color: #b3b3b3; cursor: pointer; user-select: none;">Snap to pixel grid</label>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                    <input type="checkbox" id="chk-show-exports" checked style="accent-color: var(--accent-color); cursor: pointer; width: 12px; height: 12px;">
+                    <label for="chk-show-exports" style="font-size: 11px; color: #b3b3b3; cursor: pointer; user-select: none;">Show in exports</label>
+                  </div>
+                </div>
+
+                <!-- Styles section -->
+                <div class="props-section" style="padding: 12px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; height: 38px;">
+                  <span style="font-size: 11px; font-weight: 600; color: #ffffff;">Styles</span>
+                  <div style="position: relative;">
+                    <button id="btn-add-style" style="background: rgba(255,255,255,0.06); border: none; color: #ffffff; border-radius: 4px; width: 22px; height: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Add Style">
+                      <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                    </button>
+                    <!-- Styles popover menu -->
+                    <div id="popover-styles" style="display: none; position: absolute; right: 0; top: 26px; width: 140px; background: #2c2c2c; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 1000; padding: 4px 0;">
+                      <button class="popover-item" data-action="text" style="width: 100%; background: none; border: none; color: #fff; text-align: left; padding: 6px 12px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;">
+                        <i data-lucide="type" style="width: 12px; height: 12px; color: #b3b3b3;"></i> Text
+                      </button>
+                      <button class="popover-item" data-action="color" style="width: 100%; background: none; border: none; color: #fff; text-align: left; padding: 6px 12px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;">
+                        <i data-lucide="pipette" style="width: 12px; height: 12px; color: #b3b3b3;"></i> Color
+                      </button>
+                      <button class="popover-item" data-action="effect" style="width: 100%; background: none; border: none; color: #fff; text-align: left; padding: 6px 12px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;">
+                        <i data-lucide="zap" style="width: 12px; height: 12px; color: #b3b3b3;"></i> Effect
+                      </button>
+                      <button class="popover-item" data-action="layout" style="width: 100%; background: none; border: none; color: #fff; text-align: left; padding: 6px 12px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;">
+                        <i data-lucide="grid" style="width: 12px; height: 12px; color: #b3b3b3;"></i> Layout guide
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+
+              </div>
+
+              <!-- Floating Help Question Mark -->
+              <div style="padding: 14px; display: flex; justify-content: flex-end; align-items: center;">
+                <button id="btn-help-floating" style="width: 24px; height: 24px; border-radius: 50%; background: #2c2c2c; border: 1px solid #444; color: #fff; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);" title="Help">
+                  ?
+                </button>
+              </div>
             </div>
 
             <div id="props-content" style="display:none;">
@@ -1178,8 +1377,13 @@ export function getEditorHTML(port: number): string {
 
               <!-- Position & Size -->
               <div class="props-section" id="section-geometry">
-                <div class="props-section-title">Position & Size</div>
-                <div class="props-grid" style="margin-bottom:6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span id="selected-element-title-sidebar" style="font-size: 11px; font-weight: 600; color: #ffffff;">Rectangle</span>
+                  <i data-lucide="settings" style="width: 12px; height: 12px; cursor: pointer; color: #b3b3b3;"></i>
+                </div>
+
+                <div class="props-subheader">Position</div>
+                <div class="props-grid" style="margin-bottom: 6px;">
                   <div class="props-field">
                     <span class="props-label">X</span>
                     <input class="props-input" id="prop-x" type="number" placeholder="0">
@@ -1188,18 +1392,34 @@ export function getEditorHTML(port: number): string {
                     <span class="props-label">Y</span>
                     <input class="props-input" id="prop-y" type="number" placeholder="0">
                   </div>
-                  <div class="props-field">
+                </div>
+
+                <div class="props-subheader">Rotation</div>
+                <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                  <div class="props-field" style="flex: 1;">
+                    <span class="props-label" style="font-size: 11px; font-weight: 400;">∡</span>
+                    <input class="props-input" id="prop-rotation" type="number" placeholder="0" value="0">
+                  </div>
+                  <button class="icon-btn" id="btn-flip-h" title="Flip Horizontal" style="max-width: 32px;"><i data-lucide="flip-horizontal" style="width: 12px; height: 12px;"></i></button>
+                  <button class="icon-btn" id="btn-flip-v" title="Flip Vertical" style="max-width: 32px;"><i data-lucide="flip-vertical" style="width: 12px; height: 12px;"></i></button>
+                </div>
+
+                <div class="props-subheader">Layout</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                  <div class="props-field" style="flex: 1;">
                     <span class="props-label">W</span>
                     <input class="props-input" id="prop-w" type="number" placeholder="auto">
                   </div>
-                  <div class="props-field">
+                  <div class="props-field" style="flex: 1;">
                     <span class="props-label">H</span>
                     <input class="props-input" id="prop-h" type="number" placeholder="auto">
                   </div>
+                  <button class="icon-btn" id="btn-lock-aspect" title="Constrain Proportions" style="max-width: 32px; background: transparent; border: none; color: #b3b3b3;"><i data-lucide="link" style="width: 12px; height: 12px;"></i></button>
                 </div>
-                <div class="props-grid" style="margin-bottom:6px;">
+
+                <div class="props-grid" style="margin-bottom: 4px;">
                   <div class="props-field">
-                    <span class="props-label" style="font-size:8px;padding-right:1px;">W Mode</span>
+                    <span class="props-label" style="font-size: 9px; width: auto; padding-right: 2px;">W Mode</span>
                     <select class="props-select" id="prop-w-mode">
                       <option value="fixed">Fixed</option>
                       <option value="hug">Hug</option>
@@ -1207,17 +1427,13 @@ export function getEditorHTML(port: number): string {
                     </select>
                   </div>
                   <div class="props-field">
-                    <span class="props-label" style="font-size:8px;padding-right:1px;">H Mode</span>
+                    <span class="props-label" style="font-size: 9px; width: auto; padding-right: 2px;">H Mode</span>
                     <select class="props-select" id="prop-h-mode">
                       <option value="fixed">Fixed</option>
                       <option value="hug">Hug</option>
                       <option value="fill">Fill</option>
                     </select>
                   </div>
-                </div>
-                <div class="props-field">
-                  <span class="props-label">Rotation (°)</span>
-                  <input class="props-input" id="prop-rotation" type="number" placeholder="0" value="0">
                 </div>
               </div>
 
@@ -1262,6 +1478,31 @@ export function getEditorHTML(port: number): string {
                 </div>
               </div>
 
+              <!-- Appearance -->
+              <div class="props-section" id="section-appearance">
+                <div class="props-section-title">Appearance</div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <i data-lucide="opacity" style="width: 12px; height: 12px; color: #b3b3b3; flex-shrink: 0;"></i>
+                  <input type="range" class="opacity-slider" id="prop-opacity-slider" min="0" max="100" value="100" style="flex: 1; height: 4px; accent-color: var(--accent-color);">
+                  <div class="props-field" style="width: 52px; flex-shrink: 0; padding: 0 4px;">
+                    <input class="props-input" id="prop-opacity" type="number" min="0" max="100" value="100" style="text-align: center;">
+                    <span style="font-size: 10px; color: #b3b3b3;">%</span>
+                  </div>
+                  <button id="btn-visibility-toggle" style="background: none; border: none; color: #b3b3b3; cursor: pointer; display: flex; align-items: center;" title="Toggle Visibility">
+                    <i data-lucide="eye" id="icon-visibility" style="width: 12px; height: 12px;"></i>
+                  </button>
+                </div>
+                <div class="props-field">
+                  <span class="props-label" style="font-size: 9px; width: auto; padding-right: 4px;">Blend</span>
+                  <select class="props-select" id="prop-blend-mode">
+                    <option value="normal">Pass through</option>
+                    <option value="multiply">Multiply</option>
+                    <option value="screen">Screen</option>
+                    <option value="overlay">Overlay</option>
+                  </select>
+                </div>
+              </div>
+
               <!-- Spacing (Box Model) -->
               <div class="props-section">
                 <div class="props-section-title">Spacing</div>
@@ -1279,165 +1520,230 @@ export function getEditorHTML(port: number): string {
                 <div class="box-outer" style="position:relative;">
                   <input class="box-input pt-input" id="prop-pt" type="number" placeholder="0" title="Padding Top">
                   <input class="box-input pb-input" id="prop-pb" type="number" placeholder="0" title="Padding Bottom">
-                  <input class="box-input pl-input" id="prop-pl" type="number" placeholder="0" title="Padding Left">
-                  <input class="box-input pr-input" id="prop-pr" type="number" placeholder="0" title="Padding Right">
+                  <input class="box-input ml-input" id="prop-pl" type="number" placeholder="0" title="Padding Left">
+                  <input class="box-input mr-input" id="prop-pr" type="number" placeholder="0" title="Padding Right">
                   <span class="box-label">P</span>
+                </div>
+              </div>
+
+              <!-- Content / Text Editing Section -->
+              <div class="props-section" id="section-content" style="display:none;">
+                <div class="props-section-title">Content</div>
+                <div style="position:relative; margin-bottom: 6px;">
+                  <textarea class="props-input" id="prop-text-content" rows="3" style="width: 100%; box-sizing: border-box; background: #1e1e1e; border: 1px solid #444; border-radius: 4px; padding: 6px; color: #fff; font-size: 11px; outline: none; resize: vertical;" placeholder="Text content..."></textarea>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #888;">
+                  <span id="prop-text-preview-label">12px Inter</span>
+                  <span id="prop-text-char-count">0 chars</span>
                 </div>
               </div>
 
               <!-- Typography -->
               <div class="props-section" id="section-typography">
                 <div class="props-section-title">Typography</div>
-                <div class="props-field" style="margin-bottom:6px;">
-                  <span class="props-label">Font Family</span>
+                <!-- Font Family select -->
+                <div class="props-field" style="margin-bottom: 6px;">
+                  <span class="props-label" style="width: auto; padding-right: 4px;"><i data-lucide="type" style="width: 12px; height: 12px; color: #b3b3b3;"></i></span>
                   <input class="props-input" id="prop-font-family" type="text" placeholder="Inter, sans-serif">
                 </div>
-                <div class="props-grid" style="margin-bottom:6px;">
+                <!-- Font Weight & Size side-by-side -->
+                <div class="props-grid" style="margin-bottom: 6px;">
                   <div class="props-field">
-                    <span class="props-label">Size (px)</span>
-                    <input class="props-input" id="prop-font-size" type="number" placeholder="16">
-                  </div>
-                  <div class="props-field">
-                    <span class="props-label">Weight</span>
                     <select class="props-select" id="prop-font-weight">
-                      <option value="100">100</option>
-                      <option value="200">200</option>
-                      <option value="300">300 Light</option>
-                      <option value="400" selected>400 Normal</option>
-                      <option value="500">500 Medium</option>
-                      <option value="600">600 Semibold</option>
-                      <option value="700">700 Bold</option>
-                      <option value="800">800 Extrabold</option>
-                      <option value="900">900 Black</option>
+                      <option value="100">Thin</option>
+                      <option value="200">Extra Light</option>
+                      <option value="300">Light</option>
+                      <option value="400" selected>Regular</option>
+                      <option value="500">Medium</option>
+                      <option value="600">Semibold</option>
+                      <option value="700">Bold</option>
+                      <option value="800">Extra Bold</option>
+                      <option value="900">Black</option>
                     </select>
                   </div>
                   <div class="props-field">
-                    <span class="props-label">Line Height</span>
-                    <input class="props-input" id="prop-line-height" type="number" placeholder="1.5">
-                  </div>
-                  <div class="props-field">
-                    <span class="props-label">Letter Spacing</span>
-                    <input class="props-input" id="prop-letter-spacing" type="number" placeholder="0">
+                    <span class="props-label" style="width: auto; padding-right: 2px;"><i data-lucide="text-cursor-input" style="width: 10px; height: 10px; color: #b3b3b3;"></i></span>
+                    <input class="props-input" id="prop-font-size" type="number" placeholder="12">
                   </div>
                 </div>
-                <div class="props-row" style="margin-bottom:6px;">
-                  <span class="props-label" style="min-width:40px;">Align</span>
-                  <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="ta-left" title="Left"><i data-lucide="align-left" style="width: 12px; height: 12px;"></i></button>
-                    <button class="icon-btn" id="ta-center" title="Center"><i data-lucide="align-center" style="width: 12px; height: 12px;"></i></button>
-                    <button class="icon-btn" id="ta-right" title="Right"><i data-lucide="align-right" style="width: 12px; height: 12px;"></i></button>
+                <!-- Line Height & Letter Spacing side-by-side -->
+                <div class="props-grid" style="margin-bottom: 6px;">
+                  <div class="props-field">
+                    <span class="props-label" style="width: auto; padding-right: 4px;"><i data-lucide="chevrons-up-down" style="width: 10px; height: 10px; color: #b3b3b3;"></i></span>
+                    <input class="props-input" id="prop-line-height" type="text" placeholder="Auto">
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label" style="width: auto; padding-right: 4px;"><i data-lucide="indent" style="width: 10px; height: 10px; color: #b3b3b3;"></i></span>
+                    <input class="props-input" id="prop-letter-spacing" type="text" placeholder="0%">
+                  </div>
+                </div>
+                <!-- Alignment -->
+                <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                  <!-- Horizontal Alignment -->
+                  <div class="icon-btn-group" style="flex: 1;">
+                    <button class="icon-btn" id="ta-left" title="Align Left"><i data-lucide="align-left" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ta-center" title="Align Center"><i data-lucide="align-center" style="width: 12px; height: 12px;"></i></button>
+                    <button class="icon-btn" id="ta-right" title="Align Right"><i data-lucide="align-right" style="width: 12px; height: 12px;"></i></button>
                     <button class="icon-btn" id="ta-justify" title="Justify"><i data-lucide="align-justify" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
-                <div class="props-row" style="margin-bottom:6px;">
-                  <span class="props-label" style="min-width:40px;">Style</span>
-                  <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn" id="td-underline" title="Underline"><i data-lucide="underline" style="width: 12px; height: 12px;"></i></button>
-                    <button class="icon-btn" id="td-italic" title="Italic"><i data-lucide="italic" style="width: 12px; height: 12px;"></i></button>
-                    <button class="icon-btn" id="td-strike" title="Strikethrough"><i data-lucide="strikethrough" style="width: 12px; height: 12px;"></i></button>
-                  </div>
-                </div>
-                <div class="props-field">
-                  <span class="props-label">Color</span>
-                  <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-text" style="cursor:pointer;"></div>
-                    <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family:monospace;">
+                <!-- Text Color Row -->
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                  <div class="color-swatch" id="color-swatch-text" style="width: 20px; height: 20px; border-radius: 4px; border: 1px solid #444; cursor: pointer; flex-shrink: 0; background: #fff;"></div>
+                  <div class="props-field" style="flex: 1;">
+                    <input class="props-input" id="prop-color-hex" type="text" placeholder="#ffffff" style="font-family: monospace;">
                   </div>
                 </div>
               </div>
 
               <!-- Fill / Background -->
-              <div class="props-section">
-                <div class="props-section-title">Fill</div>
-                <div class="props-row" style="margin-bottom:8px;">
-                  <div class="icon-btn-group" style="flex:1;">
-                    <button class="icon-btn active" id="fill-none" title="None">None</button>
-                    <button class="icon-btn" id="fill-solid" title="Solid">Solid</button>
-                    <button class="icon-btn" id="fill-gradient" title="Gradient">Grad</button>
+              <div class="props-section" id="section-fill">
+                <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span>Fill</span>
+                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
+                    <i data-lucide="plus" id="btn-add-fill" style="width: 12px; height: 12px;"></i>
+                    <i data-lucide="minus" id="btn-remove-fill" style="width: 12px; height: 12px;"></i>
                   </div>
                 </div>
                 <div id="fill-solid-controls">
-                  <div class="color-row">
-                    <div class="color-swatch" id="color-swatch-bg" style="cursor:pointer;"></div>
-                    <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family:monospace;">
-                    <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="width:52px;" title="Opacity %">
-                    <span style="font-size:11px;color:var(--text-secondary);">%</span>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="color-swatch" id="color-swatch-bg" style="width: 20px; height: 20px; border-radius: 4px; border: 1px solid #444; cursor: pointer; flex-shrink: 0; background: #000;"></div>
+                    <div class="props-field" style="flex: 1;">
+                      <input class="props-input" id="prop-bg-hex" type="text" placeholder="#000000" style="font-family: monospace;">
+                    </div>
+                    <div class="props-field" style="width: 52px; flex-shrink: 0;">
+                      <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="text-align: center;">
+                      <span style="font-size: 10px; color: #b3b3b3;">%</span>
+                    </div>
+                    <select class="props-select" id="fill-mode-select" style="max-width: 60px; font-size: 10px; color: #b3b3b3; border: none; background: transparent; cursor: pointer;">
+                      <option value="solid">Solid</option>
+                      <option value="gradient">Gradient</option>
+                      <option value="none">None</option>
+                    </select>
                   </div>
                 </div>
-                <div id="fill-gradient-controls" style="display:none;">
-                  <div class="props-row" style="margin-bottom:8px;">
-                    <span class="props-label" style="min-width:50px;">Type</span>
-                    <div class="icon-btn-group" style="flex:1;">
+                <div id="fill-gradient-controls" style="display: none; margin-top: 8px;">
+                  <div class="props-row" style="margin-bottom: 6px;">
+                    <span class="props-label" style="width: auto; padding-right: 4px;">Type</span>
+                    <div class="icon-btn-group" style="flex: 1;">
                       <button class="icon-btn active" id="grad-linear">Linear</button>
                       <button class="icon-btn" id="grad-radial">Radial</button>
                     </div>
                   </div>
-                  <div class="props-field" style="margin-bottom:8px;">
-                    <span class="props-label">Angle (°)</span>
+                  <div class="props-field" style="margin-bottom: 6px;">
+                    <span class="props-label">∡</span>
                     <input class="props-input" id="prop-grad-angle" type="number" value="90">
                   </div>
-                  <div class="props-row" style="margin-bottom:8px;">
-                    <span class="props-label" style="min-width:50px;">Start</span>
-                    <div class="color-swatch" id="color-swatch-grad-start" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#000;cursor:pointer;"></div>
-                    <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="flex:1;font-family:monospace;">
+                  <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
+                    <div class="color-swatch" id="color-swatch-grad-start" style="width: 16px; height: 16px; border-radius: 2px; cursor: pointer;"></div>
+                    <div class="props-field" style="flex: 1;">
+                      <input class="props-input" id="prop-grad-start-hex" type="text" value="#000000" style="font-family: monospace;">
+                    </div>
                   </div>
-                  <div class="props-row" style="margin-bottom:8px;">
-                    <span class="props-label" style="min-width:50px;">End</span>
-                    <div class="color-swatch" id="color-swatch-grad-end" style="width:24px;height:24px;border-radius:4px;overflow:hidden;background:#fff;cursor:pointer;"></div>
-                    <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="flex:1;font-family:monospace;">
+                  <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
+                    <div class="color-swatch" id="color-swatch-grad-end" style="width: 16px; height: 16px; border-radius: 2px; cursor: pointer;"></div>
+                    <div class="props-field" style="flex: 1;">
+                      <input class="props-input" id="prop-grad-end-hex" type="text" value="#ffffff" style="font-family: monospace;">
+                    </div>
                   </div>
-                  <div style="height:16px;border-radius:4px;background:linear-gradient(90deg,#000,#fff);border:1px solid var(--border-color);margin-top:6px;" id="grad-preview"></div>
+                  <div style="height: 12px; border-radius: 2px; background: linear-gradient(90deg, #000, #fff); border: 1px solid #444; margin-top: 4px;" id="grad-preview"></div>
                 </div>
               </div>
 
-              <!-- Border -->
-              <div class="props-section">
-                <div class="props-section-title">Border</div>
-                <div class="props-row" style="margin-bottom:6px;">
-                  <div class="color-swatch" id="color-swatch-border" style="cursor:pointer;"></div>
-                  <input class="props-input" id="prop-border-width" type="number" placeholder="0" style="width:52px;" title="Width">
-                  <select class="props-select" id="prop-border-style" style="flex:1;">
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                    <option value="none">None</option>
-                  </select>
+              <!-- Stroke -->
+              <div class="props-section" id="section-stroke">
+                <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span>Stroke</span>
+                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
+                    <i data-lucide="plus" id="btn-add-stroke" style="width: 12px; height: 12px;"></i>
+                    <i data-lucide="minus" id="btn-remove-stroke" style="width: 12px; height: 12px;"></i>
+                  </div>
                 </div>
-                <div class="props-section-title" style="margin-bottom:6px;">Radius</div>
-                <div class="props-grid-4">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <div class="color-swatch" id="color-swatch-border" style="width: 20px; height: 20px; border-radius: 4px; border: 1px solid #444; cursor: pointer; flex-shrink: 0; background: #000;"></div>
+                  <div class="props-field" style="flex: 1;">
+                    <input class="props-input" id="prop-border-color" type="text" placeholder="#000000" style="font-family: monospace;">
+                  </div>
+                  <div class="props-field" style="width: 52px; flex-shrink: 0;">
+                    <input class="props-input" id="prop-border-width" type="number" placeholder="1" style="text-align: center;">
+                    <span style="font-size: 10px; color: #b3b3b3;">px</span>
+                  </div>
+                </div>
+                <div class="props-grid" style="margin-bottom: 8px;">
                   <div class="props-field">
-                    <span class="props-label">TL</span>
+                    <select class="props-select" id="prop-stroke-position" style="font-size: 10px;">
+                      <option value="inside">Inside</option>
+                      <option value="center">Center</option>
+                      <option value="outside">Outside</option>
+                    </select>
+                  </div>
+                  <div class="props-field">
+                    <select class="props-select" id="prop-border-style" style="font-size: 10px;">
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                      <option value="dotted">Dotted</option>
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="props-section-title" style="margin-bottom: 6px; font-size: 9px; color: #888;">Corner Radius</div>
+                <div class="props-grid-4">
+                  <div class="props-field" style="padding: 0 4px;">
+                    <span class="props-label" style="font-size: 8px; width: auto;">TL</span>
                     <input class="props-input" id="prop-br-tl" type="number" placeholder="0">
                   </div>
-                  <div class="props-field">
-                    <span class="props-label">TR</span>
+                  <div class="props-field" style="padding: 0 4px;">
+                    <span class="props-label" style="font-size: 8px; width: auto;">TR</span>
                     <input class="props-input" id="prop-br-tr" type="number" placeholder="0">
                   </div>
-                  <div class="props-field">
-                    <span class="props-label">BR</span>
+                  <div class="props-field" style="padding: 0 4px;">
+                    <span class="props-label" style="font-size: 8px; width: auto;">BR</span>
                     <input class="props-input" id="prop-br-br" type="number" placeholder="0">
                   </div>
-                  <div class="props-field">
-                    <span class="props-label">BL</span>
+                  <div class="props-field" style="padding: 0 4px;">
+                    <span class="props-label" style="font-size: 8px; width: auto;">BL</span>
                     <input class="props-input" id="prop-br-bl" type="number" placeholder="0">
                   </div>
                 </div>
               </div>
 
-              <!-- Shadow -->
-              <div class="props-section">
-                <div class="props-section-title">Shadow</div>
+              <!-- Effects -->
+              <div class="props-section" id="section-effects">
+                <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span>Effects</span>
+                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
+                    <i data-lucide="plus" id="btn-add-effect" style="width: 12px; height: 12px;"></i>
+                    <i data-lucide="minus" id="btn-remove-effect" style="width: 12px; height: 12px;"></i>
+                  </div>
+                </div>
                 <div id="shadows-list"></div>
-                <button class="add-btn" id="add-shadow-btn">+ Add Shadow</button>
               </div>
 
-              <!-- Opacity -->
-              <div class="props-section">
-                <div class="props-section-title">Opacity</div>
-                <div class="opacity-row">
-                  <input type="range" class="opacity-slider" id="prop-opacity-slider" min="0" max="100" value="100">
-                  <input class="props-input" id="prop-opacity" type="number" min="0" max="100" value="100" style="width:52px;">
-                  <span style="font-size:11px;color:var(--text-secondary);">%</span>
+              <!-- Export -->
+              <div class="props-section" id="section-export">
+                <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span>Export</span>
+                  <i data-lucide="plus" style="width: 12px; height: 12px; cursor: pointer; color: var(--text-secondary);"></i>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <div class="props-field" style="width: 52px; flex-shrink: 0;">
+                    <select class="props-select" id="export-scale" style="font-size: 10px; text-align: center;">
+                      <option value="1x">1x</option>
+                      <option value="2x">2x</option>
+                      <option value="3x">3x</option>
+                    </select>
+                  </div>
+                  <div class="props-field" style="flex: 1;">
+                    <select class="props-select" id="export-format" style="font-size: 10px;">
+                      <option value="PNG">PNG</option>
+                      <option value="JPG">JPG</option>
+                      <option value="SVG">SVG</option>
+                      <option value="PDF">PDF</option>
+                    </select>
+                  </div>
+                  <button class="device-btn" id="btn-export-element" style="background: #383838; color: #ffffff; border: 1px solid #444; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500;">Export</button>
+                </div>
+              </div>
                 </div>
               </div>
 
@@ -1499,6 +1805,9 @@ export function getEditorHTML(port: number): string {
           let activeBranch = null;
           let draggingGuide = null;
           let altPressed = false;
+          let isAspectLocked = false;
+          let isFlippedH = false;
+          let isFlippedV = false;
 
           function findNodeBySource(nodes, source) {
             for (const node of nodes) {
@@ -1677,6 +1986,13 @@ export function getEditorHTML(port: number): string {
                         btn.classList.add('active');
                         btn.textContent = '⎇ ' + activeBranch.split('/').pop();
                       }
+                      const navBtn = document.getElementById('btn-branching-nav');
+                      if (navBtn) navBtn.classList.add('active');
+                      const nameLabel = document.getElementById('active-branch-name');
+                      if (nameLabel) {
+                        nameLabel.textContent = activeBranch.split('/').pop();
+                        nameLabel.style.color = 'var(--accent-color)';
+                      }
                       showToast('success', 'Checked out branch: ' + activeBranch);
                     } else if (message.action === 'finalize') {
                       showToast('success', 'Visual edits staged and committed successfully!');
@@ -1685,6 +2001,13 @@ export function getEditorHTML(port: number): string {
                       if (btn) {
                         btn.classList.remove('active');
                         btn.textContent = '⎇ Branch';
+                      }
+                      const navBtn = document.getElementById('btn-branching-nav');
+                      if (navBtn) navBtn.classList.remove('active');
+                      const nameLabel = document.getElementById('active-branch-name');
+                      if (nameLabel) {
+                        nameLabel.textContent = 'main';
+                        nameLabel.style.color = 'var(--text-secondary)';
                       }
                     }
                   } else {
@@ -1811,7 +2134,13 @@ export function getEditorHTML(port: number): string {
             const vp = document.getElementById('canvas-viewport');
             vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
             document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
-            
+            const dzs = document.getElementById('draw-zoom-select');
+            if (dzs) {
+              const roundedPct = Math.round(zoomLevel * 100);
+              if (['50','75','100','150','200'].includes(roundedPct.toString())) {
+                dzs.value = roundedPct.toString();
+              }
+            }
             drawRulers();
           }
 
@@ -3059,19 +3388,19 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           /* ── Layer icon SVGs — Figma-style monochrome ── */
           const LAYER_ICONS = {
-            frame:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="1" y1="4" x2="11" y2="4"/><line x1="1" y1="8" x2="11" y2="8"/><line x1="4" y1="1" x2="4" y2="11"/><line x1="8" y1="1" x2="8" y2="11"/></svg>',
-            text:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><text x="1" y="10" font-size="10" font-family="serif" font-weight="700">T</text></svg>',
-            button:   '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="10" height="6" rx="2"/></svg>',
-            image:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><polyline points="1,9 3.5,6.5 5.5,8.5 7.5,5.5 11,9"/><circle cx="8.5" cy="3.5" r="1"/></svg>',
-            list:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="2" width="2" height="2" rx="1"/><rect x="1" y="5" width="2" height="2" rx="1"/><rect x="1" y="8" width="2" height="2" rx="1"/><rect x="4.5" y="2.5" width="6.5" height="1" rx="0.5"/><rect x="4.5" y="5.5" width="6.5" height="1" rx="0.5"/><rect x="4.5" y="8.5" width="6.5" height="1" rx="0.5"/></svg>',
-            input:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="10" height="6" rx="1"/><line x1="3" y1="6" x2="3" y2="8" stroke-width="1"/></svg>',
-            nav:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="3" rx="1"/><rect x="1" y="6" width="4" height="5" rx="1"/><rect x="7" y="6" width="4" height="5" rx="1"/></svg>',
-            section:  '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/></svg>',
-            svg:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 11 L4 4 L7 8 L9 6 L11 11 Z"/></svg>',
-            link:     '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 A3 3 0 0 0 8.5 7.5 L9.5 6.5 A3 3 0 0 0 5.5 2.5 L4.5 3.5"/><path d="M7 4.5 A3 3 0 0 0 3.5 4.5 L2.5 5.5 A3 3 0 0 0 6.5 9.5 L7.5 8.5"/></svg>',
-            component:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1 L11 3.5 L11 8.5 L6 11 L1 8.5 L1 3.5 Z"/></svg>',
-            div:      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="10" height="10" rx="1" stroke-dasharray="2 1.5"/></svg>',
-            group:    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="0.5" y="2" width="8" height="7" rx="1"/><rect x="3.5" y="0.5" width="8" height="7" rx="1"/></svg>',
+            frame:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>',
+            text:     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>',
+            button:   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="3"></rect><path d="M12 12h.01"></path></svg>',
+            image:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg>',
+            list:     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>',
+            input:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" ry="2"></rect><line x1="7" y1="12" x2="17" y2="12"></line></svg>',
+            nav:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>',
+            section:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="12" x2="21" y2="12"></line></svg>',
+            svg:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path></svg>',
+            link:     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+            component:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 12l10 10 10-10z"></path></svg>',
+            div:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>',
+            group:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="16" height="11" rx="2"></rect><path d="M4 14h16M14 5l-2-2H4a2 2 0 0 0-2 2v4"></path></svg>',
           };
 
           function getLayerIconSVG(name) {
@@ -3520,6 +3849,26 @@ export function getEditorHTML(port: number): string {
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
+            
+            const nameMap = {
+              'div': 'Frame',
+              'section': 'Frame',
+              'span': 'Text',
+              'p': 'Text',
+              'h1': 'Heading 1',
+              'h2': 'Heading 2',
+              'h3': 'Heading 3',
+              'h4': 'Heading 4',
+              'h5': 'Heading 5',
+              'h6': 'Heading 6',
+              'img': 'Image',
+              'button': 'Button',
+              'input': 'Input',
+              'a': 'Link'
+            };
+            const friendlyName = nameMap[tagName?.toLowerCase()] || (tagName ? tagName.charAt(0).toUpperCase() + tagName.slice(1).toLowerCase() : 'Rectangle');
+            const sidebarTitle = document.getElementById('selected-element-title-sidebar');
+            if (sidebarTitle) sidebarTitle.textContent = friendlyName;
           }
 
           function parsePixels(val) {
@@ -3702,6 +4051,13 @@ export function getEditorHTML(port: number): string {
             if (elOpacity) elOpacity.value = opacity;
             const elOpacitySlider = document.getElementById('prop-opacity-slider');
             if (elOpacitySlider) elOpacitySlider.value = opacity;
+            // Visibility eye icon status update
+            const iconVisibility = document.getElementById('icon-visibility');
+            if (iconVisibility) {
+              const isHidden = styles.display === 'none';
+              iconVisibility.setAttribute('data-lucide', isHidden ? 'eye-off' : 'eye');
+              if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
           }
 
           function setActiveBtn(ids, activeId) {
@@ -3712,7 +4068,8 @@ export function getEditorHTML(port: number): string {
           }
 
           function setFillMode(mode) {
-            setActiveBtn(['fill-none','fill-solid','fill-gradient'], 'fill-' + mode);
+            const select = document.getElementById('fill-mode-select');
+            if (select) select.value = mode;
             document.getElementById('fill-solid-controls').style.display = mode === 'solid' ? 'block' : 'none';
             document.getElementById('fill-gradient-controls').style.display = mode === 'gradient' ? 'block' : 'none';
           }
@@ -3768,29 +4125,29 @@ export function getEditorHTML(port: number): string {
             openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:null, isGradient:false, isGradEnd:false });
           });
 
-          document.getElementById('fill-none').addEventListener('click', () => {
-            setFillMode('none');
-            sendMultiClassChange(selectedElement.source, {
-              backgroundImage: 'none',
-              backgroundColor: 'transparent'
+          const fillModeSelect = document.getElementById('fill-mode-select');
+          if (fillModeSelect) {
+            fillModeSelect.addEventListener('change', (e) => {
+              if (!selectedElement) return;
+              const mode = e.target.value;
+              setFillMode(mode);
+              if (mode === 'none') {
+                sendMultiClassChange(selectedElement.source, {
+                  backgroundImage: 'none',
+                  backgroundColor: 'transparent'
+                });
+              } else if (mode === 'solid') {
+                const bgHexEl = document.getElementById('prop-bg-hex');
+                const val = (bgHexEl ? bgHexEl.value : '#000000') || '#000000';
+                sendMultiClassChange(selectedElement.source, {
+                  backgroundImage: 'none',
+                  backgroundColor: val
+                });
+              } else if (mode === 'gradient') {
+                updateGradientFill();
+              }
             });
-          });
-
-          document.getElementById('fill-solid').addEventListener('click', () => {
-            setFillMode('solid');
-            const bgEl = document.getElementById('prop-bg-color');
-            const bgHexEl = document.getElementById('prop-bg-hex');
-            const val = (bgEl ? bgEl.value : (bgHexEl ? bgHexEl.value : '#000000')) || '#000000';
-            sendMultiClassChange(selectedElement.source, {
-              backgroundImage: 'none',
-              backgroundColor: val
-            });
-          });
-
-          document.getElementById('fill-gradient').addEventListener('click', () => {
-            setFillMode('gradient');
-            updateGradientFill();
-          });
+          }
 
           // Gradient type & angle
           document.getElementById('grad-linear').addEventListener('click', () => {
@@ -3812,8 +4169,10 @@ export function getEditorHTML(port: number): string {
           [
             ['prop-color-hex',      'color-swatch-text',       'color',            false, false],
             ['prop-bg-hex',         'color-swatch-bg',          'backgroundColor',  false, false],
+            ['prop-border-color',   'color-swatch-border',      'borderColor',      false, false],
             ['prop-grad-start-hex', 'color-swatch-grad-start',  null,               true,  false],
             ['prop-grad-end-hex',   'color-swatch-grad-end',    null,               true,  true],
+            ['prop-page-bg-hex',    'color-swatch-page',        null,               false, false],
           ].forEach(([hexId, swatchId, styleProp, isGradient, isGradEnd]) => {
             const hexEl = document.getElementById(hexId);
             if (!hexEl) return;
@@ -3822,6 +4181,11 @@ export function getEditorHTML(port: number): string {
               if (!/^#[0-9a-fA-F]{3,6}$/.test(hex)) return;
               const swatch = document.getElementById(swatchId);
               if (swatch) swatch.style.background = hex;
+              if (hexId === 'prop-page-bg-hex') {
+                const fw = document.getElementById('frame-wrapper');
+                if (fw) fw.style.backgroundColor = hex;
+                return;
+              }
               if (!selectedElement) return;
               if (isGradient) {
                 const startHex = isGradEnd ? document.getElementById('prop-grad-start-hex')?.value : hex;
@@ -3844,7 +4208,26 @@ export function getEditorHTML(port: number): string {
             const prop = id === 'prop-w' ? 'width' : 'height';
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => {
-              if (selectedElement) sendStylePropsChange(selectedElement.source, { [prop]: e.target.value + 'px' });
+              if (!selectedElement) return;
+              const val = parseFloat(e.target.value);
+              if (isNaN(val)) return;
+              if (isAspectLocked && selectedRect && selectedRect.width && selectedRect.height) {
+                if (prop === 'width') {
+                  const ratio = selectedRect.height / selectedRect.width;
+                  const newHeight = Math.round(val * ratio);
+                  const hInput = document.getElementById('prop-h');
+                  if (hInput) hInput.value = newHeight;
+                  sendStylePropsChange(selectedElement.source, { width: val + 'px', height: newHeight + 'px' });
+                } else {
+                  const ratio = selectedRect.width / selectedRect.height;
+                  const newWidth = Math.round(val * ratio);
+                  const wInput = document.getElementById('prop-w');
+                  if (wInput) wInput.value = newWidth;
+                  sendStylePropsChange(selectedElement.source, { width: newWidth + 'px', height: val + 'px' });
+                }
+              } else {
+                sendStylePropsChange(selectedElement.source, { [prop]: val + 'px' });
+              }
             });
           });
 
@@ -3899,40 +4282,54 @@ export function getEditorHTML(port: number): string {
           });
 
           // Flex direction
-          document.getElementById('flex-row').addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-row'); sendEdit({type:'class',property:'flexDirection',value:'row'}); });
-          document.getElementById('flex-col').addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-col'); sendEdit({type:'class',property:'flexDirection',value:'column'}); });
+          const flexRow = document.getElementById('flex-row');
+          if (flexRow) flexRow.addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-row'); sendEdit({type:'class',property:'flexDirection',value:'row'}); });
+          const flexCol = document.getElementById('flex-col');
+          if (flexCol) flexCol.addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-col'); sendEdit({type:'class',property:'flexDirection',value:'column'}); });
 
           // Justify content
           const jcValues = {'jc-start':'flex-start','jc-center':'center','jc-end':'flex-end','jc-between':'space-between','jc-around':'space-around'};
           Object.entries(jcValues).forEach(([id, val]) => {
-            document.getElementById(id).addEventListener('click', () => {
-              setActiveBtn(Object.keys(jcValues), id);
-              sendEdit({type:'class',property:'justifyContent',value:val});
-            });
+            const el = document.getElementById(id);
+            if (el) {
+              el.addEventListener('click', () => {
+                setActiveBtn(Object.keys(jcValues), id);
+                sendEdit({type:'class',property:'justifyContent',value:val});
+              });
+            }
           });
 
           // Align items
           const aiValues = {'ai-start':'flex-start','ai-center':'center','ai-end':'flex-end','ai-stretch':'stretch'};
           Object.entries(aiValues).forEach(([id, val]) => {
-            document.getElementById(id).addEventListener('click', () => {
-              setActiveBtn(Object.keys(aiValues), id);
-              sendEdit({type:'class',property:'alignItems',value:val});
-            });
+            const el = document.getElementById(id);
+            if (el) {
+              el.addEventListener('click', () => {
+                setActiveBtn(Object.keys(aiValues), id);
+                sendEdit({type:'class',property:'alignItems',value:val});
+              });
+            }
           });
 
           // Text align
           const taValues = {'ta-left':'left','ta-center':'center','ta-right':'right','ta-justify':'justify'};
           Object.entries(taValues).forEach(([id, val]) => {
-            document.getElementById(id).addEventListener('click', () => {
-              setActiveBtn(Object.keys(taValues), id);
-              sendEdit({type:'class',property:'textAlign',value:val});
-            });
+            const el = document.getElementById(id);
+            if (el) {
+              el.addEventListener('click', () => {
+                setActiveBtn(Object.keys(taValues), id);
+                sendEdit({type:'class',property:'textAlign',value:val});
+              });
+            }
           });
 
           // Text decoration
-          document.getElementById('td-underline').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
-          document.getElementById('td-italic').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
-          document.getElementById('td-strike').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+          const tdUnderline = document.getElementById('td-underline');
+          if (tdUnderline) tdUnderline.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+          const tdItalic = document.getElementById('td-italic');
+          if (tdItalic) tdItalic.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
+          const tdStrike = document.getElementById('td-strike');
+          if (tdStrike) tdStrike.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
 
           // Numeric inputs — typography/spacing via class, layout (w/h) via style
           const numericClassMap = {
@@ -3951,9 +4348,12 @@ export function getEditorHTML(port: number): string {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
           });
+
           // Font family
-          document.getElementById('prop-font-family').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontFamily',value:e.target.value}); });
-          document.getElementById('prop-font-weight').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontWeight',value:e.target.value}); });
+          const elFontFamily = document.getElementById('prop-font-family');
+          if (elFontFamily) elFontFamily.addEventListener('change', (e) => { sendEdit({type:'class',property:'fontFamily',value:e.target.value}); });
+          const elFontWeight = document.getElementById('prop-font-weight');
+          if (elFontWeight) elFontWeight.addEventListener('change', (e) => { sendEdit({type:'class',property:'fontWeight',value:e.target.value}); });
 
           // Margin/Padding
           const spacingMap = {
@@ -3961,31 +4361,36 @@ export function getEditorHTML(port: number): string {
             'prop-pt': 'paddingTop', 'prop-pb': 'paddingBottom', 'prop-pl': 'paddingLeft', 'prop-pr': 'paddingRight',
           };
           Object.entries(spacingMap).forEach(([id, prop]) => {
-            document.getElementById(id).addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
           });
 
           // Rotation
-          document.getElementById('prop-rotation').addEventListener('change', (e) => { sendEdit({type:'class',property:'transform',value:'rotate('+e.target.value+'deg)'}); });
-          document.getElementById('prop-rotation').addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-              if (e.shiftKey) {
-                e.preventDefault();
-                const currentVal = parseFloat(e.target.value) || 0;
-                const step = 15;
-                let newVal = 0;
-                if (e.key === 'ArrowUp') {
-                  newVal = Math.ceil((currentVal + 0.1) / step) * step;
-                } else {
-                  newVal = Math.floor((currentVal - 0.1) / step) * step;
+          const elRotation = document.getElementById('prop-rotation');
+          if (elRotation) {
+            elRotation.addEventListener('change', (e) => { sendEdit({type:'class',property:'transform',value:'rotate('+e.target.value+'deg)'}); });
+            elRotation.addEventListener('keydown', (e) => {
+              if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (e.shiftKey) {
+                  e.preventDefault();
+                  const currentVal = parseFloat(e.target.value) || 0;
+                  const step = 15;
+                  let newVal = 0;
+                  if (e.key === 'ArrowUp') {
+                    newVal = Math.ceil((currentVal + 0.1) / step) * step;
+                  } else {
+                    newVal = Math.floor((currentVal - 0.1) / step) * step;
+                  }
+                  e.target.value = newVal;
+                  e.target.dispatchEvent(new Event('change'));
                 }
-                e.target.value = newVal;
-                e.target.dispatchEvent(new Event('change'));
               }
-            }
-          });
+            });
+          }
 
           // Border style
-          document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
+          const elBorderStyle = document.getElementById('prop-border-style');
+          if (elBorderStyle) elBorderStyle.addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
           // (border colour is handled by the custom popup + hex input above)
 
           // ─── Custom Colour Picker Popup JS ────────────────────────────────────
@@ -4018,7 +4423,10 @@ export function getEditorHTML(port: number): string {
             }
             document.getElementById('color-popup-preview').style.background = hex;
             document.getElementById('color-popup-hex').value = hex;
-            if (selectedElement) {
+            if (hexInputId === 'prop-page-bg-hex') {
+              const fw = document.getElementById('frame-wrapper');
+              if (fw) fw.style.backgroundColor = hex;
+            } else if (selectedElement) {
               if (isGradient) {
                 const gv = (id) => document.getElementById(id)?.value || '';
                 const startHex = isGradEnd ? gv('prop-grad-start-hex') : hex;
@@ -4129,49 +4537,58 @@ export function getEditorHTML(port: number): string {
           })();
 
           // Shadow management
-          document.getElementById('add-shadow-btn').addEventListener('click', () => {
-            shadowCount++;
-            const row = document.createElement('div');
-            row.className = 'shadow-row';
-            row.dataset.shadowId = shadowCount;
-            row.innerHTML =
-              '<input type="number" class="props-input" placeholder="X" style="width:36px;" title="X offset">' +
-              '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
-              '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
-              '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
-              '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;cursor:pointer;"></div>' +
-              '<input type="color" class="shadow-color-input" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">' +
-              '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
-            const swatch = row.querySelector('.shadow-swatch');
-            const colorInput = row.querySelector('.shadow-color-input');
-            swatch.addEventListener('click', () => colorInput.click());
+          const addShadowBtn = document.getElementById('btn-add-effect') || document.getElementById('add-shadow-btn');
+          if (addShadowBtn) {
+            addShadowBtn.addEventListener('click', () => {
+              shadowCount++;
+              const row = document.createElement('div');
+              row.className = 'shadow-row';
+              row.dataset.shadowId = shadowCount;
+              row.innerHTML =
+                '<input type="number" class="props-input" placeholder="X" style="width:36px;" title="X offset">' +
+                '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
+                '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
+                '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
+                '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;cursor:pointer;"></div>' +
+                '<input type="color" class="shadow-color-input" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">' +
+                '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
+              const swatch = row.querySelector('.shadow-swatch');
+              const colorInput = row.querySelector('.shadow-color-input');
+              if (swatch && colorInput) {
+                swatch.addEventListener('click', () => colorInput.click());
+                
+                // Throttle shadow color input with rAF to prevent browser crash
+                let _shadowRaf = false;
+                let _shadowLastVal = null;
+                colorInput.addEventListener('input', (e) => {
+                  _shadowLastVal = e.target.value;
+                  if (_shadowRaf) return;
+                  _shadowRaf = true;
+                  requestAnimationFrame(() => {
+                    _shadowRaf = false;
+                    if (_shadowLastVal) swatch.style.background = _shadowLastVal;
+                  });
+                });
 
-            // Throttle shadow color input with rAF to prevent browser crash
-            let _shadowRaf = false;
-            let _shadowLastVal = null;
-            colorInput.addEventListener('input', (e) => {
-              _shadowLastVal = e.target.value;
-              if (_shadowRaf) return;
-              _shadowRaf = true;
-              requestAnimationFrame(() => {
-                _shadowRaf = false;
-                if (_shadowLastVal) swatch.style.background = _shadowLastVal;
-              });
+                // Close picker on blur (Escape / click-outside)
+                let _shadowClosed = false;
+                colorInput.addEventListener('change', () => { _shadowClosed = true; });
+                colorInput.addEventListener('blur', () => {
+                  if (_shadowClosed) { _shadowClosed = false; return; }
+                  // Force-close by blur (no change fired = Escape pressed)
+                  const clone = colorInput.cloneNode(true);
+                  colorInput.parentNode.replaceChild(clone, colorInput);
+                });
+              }
+
+              const deleteBtn = row.querySelector('button');
+              if (deleteBtn) {
+                deleteBtn.addEventListener('click', () => row.remove());
+              }
+              const shadowsList = document.getElementById('shadows-list');
+              if (shadowsList) shadowsList.appendChild(row);
             });
-
-            // Close picker on blur (Escape / click-outside)
-            let _shadowClosed = false;
-            colorInput.addEventListener('change', () => { _shadowClosed = true; });
-            colorInput.addEventListener('blur', () => {
-              if (_shadowClosed) { _shadowClosed = false; return; }
-              // Force-close by blur (no change fired = Escape pressed)
-              const clone = colorInput.cloneNode(true);
-              colorInput.parentNode.replaceChild(clone, colorInput);
-            });
-
-            row.querySelector('button').addEventListener('click', () => row.remove());
-            document.getElementById('shadows-list').appendChild(row);
-          });
+          }
 
           // Figma-like Align Button Click Handlers
           const alignMap = {
@@ -4781,6 +5198,229 @@ export function getEditorHTML(port: number): string {
           document.getElementById('btn-history-back').addEventListener('click', () => {
             toggleHistory();
           });
+
+          // Visibility Toggle
+          const visibilityToggle = document.getElementById('btn-visibility-toggle');
+          if (visibilityToggle) {
+            visibilityToggle.addEventListener('click', () => {
+              if (!selectedElement || !selectedComputedStyles) return;
+              const isHidden = selectedComputedStyles.display === 'none';
+              const icon = document.getElementById('icon-visibility');
+              if (icon) {
+                icon.setAttribute('data-lucide', isHidden ? 'eye' : 'eye-off');
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+              }
+              sendStylePropsChange(selectedElement.source, { display: isHidden ? 'block' : 'none' });
+            });
+          }
+
+          // Aspect ratio Lock
+          const btnLockAspect = document.getElementById('btn-lock-aspect');
+          if (btnLockAspect) {
+            btnLockAspect.addEventListener('click', () => {
+              isAspectLocked = !isAspectLocked;
+              btnLockAspect.classList.toggle('active', isAspectLocked);
+              btnLockAspect.style.color = isAspectLocked ? 'var(--accent-color)' : '#b3b3b3';
+            });
+          }
+
+          // Flip Horizontal / Vertical
+          const btnFlipH = document.getElementById('btn-flip-h');
+          if (btnFlipH) {
+            btnFlipH.addEventListener('click', () => {
+              if (!selectedElement) return;
+              isFlippedH = !isFlippedH;
+              btnFlipH.classList.toggle('active', isFlippedH);
+              const rotation = document.getElementById('prop-rotation').value || 0;
+              const transformVal = 'rotate(' + rotation + 'deg) scaleX(' + (isFlippedH ? -1 : 1) + ') scaleY(' + (isFlippedV ? -1 : 1) + ')';
+              sendEdit({ type: 'class', property: 'transform', value: transformVal });
+            });
+          }
+          const btnFlipV = document.getElementById('btn-flip-v');
+          if (btnFlipV) {
+            btnFlipV.addEventListener('click', () => {
+              if (!selectedElement) return;
+              isFlippedV = !isFlippedV;
+              btnFlipV.classList.toggle('active', isFlippedV);
+              const rotation = document.getElementById('prop-rotation').value || 0;
+              const transformVal = 'rotate(' + rotation + 'deg) scaleX(' + (isFlippedH ? -1 : 1) + ') scaleY(' + (isFlippedV ? -1 : 1) + ')';
+              sendEdit({ type: 'class', property: 'transform', value: transformVal });
+            });
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // PAGE-LEVEL PROPERTIES LISTENERS (FIGMA COPY)
+          // ═══════════════════════════════════════════════════════════════
+          // Draw Zoom Select
+          const drawZoomSelect = document.getElementById('draw-zoom-select');
+          if (drawZoomSelect) {
+            drawZoomSelect.addEventListener('change', (e) => {
+              const val = parseFloat(e.target.value) / 100;
+              if (!isNaN(val)) {
+                zoomLevel = val;
+                applyTransform();
+              }
+            });
+          }
+
+          // Viewport Select
+          const drawViewportSelect = document.getElementById('draw-viewport-select');
+          if (drawViewportSelect) {
+            drawViewportSelect.addEventListener('change', (e) => {
+              const w = parseInt(e.target.value, 10);
+              if (!isNaN(w)) {
+                setIframeWidth(w);
+              }
+            });
+          }
+
+          // Snapping checkboxes
+          const chkSnapObject = document.getElementById('chk-snap-object');
+          if (chkSnapObject) {
+            chkSnapObject.addEventListener('change', () => {
+              const btn = document.getElementById('btn-snap-object');
+              if (btn) btn.click();
+            });
+          }
+
+          const chkSnapPixel = document.getElementById('chk-snap-pixel');
+          if (chkSnapPixel) {
+            chkSnapPixel.addEventListener('change', () => {
+              const btn = document.getElementById('btn-snap-pixel');
+              if (btn) btn.click();
+            });
+          }
+
+          // Branch Subtitle click to trigger git branching modal
+          const branchSubtitle = document.getElementById('branch-subtitle');
+          if (branchSubtitle) {
+            branchSubtitle.addEventListener('click', () => {
+              const btn = document.getElementById('btn-branching');
+              if (btn) btn.click();
+            });
+          }
+
+          // Page background color swatch
+          const swatchPage = document.getElementById('color-swatch-page');
+          if (swatchPage) {
+            swatchPage.addEventListener('click', (e) => {
+              openColorPopup(e.currentTarget, { swatchId: 'color-swatch-page', styleProp: null, hexInputId: 'prop-page-bg-hex', isGradient: false, isGradEnd: false });
+            });
+          }
+
+          // Toggle page background visibility (eye icon)
+          let pageBgVisible = true;
+          const btnTogglePageVisibility = document.getElementById('btn-toggle-page-visibility');
+          if (btnTogglePageVisibility) {
+            btnTogglePageVisibility.addEventListener('click', () => {
+              pageBgVisible = !pageBgVisible;
+              const fw = document.getElementById('frame-wrapper');
+              if (fw) {
+                if (pageBgVisible) {
+                  const hex = document.getElementById('prop-page-bg-hex')?.value || '#1E1E1E';
+                  fw.style.backgroundColor = hex;
+                  btnTogglePageVisibility.innerHTML = '<i data-lucide="eye" style="width: 14px; height: 14px;"></i>';
+                } else {
+                  fw.style.backgroundColor = 'transparent';
+                  btnTogglePageVisibility.innerHTML = '<i data-lucide="eye-off" style="width: 14px; height: 14px;"></i>';
+                }
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+              }
+            });
+          }
+
+          // Styles popover menu trigger
+          const btnAddStyle = document.getElementById('btn-add-style');
+          const popoverStyles = document.getElementById('popover-styles');
+          if (btnAddStyle && popoverStyles) {
+            btnAddStyle.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const isHidden = popoverStyles.style.display === 'none' || !popoverStyles.style.display;
+              popoverStyles.style.display = isHidden ? 'block' : 'none';
+            });
+
+            // Close popover when clicking anywhere else
+            document.addEventListener('click', () => {
+              popoverStyles.style.display = 'none';
+            });
+
+            // Handle options selection inside popover
+            popoverStyles.querySelectorAll('.popover-item').forEach(item => {
+              item.addEventListener('click', (e) => {
+                const action = e.currentTarget.getAttribute('data-action');
+                showToast('info', 'Created Page Style: ' + action.toUpperCase());
+              });
+            });
+          }
+
+          // Show in exports checkbox sync
+          const chkShowExports = document.getElementById('chk-show-exports');
+          if (chkShowExports) {
+            chkShowExports.addEventListener('change', (e) => {
+              showToast('success', 'Export visibility settings updated');
+            });
+          }
+
+
+
+
+
+          // Navbar Snapping, Grid, Guides and branching toggles
+          const btnSnapObjectNav = document.getElementById('btn-snap-object-nav');
+          if (btnSnapObjectNav) {
+            btnSnapObjectNav.addEventListener('click', () => {
+              const btn = document.getElementById('btn-snap-object');
+              if (btn) {
+                btn.click();
+                btnSnapObjectNav.classList.toggle('active', snapObjectEnabled);
+                const chk = document.getElementById('chk-snap-object');
+                if (chk) chk.checked = snapObjectEnabled;
+              }
+            });
+          }
+
+          const btnSnapPixelNav = document.getElementById('btn-snap-pixel-nav');
+          if (btnSnapPixelNav) {
+            btnSnapPixelNav.addEventListener('click', () => {
+              const btn = document.getElementById('btn-snap-pixel');
+              if (btn) {
+                btn.click();
+                btnSnapPixelNav.classList.toggle('active', snapPixelEnabled);
+                const chk = document.getElementById('chk-snap-pixel');
+                if (chk) chk.checked = snapPixelEnabled;
+              }
+            });
+          }
+
+          const btnToggleGridNav = document.getElementById('btn-toggle-grid-nav');
+          if (btnToggleGridNav) {
+            btnToggleGridNav.addEventListener('click', () => {
+              const btn = document.getElementById('btn-toggle-grid');
+              if (btn) {
+                btn.click();
+                btnToggleGridNav.classList.toggle('active', gridVisible);
+              }
+            });
+          }
+
+          const btnToggleGuidesNav = document.getElementById('btn-toggle-guides-nav');
+          if (btnToggleGuidesNav) {
+            btnToggleGuidesNav.addEventListener('click', () => {
+              const btn = document.getElementById('btn-toggle-guides');
+              if (btn) {
+                btn.click();
+                btnToggleGuidesNav.classList.toggle('active', guidesVisible);
+              }
+            });
+          }
+
+          const btnBranchingNav = document.getElementById('btn-branching-nav');
+          if (btnBranchingNav) {
+            btnBranchingNav.addEventListener('click', () => {
+              const btn = document.getElementById('btn-branching');
+              if (btn) btn.click();
+            });
+          }
 
           connectSocket();
           // Load default url on start
