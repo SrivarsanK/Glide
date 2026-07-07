@@ -432,7 +432,7 @@ export function getEditorHTML(port: number): string {
           }
           #app-iframe {
             width: 1440px;
-            height: 880px;
+            height: 1024px;
             border: none;
             display: block;
           }
@@ -1061,33 +1061,46 @@ export function getEditorHTML(port: number): string {
             <button class="device-btn" id="btn-branching" title="Git Branching Mode">⎇ Branch</button>
           </div>
 
-          <!-- Present, Share & Avatar controls -->
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <!-- Profile Avatar -->
-            <div style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-              <div style="width: 24px; height: 24px; border-radius: 50%; background: #e0245e; color: #fff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; font-family: inherit;">
-                S
-              </div>
-              <span style="font-size: 8px; color: var(--text-secondary);">▼</span>
+          <!-- Viewport & Zoom Controls (Right) -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <!-- Viewport Label / Dropdown -->
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <select id="draw-viewport-select" class="props-select" style="width: 185px; font-size: 11px; font-family: inherit; height: 28px; padding: 0 8px; background: var(--bg-element); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; cursor: pointer; outline: none;">
+                <optgroup label="📱 Phones">
+                  <option value="1290" data-height="2796">iPhone 15 Pro Max (1290×2796)</option>
+                  <option value="1170" data-height="2532">iPhone 15 Pro (1170×2532)</option>
+                  <option value="1179" data-height="2556">iPhone 15 (1179×2556)</option>
+                  <option value="390" data-height="844">iPhone 13 / 14 / 14 Pro (390×844)</option>
+                  <option value="375" data-height="667">iPhone SE (375×667)</option>
+                  <option value="360" data-height="640">Android Small (360×640)</option>
+                </optgroup>
+                <optgroup label="📟 Tablets">
+                  <option value="834" data-height="1194">iPad Pro 11&quot; (834×1194)</option>
+                  <option value="768" data-height="1024">iPad Mini (768×1024)</option>
+                  <option value="1280" data-height="720">Surface Pro 8 (1280×720)</option>
+                </optgroup>
+                <optgroup label="💻 Desktop & Laptops">
+                  <option value="1440" data-height="1024" selected>Desktop (Default) (1440×1024)</option>
+                  <option value="1728" data-height="1117">MacBook Pro 16&quot; (1728×1117)</option>
+                  <option value="1280" data-height="832">MacBook Air 13&quot; (1280×832)</option>
+                </optgroup>
+                <option value="custom">⚙ Custom Mode</option>
+              </select>
+              
+              <!-- Custom Width & Height Inputs -->
+              <input type="number" id="viewport-width-input" value="1440" placeholder="W" style="width: 50px; height: 28px; font-size: 11px; text-align: center; border: 1px solid var(--border-color); background: var(--bg-element); color: #fff; border-radius: 6px; outline: none;" title="Viewport Width">
+              <span style="color: var(--text-secondary); font-size: 11px; user-select: none;">×</span>
+              <input type="number" id="viewport-height-input" value="1024" placeholder="H" style="width: 50px; height: 28px; font-size: 11px; text-align: center; border: 1px solid var(--border-color); background: var(--bg-element); color: #fff; border-radius: 6px; outline: none;" title="Viewport Height">
             </div>
 
-            <!-- Present Button -->
-            <div style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: var(--text-secondary);" title="Present">
-              <i data-lucide="play" style="width: 14px; height: 14px; fill: currentColor;"></i>
-              <span style="font-size: 8px;">▼</span>
-            </div>
+            <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
 
-            <!-- Blue Share Button -->
-            <button style="background: #0d99ff; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background='#0d99ff'" title="Share">
-              Share
-            </button>
-
-            <!-- Hidden zoom controls for compatibility -->
-            <div class="zoom-control" style="display: none !important;">
-              <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
-              <span id="zoom-label">100%</span>
-              <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
-              <button class="zoom-btn" id="zoom-fit" title="Fit (Ctrl+0)" style="font-size:10px;width:auto;padding:0 4px;">Fit</button>
+            <!-- Zoom controls -->
+            <div class="zoom-control" style="height: 28px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 8px; display: flex; align-items: center; gap: 4px;">
+              <button class="zoom-btn" id="zoom-out" title="Zoom out" style="height: 22px; width: 22px;">−</button>
+              <span id="zoom-label" style="font-size: 11px; font-weight: 500; min-width: 36px; text-align: center; color: var(--text-primary);">100%</span>
+              <button class="zoom-btn" id="zoom-in" title="Zoom in" style="height: 22px; width: 22px;">+</button>
+              <button class="zoom-btn" id="zoom-fit" title="Fit (Ctrl+0)" style="font-size: 11px; width: auto; padding: 0 6px; height: 22px; font-weight: 500; margin-left: 2px;">Fit</button>
             </div>
           </div>
         </header>
@@ -1258,34 +1271,9 @@ export function getEditorHTML(port: number): string {
 
             <div id="no-selection-msg" style="display: flex; flex-direction: column; height: calc(100% - 37px); text-align: left; align-items: stretch; justify-content: flex-start; gap: 0; padding: 0;">
               <div style="flex-grow: 1;">
-                <!-- Draw section -->
-                <div class="props-section" style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; height: 38px;">
-                  <span style="font-size: 11px; font-weight: 600; color: #ffffff;">Draw</span>
-                  <select id="draw-zoom-select" class="props-select" style="width: auto; background: transparent; border: none; color: #b3b3b3; font-size: 11px; cursor: pointer; text-align: right; outline: none; padding: 0 4px; font-family: inherit;">
-                    <option value="50">50%</option>
-                    <option value="75">75%</option>
-                    <option value="100" selected>100%</option>
-                    <option value="150">150%</option>
-                    <option value="200">200%</option>
-                  </select>
-                </div>
-
                 <!-- Page section -->
                 <div class="props-section" style="padding: 12px 14px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px;">
                   <div style="font-size: 11px; font-weight: 600; color: #ffffff;">Page</div>
-                  
-                  <!-- Viewport selector -->
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 11px; color: #b3b3b3;">Viewport</span>
-                    <select id="draw-viewport-select" class="props-select" style="width: 140px; font-size: 11px; font-family: inherit; height: 22px; padding: 0 4px; background: #383838; border: 1px solid var(--border-color); color: #fff; border-radius: 4px;">
-                      <option value="1440" selected>Desktop (1440px)</option>
-                      <option value="1024">Laptop (1024px)</option>
-                      <option value="768">Tablet (768px)</option>
-                      <option value="425">Mobile L (425px)</option>
-                      <option value="375">Mobile M (375px)</option>
-                      <option value="320">Mobile S (320px)</option>
-                    </select>
-                  </div>
 
                   <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -2135,8 +2123,17 @@ export function getEditorHTML(port: number): string {
 
           function setIframeWidth(px) {
             const frame = document.getElementById('app-iframe');
-            frame.style.width = px + 'px';
-            iframeWidth.current = px;
+            if (frame) {
+              frame.style.width = px + 'px';
+              iframeWidth.current = px;
+            }
+          }
+
+          function setIframeHeight(px) {
+            const frame = document.getElementById('app-iframe');
+            if (frame) {
+              frame.style.height = px + 'px';
+            }
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -3188,7 +3185,11 @@ export function getEditorHTML(port: number): string {
             if (data.type === 'glide:document-height') {
               const iframe = document.getElementById('app-iframe');
               if (iframe) {
-                iframe.style.height = data.height + 'px';
+                const heightInput = document.getElementById('viewport-height-input');
+                const select = document.getElementById('draw-viewport-select');
+                if (select && select.value === 'custom' && (!heightInput || !heightInput.value)) {
+                  iframe.style.height = data.height + 'px';
+                }
               }
               return;
             }
@@ -5275,13 +5276,56 @@ export function getEditorHTML(port: number): string {
             });
           }
 
-          // Viewport Select
+          // Viewport Select & Custom W x H Inputs
           const drawViewportSelect = document.getElementById('draw-viewport-select');
-          if (drawViewportSelect) {
+          const vpWidthInput = document.getElementById('viewport-width-input');
+          const vpHeightInput = document.getElementById('viewport-height-input');
+
+          if (drawViewportSelect && vpWidthInput && vpHeightInput) {
             drawViewportSelect.addEventListener('change', (e) => {
-              const w = parseInt(e.target.value, 10);
-              if (!isNaN(w)) {
+              const val = e.target.value;
+              if (val === 'custom') {
+                vpWidthInput.select();
+              } else {
+                const w = parseInt(val, 10);
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                const h = parseInt(selectedOption.getAttribute('data-height') || '1024', 10);
+                
+                if (!isNaN(w) && !isNaN(h)) {
+                  vpWidthInput.value = w;
+                  vpHeightInput.value = h;
+                  setIframeWidth(w);
+                  setIframeHeight(h);
+                  fitToScreen();
+                }
+              }
+            });
+
+            const updateCustomSize = () => {
+              const w = parseInt(vpWidthInput.value, 10);
+              const h = parseInt(vpHeightInput.value, 10);
+              if (!isNaN(w) && w >= 100 && w <= 4000) {
                 setIframeWidth(w);
+              }
+              if (!isNaN(h) && h >= 100 && h <= 4000) {
+                setIframeHeight(h);
+              }
+              drawViewportSelect.value = 'custom';
+            };
+
+            vpWidthInput.addEventListener('change', updateCustomSize);
+            vpWidthInput.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                updateCustomSize();
+                vpWidthInput.blur();
+              }
+            });
+
+            vpHeightInput.addEventListener('change', updateCustomSize);
+            vpHeightInput.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                updateCustomSize();
+                vpHeightInput.blur();
               }
             });
           }
