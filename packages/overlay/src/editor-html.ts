@@ -3410,6 +3410,11 @@ export function getEditorHTML(port: number): string {
               // Double-click → inline edit
               item.addEventListener('dblclick', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
+                // Only allow editing text of leaf elements (no children in the layers tree)
+                if (node.children && node.children.length > 0) {
+                  showToast('info', 'Cannot edit text of structural containers');
+                  return;
+                }
                 const nameSpan = item.querySelector('.layer-name-text');
                 const originalText = node.text || '';
                 const inp = document.createElement('input');
