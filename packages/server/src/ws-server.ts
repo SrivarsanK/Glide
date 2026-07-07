@@ -22,6 +22,27 @@ import {
 
 const execAsync = promisify(exec);
 
+/**
+ * Walk up from a file path to find the nearest directory containing a .git folder.
+ * Returns the directory if found, otherwise falls back to process.cwd().
+ */
+function findGitRoot(startPath: string): string {
+  let dir = fs.statSync(startPath).isDirectory() ? startPath : path.dirname(startPath);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    if (fs.existsSync(path.join(dir, '.git'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return process.cwd();
+}
+
+// Tracks the git root of the user's target project (populated on first file operation)
+let activeProjectGitRoot: string = process.cwd();
+
 
 export interface EditChange {
   type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'group' | 'ungroup';
@@ -118,6 +139,8 @@ export class GlideServer {
               if (message.type === 'get-tree') {
                 const { file } = message;
                 if (fs.existsSync(file)) {
+                  // Track the user's project git root for git commands
+                  try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
                   const tree = buildComponentTree(code);
                   const normPath = normalizePathKey(file);
@@ -136,6 +159,7 @@ export class GlideServer {
                 }
                 return;
               }
+
 
               if (message.type === 'insert') {
                 const { file, parentId, elementType } = message;
@@ -337,10 +361,14 @@ export class GlideServer {
 
 
               if (message.type === 'git-branch-create') {
-                const { branchName } = message;
-                console.log(`[Glide] Creating and checking out git branch: ${branchName}`);
+                const { branchName, projectDir } = message;
+                // Use projectDir sent from client, or fall back to the tracked git root
+                const cwd = projectDir
+                  ? findGitRoot(projectDir)
+                  : activeProjectGitRoot;
+                console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                 try {
-                  await execAsync(`git checkout -b ${branchName}`);
+                  await execAsync(`git checkout -b ${branchName}`, { cwd });
                   ws.send(JSON.stringify({
                     type: 'git-status',
                     success: true,
@@ -360,10 +388,15 @@ export class GlideServer {
               }
 
               if (message.type === 'git-branch-finalize') {
-                const { commitMessage } = message;
-                console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}"`);
+                const { commitMessage, projectDir } = message;
+                const cwd = projectDir
+                  ? findGitRoot(projectDir)
+                  : activeProjectGitRoot;
+                console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
                 try {
-                  await execAsync(`git add -A && git commit -m "${commitMessage}"`);
+                  // Run git add and git commit as separate commands to avoid && issues on Windows
+                  await execAsync(`git add -A`, { cwd });
+                  await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd });
                   ws.send(JSON.stringify({
                     type: 'git-status',
                     success: true,
