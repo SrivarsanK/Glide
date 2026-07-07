@@ -78,9 +78,7 @@ Go to **http://localhost:7777** in your browser. Your app will appear inside the
 ## Features
 
 <p align="center">
-    <img width="49%" src="./.github/assets/layers.png" alt="Figma-like Layers Panel"/>
-&nbsp;
-    <img width="49%" src="./.github/assets/properties.png" alt="Properties panel"/>
+    <img src="./ui/guide.png" alt="Glide Visual Editor Guide" width="100%"/>
 </p>
 
 | Feature | Description |
@@ -100,10 +98,6 @@ Go to **http://localhost:7777** in your browser. Your app will appear inside the
 ---
 
 ## Color Picker
-
-<p align="center">
-    <img src="./.github/assets/color_picker.png" alt="Color Picker" width="60%"/>
-</p>
 
 Glide uses a **custom popup color picker** (not the native OS dialog). Click any color swatch to open it. You can:
 - Pick from 16 preset colors
