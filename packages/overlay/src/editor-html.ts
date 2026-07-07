@@ -307,10 +307,6 @@ export function getEditorHTML(port: number): string {
           .layer-item.active .layer-caret { color: #ffffff !important; }
 
           /* Group container: teal left border + subtle bg */
-          .layer-item.group-container {
-            border-left: 2px solid rgba(45,212,191,0.5);
-            padding-left: 6px;
-          }
           .layer-item.group-container .layer-icon-svg { color: #2dd4bf; opacity: 1; }
           .layer-item.group-container .layer-name { color: #5eead4; }
           .layer-item.group-container.active .layer-name { color: #ffffff; }
@@ -380,10 +376,6 @@ export function getEditorHTML(port: number): string {
             flex-shrink: 1;
           }
           /* component root: subtle purple left-border accent */
-          .layer-item.component-root {
-            border-left: 2px solid rgba(167,139,250,0.4);
-            padding-left: 6px;
-          }
           .layer-item.component-root .layer-icon-svg { color: #a78bfa; opacity: 1; }
           /* hidden/locked tint */
           .layer-item.hidden-node { opacity: 0.38; }
