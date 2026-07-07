@@ -4461,6 +4461,7 @@ export function getEditorHTML(port: number): string {
           // NEVER use <input type="color">.click() — that opens the OS dialog which
           // blocks Chrome's event loop and crashes the browser.
           let _cpTarget = null;
+          let _cpAnchor = null;
 
           function cssColorToHex(color) {
             if (!color || color === 'transparent' || color === 'initial') return '#000000';
@@ -4520,6 +4521,7 @@ export function getEditorHTML(port: number): string {
           }
 
           function openColorPopup(anchorEl, config) {
+            _cpAnchor = anchorEl;
             _cpTarget = config;
             const popup  = document.getElementById('glide-color-popup');
             const hexInp = document.getElementById('color-popup-hex');
@@ -4578,13 +4580,24 @@ export function getEditorHTML(port: number): string {
             } else {
               dropBtn.addEventListener('click', async () => {
                 const savedTarget = _cpTarget;
+                const savedAnchor = _cpAnchor;
+                const savedSelected = selectedElement;
                 closeColorPopup(); // dismiss popup first so dropper can see full screen
                 try {
                   const result = await new window.EyeDropper().open();
-                  _cpTarget = savedTarget; // restore target after async
+                  _cpAnchor = savedAnchor;
+                  _cpTarget = savedTarget;
+                  selectedElement = savedSelected;
                   _applyColorToTarget(result.sRGBHex);
-                  _cpTarget = null;
-                } catch(e) { _cpTarget = null; }
+                  openColorPopup(savedAnchor, savedTarget);
+                } catch(e) {
+                  _cpAnchor = savedAnchor;
+                  _cpTarget = savedTarget;
+                  selectedElement = savedSelected;
+                  if (savedAnchor && savedTarget) {
+                    openColorPopup(savedAnchor, savedTarget);
+                  }
+                }
               });
             }
 
