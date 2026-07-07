@@ -3411,9 +3411,10 @@ export function getEditorHTML(port: number): string {
               item.addEventListener('dblclick', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
                 const nameSpan = item.querySelector('.layer-name-text');
-                const original = node.name + (node.text ? ': ' + node.text : '');
+                const originalText = node.text || '';
                 const inp = document.createElement('input');
-                inp.value = node.text || node.name;
+                inp.value = originalText;
+                inp.placeholder = 'Edit text content...';
                 inp.style.cssText = 'background:var(--bg-base);border:1px solid var(--accent-color);color:var(--text-primary);padding:2px 4px;border-radius:3px;font-size:12px;font-family:inherit;outline:none;width:100%;';
                 nameSpan.innerHTML = '';
                 nameSpan.appendChild(inp);
@@ -3441,7 +3442,7 @@ export function getEditorHTML(port: number): string {
 
                 const commit = () => {
                   const newText = inp.value.trim();
-                  if (newText && newText !== (node.text || node.name) && node.text !== undefined) {
+                  if (newText && newText !== originalText) {
                     if (socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({
                         type: 'edit',
