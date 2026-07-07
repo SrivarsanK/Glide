@@ -30,7 +30,7 @@ const BRIDGE_SCRIPT = `
   style.textContent = [
     '[data-glide-hover]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
-    'html, body { overflow: hidden !important; height: auto !important; }',
+    'html, body { overflow: auto !important; height: auto !important; -ms-overflow-style: none !important; scrollbar-width: none !important; } html::-webkit-scrollbar, body::-webkit-scrollbar { display: none !important; }',
     
     /* ── Type Classes Standardized Behaviors ── */
     /* Ensure all inline elements with typography type classes flow as inline-block for precise boundaries & dragging */

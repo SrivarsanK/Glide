@@ -3177,8 +3177,9 @@ export function getEditorHTML(port: number): string {
               const iframe = document.getElementById('app-iframe');
               if (iframe) {
                 const heightInput = document.getElementById('viewport-height-input');
-                const select = document.getElementById('draw-viewport-select');
-                if (select && select.value === 'custom' && (!heightInput || !heightInput.value)) {
+                const triggerText = document.getElementById('viewport-trigger-text');
+                const isCustom = triggerText && triggerText.textContent === 'Custom Mode';
+                if (isCustom && (!heightInput || !heightInput.value)) {
                   iframe.style.height = data.height + 'px';
                 }
               }
