@@ -1,5 +1,5 @@
 /**
- * @glide-dev/overlay — Visual editor UI, bridge, overlay, and snap logic.
+ * @srivarsank/overlay — Visual editor UI, bridge, overlay, and snap logic.
  */
 
 export { getEditorHTML } from './editor-html.js';

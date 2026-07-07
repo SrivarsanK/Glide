@@ -1,5 +1,5 @@
 /**
- * @glide-dev/server — WebSocket server, undo manager, and asset handling.
+ * @srivarsank/server — WebSocket server, undo manager, and asset handling.
  */
 
 export { GlideServer } from './ws-server.js';

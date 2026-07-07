@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/babel-plugin",
+  "name": "@srivarsank/babel-plugin",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

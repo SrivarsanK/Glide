@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/core",
+  "name": "@srivarsank/core",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

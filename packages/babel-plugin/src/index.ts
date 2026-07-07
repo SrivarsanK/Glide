@@ -1,5 +1,5 @@
 /**
- * @glide-dev/babel-plugin — JSX source stamping.
+ * @srivarsank/babel-plugin — JSX source stamping.
  * Injects data-gl-source="path:line:col" onto every JSX element at dev build time.
  */
 

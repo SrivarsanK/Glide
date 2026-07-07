@@ -1,7 +1,7 @@
 export const VERSION = '0.1.0';
 
-export { detectProjectMeta, generateVSCodeConfig } from '@glide-dev/core';
-export { buildComponentTree, getNestingPath } from '@glide-dev/core';
+export { detectProjectMeta, generateVSCodeConfig } from '@srivarsank/core';
+export { buildComponentTree, getNestingPath } from '@srivarsank/core';
 export { 
   updateClassName, 
   updateJSXText, 
@@ -16,12 +16,12 @@ export {
   updateCSSModuleRule,
   parseTailwindClasses,
   updateTailwindClasses
-} from '@glide-dev/ast-writer';
-export { updateVueSFCClass } from '@glide-dev/adapter-vue';
-export { updateSvelteClass } from '@glide-dev/adapter-svelte';
-export { updateHTMLClass, updateHTMLText, parseHTMLToReact, getElementClass } from '@glide-dev/adapter-html';
-export { GlideServer, HistoryManager, saveUploadedAsset } from '@glide-dev/server';
-export { getEditorHTML, GlideBridge, GlideOverlay, snapToGrid, measureTextLayout, resolveActiveBreakpoint } from '@glide-dev/overlay';
-export { glideSourceStamping } from '@glide-dev/vite-plugin';
+} from '@srivarsank/ast-writer';
+export { updateVueSFCClass } from '@srivarsank/adapter-vue';
+export { updateSvelteClass } from '@srivarsank/adapter-svelte';
+export { updateHTMLClass, updateHTMLText, parseHTMLToReact, getElementClass } from '@srivarsank/adapter-html';
+export { GlideServer, HistoryManager, saveUploadedAsset } from '@srivarsank/server';
+export { getEditorHTML, GlideBridge, GlideOverlay, snapToGrid, measureTextLayout, resolveActiveBreakpoint } from '@srivarsank/overlay';
+export { glideSourceStamping } from '@srivarsank/vite-plugin';
 
 

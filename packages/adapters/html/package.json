@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/adapter-html",
+  "name": "@srivarsank/adapter-html",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

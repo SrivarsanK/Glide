@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/adapter-svelte",
+  "name": "@srivarsank/adapter-svelte",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

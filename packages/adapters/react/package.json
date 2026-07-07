@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/adapter-react",
+  "name": "@srivarsank/adapter-react",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -9,7 +9,7 @@
   "types": "dist/index.d.ts",
   "scripts": { "build": "tsc", "dev": "tsc --watch" },
   "dependencies": {
-    "@glide-dev/core": "*",
+    "@srivarsank/core": "*",
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
     "@babel/generator": "^7.24.0",

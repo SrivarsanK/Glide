@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/overlay",
+  "name": "@srivarsank/overlay",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",
-    "@glide-dev/core": "*",
+    "@srivarsank/core": "*",
     "jotai": "^2.20.1"
   },
   "devDependencies": {

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { GlideServer, pushHistory } from '@glide-dev/server';
-import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@glide-dev/ast-writer';
-import { groupJSXElements, ungroupJSXElement } from '@glide-dev/ast-writer';
-import { updateVueSFCClass } from '@glide-dev/adapter-vue';
-import { updateSvelteClass } from '@glide-dev/adapter-svelte';
-import { updateHTMLClass, updateHTMLText, getElementClass } from '@glide-dev/adapter-html';
+import { GlideServer, pushHistory } from '@srivarsank/server';
+import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@srivarsank/ast-writer';
+import { groupJSXElements, ungroupJSXElement } from '@srivarsank/ast-writer';
+import { updateVueSFCClass } from '@srivarsank/adapter-vue';
+import { updateSvelteClass } from '@srivarsank/adapter-svelte';
+import { updateHTMLClass, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
 import * as fs from 'fs';
 import * as path from 'path';
 

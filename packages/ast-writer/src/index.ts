@@ -1,5 +1,5 @@
 /**
- * @glide-dev/ast-writer — AST-based source file manipulation.
+ * @srivarsank/ast-writer — AST-based source file manipulation.
  */
 
 export { findJSXElementAt, updateClassName, updateJSXText, updateClassString, updateJSXStyleProp, computeNodeHash } from './writer.js';

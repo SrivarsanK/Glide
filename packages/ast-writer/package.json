@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/ast-writer",
+  "name": "@srivarsank/ast-writer",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -22,7 +22,7 @@
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
     "@babel/types": "^7.24.0",
-    "@glide-dev/core": "*",
+    "@srivarsank/core": "*",
     "postcss": "^8.0.0",
     "recast": "^0.23.12"
   },

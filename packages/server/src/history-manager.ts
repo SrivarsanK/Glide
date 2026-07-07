@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { HistoryEntry, FileDiff } from '@glide-dev/core';
+import { HistoryEntry, FileDiff } from '@srivarsank/core';
 
 // --- State (module-level, in-memory only) ---
 

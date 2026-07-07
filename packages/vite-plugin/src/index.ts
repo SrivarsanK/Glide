@@ -2,7 +2,7 @@ import { Plugin } from 'vite';
 import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
-import glideSourceStampingPlugin from '@glide-dev/babel-plugin';
+import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);

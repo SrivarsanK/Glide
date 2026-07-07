@@ -1,5 +1,5 @@
 {
-  "name": "@glide-dev/cli",
+  "name": "@srivarsank/cli",
   "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -12,11 +12,11 @@
   "types": "dist/index.d.ts",
   "scripts": { "build": "tsc", "dev": "tsc --watch" },
   "dependencies": {
-    "@glide-dev/server": "*",
-    "@glide-dev/ast-writer": "*",
-    "@glide-dev/adapter-vue": "*",
-    "@glide-dev/adapter-svelte": "*",
-    "@glide-dev/adapter-html": "*"
+    "@srivarsank/server": "*",
+    "@srivarsank/ast-writer": "*",
+    "@srivarsank/adapter-vue": "*",
+    "@srivarsank/adapter-svelte": "*",
+    "@srivarsank/adapter-html": "*"
   },
   "devDependencies": {
     "typescript": "^5.4.2"

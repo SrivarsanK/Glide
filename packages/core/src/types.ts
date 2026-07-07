@@ -1,6 +1,6 @@
 /**
  * Shared types for the Glide visual editor.
- * All packages import types from @glide-dev/core.
+ * All packages import types from @srivarsank/core.
  */
 
 // ── Scene Graph Types ──────────────────────────────────────────────────

@@ -1,11 +1,11 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server } from 'http';
 import * as fs from 'fs';
-import { getEditorHTML } from '@glide-dev/overlay';
-import { buildComponentTree } from '@glide-dev/core';
+import { getEditorHTML } from '@srivarsank/overlay';
+import { buildComponentTree } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@glide-dev/ast-writer';
+import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@srivarsank/ast-writer';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { HistoryManager } from './undo-manager.js';

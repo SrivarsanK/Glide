@@ -1,5 +1,5 @@
 /**
- * @glide-dev/core — Shared types, utilities, and framework detection.
+ * @srivarsank/core — Shared types, utilities, and framework detection.
  */
 
 export * from './types.js';

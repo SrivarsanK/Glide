@@ -7,7 +7,7 @@ import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 import _generate from '@babel/generator';
 import * as t from '@babel/types';
-import type { FrameworkAdapter, AdapterAST, AdapterNode, StyleChange } from '@glide-dev/core';
+import type { FrameworkAdapter, AdapterAST, AdapterNode, StyleChange } from '@srivarsank/core';
 
 const traverse = (_traverse as any).default || _traverse;
 const generate = (_generate as any).default || _generate;
