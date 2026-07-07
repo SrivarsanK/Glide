@@ -2305,12 +2305,22 @@ export function getEditorHTML(port: number): string {
             applyTransform();
           }
 
-          // Ctrl+Scroll zoom
+          // Ctrl+Scroll zoom, normal Scroll to scroll iframe
           document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
               e.preventDefault();
               zoomLevel = Math.min(4, Math.max(0.1, zoomLevel - e.deltaY * 0.001));
               applyTransform();
+            } else {
+              e.preventDefault();
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.scrollBy({
+                  top: e.deltaY,
+                  left: e.deltaX,
+                  behavior: 'auto'
+                });
+              }
             }
           }, { passive: false });
 
