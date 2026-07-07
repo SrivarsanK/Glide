@@ -41,6 +41,15 @@ const externals = [
   'os'
 ];
 
+const esmBanner = `
+import { createRequire as __createRequire } from 'module';
+import { fileURLToPath as __fileURLToPath } from 'url';
+import { dirname as __dirnameFunc } from 'path';
+const require = __createRequire(import.meta.url);
+const __filename = __fileURLToPath(import.meta.url);
+const __dirname = __dirnameFunc(__filename);
+`;
+
 async function runBuild() {
   console.log('Bundling ESM Javascript files with esbuild...');
 
@@ -52,6 +61,9 @@ async function runBuild() {
     platform: 'node',
     target: 'node20',
     format: 'esm',
+    banner: {
+      js: esmBanner,
+    },
     external: externals,
   });
 
@@ -64,7 +76,7 @@ async function runBuild() {
     target: 'node20',
     format: 'esm',
     banner: {
-      js: '#!/usr/bin/env node',
+      js: `#!/usr/bin/env node\n${esmBanner}`,
     },
     external: externals,
   });
@@ -77,6 +89,9 @@ async function runBuild() {
     platform: 'node',
     target: 'node20',
     format: 'esm',
+    banner: {
+      js: esmBanner,
+    },
     external: externals,
   });
 
@@ -88,6 +103,9 @@ async function runBuild() {
     platform: 'node',
     target: 'node20',
     format: 'esm',
+    banner: {
+      js: esmBanner,
+    },
     external: externals,
   });
 
