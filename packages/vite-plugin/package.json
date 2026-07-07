@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/vite-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -14,7 +14,7 @@
   "dependencies": {
     "@babel/core": "^7.24.0",
     "@babel/parser": "^7.24.0",
-    "@srivarsank/babel-plugin": "^1.0.0"
+    "@srivarsank/babel-plugin": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.4.2",

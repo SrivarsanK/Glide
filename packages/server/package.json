@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -12,7 +12,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@srivarsank/core": "^1.0.0",
+    "@srivarsank/core": "^1.0.1",
     "chokidar": "^3.6.0",
     "ws": "^8.16.0"
   },

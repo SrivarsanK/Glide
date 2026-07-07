@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -15,11 +15,11 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@srivarsank/adapter-html": "^1.0.0",
-    "@srivarsank/adapter-svelte": "^1.0.0",
-    "@srivarsank/adapter-vue": "^1.0.0",
-    "@srivarsank/ast-writer": "^1.0.0",
-    "@srivarsank/server": "^1.0.0"
+    "@srivarsank/adapter-html": "^1.0.1",
+    "@srivarsank/adapter-svelte": "^1.0.1",
+    "@srivarsank/adapter-vue": "^1.0.1",
+    "@srivarsank/ast-writer": "^1.0.1",
+    "@srivarsank/server": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.4.2"
