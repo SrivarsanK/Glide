@@ -1063,34 +1063,25 @@ export function getEditorHTML(port: number): string {
 
           <!-- Viewport & Zoom Controls (Right) -->
           <div style="display: flex; align-items: center; gap: 8px;">
-            <!-- Viewport Label / Dropdown -->
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <select id="draw-viewport-select" class="props-select" style="width: 185px; font-size: 11px; font-family: inherit; height: 28px; padding: 0 8px; background: var(--bg-element); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; cursor: pointer; outline: none;">
-                <optgroup label="📱 Phones">
-                  <option value="1290" data-height="2796">iPhone 15 Pro Max (1290×2796)</option>
-                  <option value="1170" data-height="2532">iPhone 15 Pro (1170×2532)</option>
-                  <option value="1179" data-height="2556">iPhone 15 (1179×2556)</option>
-                  <option value="390" data-height="844">iPhone 13 / 14 / 14 Pro (390×844)</option>
-                  <option value="375" data-height="667">iPhone SE (375×667)</option>
-                  <option value="360" data-height="640">Android Small (360×640)</option>
-                </optgroup>
-                <optgroup label="📟 Tablets">
-                  <option value="834" data-height="1194">iPad Pro 11&quot; (834×1194)</option>
-                  <option value="768" data-height="1024">iPad Mini (768×1024)</option>
-                  <option value="1280" data-height="720">Surface Pro 8 (1280×720)</option>
-                </optgroup>
-                <optgroup label="💻 Desktop & Laptops">
-                  <option value="1440" data-height="1024" selected>Desktop (Default) (1440×1024)</option>
-                  <option value="1728" data-height="1117">MacBook Pro 16&quot; (1728×1117)</option>
-                  <option value="1280" data-height="832">MacBook Air 13&quot; (1280×832)</option>
-                </optgroup>
-                <option value="custom">⚙ Custom Mode</option>
-              </select>
+            <!-- Custom Dropdown Container -->
+            <div class="custom-dropdown" id="viewport-dropdown-container" style="position: relative;">
+              <button class="dropdown-trigger" id="viewport-dropdown-trigger" style="height: 28px; padding: 0 10px; background: var(--bg-element); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; font-size: 11px; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; width: 185px; text-align: left; justify-content: space-between;">
+                <span id="viewport-trigger-text">Desktop (Default)</span>
+                <i data-lucide="chevron-down" style="width: 12px; height: 12px; opacity: 0.6;"></i>
+              </button>
               
-              <!-- Custom Width & Height Inputs -->
-              <input type="number" id="viewport-width-input" value="1440" placeholder="W" style="width: 50px; height: 28px; font-size: 11px; text-align: center; border: 1px solid var(--border-color); background: var(--bg-element); color: #fff; border-radius: 6px; outline: none;" title="Viewport Width">
-              <span style="color: var(--text-secondary); font-size: 11px; user-select: none;">×</span>
-              <input type="number" id="viewport-height-input" value="1024" placeholder="H" style="width: 50px; height: 28px; font-size: 11px; text-align: center; border: 1px solid var(--border-color); background: var(--bg-element); color: #fff; border-radius: 6px; outline: none;" title="Viewport Height">
+              <!-- Dropdown Menu Options Panel -->
+              <div class="dropdown-menu" id="viewport-dropdown-menu" style="display: none; position: absolute; top: 32px; left: 0; width: 230px; background: #2c2c2c; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); z-index: 1000; padding: 4px 0; overflow-y: auto; max-height: 400px; font-family: inherit;">
+              </div>
+            </div>
+
+            <!-- Custom Width & Height Inputs (Unified Capsule Widget) -->
+            <div style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 8px; height: 28px; gap: 4px;">
+              <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">W</span>
+              <input type="number" id="viewport-width-input" value="1440" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
+              <span style="color: var(--text-secondary); font-size: 10px; user-select: none;">×</span>
+              <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">H</span>
+              <input type="number" id="viewport-height-input" value="1024" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
             </div>
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
@@ -5276,31 +5267,157 @@ export function getEditorHTML(port: number): string {
             });
           }
 
-          // Viewport Select & Custom W x H Inputs
-          const drawViewportSelect = document.getElementById('draw-viewport-select');
+          // Custom Viewport Dropdown & Capsule Inputs Logic
+          const viewportPresets = [
+            {
+              category: 'Phones',
+              items: [
+                { id: '1290', name: 'iPhone 15 Pro Max', width: 1290, height: 2796 },
+                { id: '1170', name: 'iPhone 15 Pro', width: 1170, height: 2532 },
+                { id: '1179', name: 'iPhone 15', width: 1179, height: 2556 },
+                { id: '390', name: 'iPhone 13 / 14 / 14 Pro', width: 390, height: 844 },
+                { id: '375', name: 'iPhone SE', width: 375, height: 667 },
+                { id: '360', name: 'Android Small', width: 360, height: 640 }
+              ]
+            },
+            {
+              category: 'Tablets',
+              items: [
+                { id: '834', name: 'iPad Pro 11"', width: 834, height: 1194 },
+                { id: '768', name: 'iPad Mini', width: 768, height: 1024 },
+                { id: '1280_tablet', name: 'Surface Pro 8', width: 1280, height: 720 }
+              ]
+            },
+            {
+              category: 'Desktop & Laptops',
+              items: [
+                { id: '1440', name: 'Desktop (Default)', width: 1440, height: 1024 },
+                { id: '1728', name: 'MacBook Pro 16"', width: 1728, height: 1117 },
+                { id: '1280', name: 'MacBook Air 13"', width: 1280, height: 832 }
+              ]
+            }
+          ];
+
           const vpWidthInput = document.getElementById('viewport-width-input');
           const vpHeightInput = document.getElementById('viewport-height-input');
 
-          if (drawViewportSelect && vpWidthInput && vpHeightInput) {
-            drawViewportSelect.addEventListener('change', (e) => {
-              const val = e.target.value;
-              if (val === 'custom') {
-                vpWidthInput.select();
-              } else {
-                const w = parseInt(val, 10);
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                const h = parseInt(selectedOption.getAttribute('data-height') || '1024', 10);
+          function buildViewportDropdown() {
+            const menu = document.getElementById('viewport-dropdown-menu');
+            if (!menu) return;
+            menu.innerHTML = '';
+
+            viewportPresets.forEach(group => {
+              const header = document.createElement('div');
+              header.className = 'dropdown-group-header';
+              header.style.cssText = 'padding: 6px 12px; font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.03); margin-top: 4px;';
+              header.textContent = group.category;
+              menu.appendChild(header);
+
+              group.items.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'dropdown-item';
+                row.style.cssText = 'padding: 6px 12px; font-size: 11px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #e0e0e0; transition: background 0.1s, color 0.1s;';
                 
-                if (!isNaN(w) && !isNaN(h)) {
-                  vpWidthInput.value = w;
-                  vpHeightInput.value = h;
-                  setIframeWidth(w);
-                  setIframeHeight(h);
-                  fitToScreen();
+                const isSelected = (iframeWidth.current === item.width && document.getElementById('app-iframe').style.height === item.height + 'px');
+                if (isSelected) {
+                  row.style.background = 'rgba(13, 153, 255, 0.15)';
+                  row.style.color = '#0d99ff';
+                  row.style.fontWeight = '600';
+                }
+
+                row.innerHTML = '<span class="item-name">' + item.name + '</span>' +
+                  '<span class="item-dims" style="font-size: 10px; color: ' + (isSelected ? '#0d99ff' : '#666') + ';">' + item.width + ' × ' + item.height + '</span>';
+
+                row.addEventListener('mouseenter', () => {
+                  row.style.background = '#0d99ff';
+                  row.style.color = '#fff';
+                  row.querySelector('.item-dims').style.color = 'rgba(255,255,255,0.7)';
+                });
+
+                row.addEventListener('mouseleave', () => {
+                  if (isSelected) {
+                    row.style.background = 'rgba(13, 153, 255, 0.15)';
+                    row.style.color = '#0d99ff';
+                    row.querySelector('.item-dims').style.color = '#0d99ff';
+                  } else {
+                    row.style.background = 'transparent';
+                    row.style.color = '#e0e0e0';
+                    row.querySelector('.item-dims').style.color = '#666';
+                  }
+                });
+
+                row.addEventListener('click', () => {
+                  selectPreset(item);
+                  menu.style.display = 'none';
+                });
+
+                menu.appendChild(row);
+              });
+            });
+
+            const divider = document.createElement('div');
+            divider.style.cssText = 'height: 1px; background: rgba(255,255,255,0.06); margin: 4px 0;';
+            menu.appendChild(divider);
+
+            const customRow = document.createElement('div');
+            customRow.className = 'dropdown-item';
+            customRow.style.cssText = 'padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #e0e0e0; transition: background 0.1s, color 0.1s;';
+            customRow.innerHTML = '<i data-lucide="settings" style="width: 12px; height: 12px; opacity: 0.6;"></i> <span style="margin-left:4px;">Custom Mode</span>';
+            
+            customRow.addEventListener('mouseenter', () => {
+              customRow.style.background = '#0d99ff';
+              customRow.style.color = '#fff';
+            });
+            customRow.addEventListener('mouseleave', () => {
+              customRow.style.background = 'transparent';
+              customRow.style.color = '#e0e0e0';
+            });
+            customRow.addEventListener('click', () => {
+              const triggerText = document.getElementById('viewport-trigger-text');
+              if (triggerText) triggerText.textContent = 'Custom Mode';
+              vpWidthInput.select();
+              menu.style.display = 'none';
+            });
+
+            menu.appendChild(customRow);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+          }
+
+          function selectPreset(item) {
+            const triggerText = document.getElementById('viewport-trigger-text');
+            if (triggerText) triggerText.textContent = item.name;
+            if (vpWidthInput) vpWidthInput.value = item.width;
+            if (vpHeightInput) vpHeightInput.value = item.height;
+            setIframeWidth(item.width);
+            setIframeHeight(item.height);
+            fitToScreen();
+          }
+
+          // Close dropdown click-outside
+          window.addEventListener('click', (e) => {
+            const container = document.getElementById('viewport-dropdown-container');
+            const menu = document.getElementById('viewport-dropdown-menu');
+            if (container && menu && !container.contains(e.target)) {
+              menu.style.display = 'none';
+            }
+          });
+
+          const viewportTrigger = document.getElementById('viewport-dropdown-trigger');
+          if (viewportTrigger) {
+            viewportTrigger.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const menu = document.getElementById('viewport-dropdown-menu');
+              if (menu) {
+                const isOpen = menu.style.display === 'block';
+                menu.style.display = isOpen ? 'none' : 'block';
+                if (!isOpen) {
+                  buildViewportDropdown();
                 }
               }
             });
+          }
 
+          if (vpWidthInput && vpHeightInput) {
             const updateCustomSize = () => {
               const w = parseInt(vpWidthInput.value, 10);
               const h = parseInt(vpHeightInput.value, 10);
@@ -5310,7 +5427,8 @@ export function getEditorHTML(port: number): string {
               if (!isNaN(h) && h >= 100 && h <= 4000) {
                 setIframeHeight(h);
               }
-              drawViewportSelect.value = 'custom';
+              const triggerText = document.getElementById('viewport-trigger-text');
+              if (triggerText) triggerText.textContent = 'Custom Mode';
             };
 
             vpWidthInput.addEventListener('change', updateCustomSize);
