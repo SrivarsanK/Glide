@@ -163,6 +163,8 @@ const BRIDGE_SCRIPT = `
       isHover: type === 'glide:element-hovered',
       computedStyles: computedStyles,
       textContent: (function() {
+        // Only allow text editing for leaf text nodes (no child element nodes)
+        if (el.children && el.children.length > 0) return undefined;
         // Collect only direct JSXText children (not text from nested elements)
         var directText = '';
         el.childNodes.forEach(function(n) {
@@ -947,7 +949,7 @@ const BRIDGE_SCRIPT = `
         }
       });
 
-      if (hasText) {
+      if (hasText && (!el.children || el.children.length === 0)) {
         var originalText = el.textContent;
         el.contentEditable = "true";
         el.focus();
