@@ -195,16 +195,16 @@ const BRIDGE_SCRIPT = `
   // Compute six snap candidates (left/right/hCenter, top/bottom/vCenter) from a rect.
   function xCandidates(r) {
     return [
-      { pos: r.left,                isCenter: false },
-      { pos: r.right,               isCenter: false },
-      { pos: r.left + r.width / 2,  isCenter: true  },
+      { pos: r.left,                isCenter: false, rect: r },
+      { pos: r.right,               isCenter: false, rect: r },
+      { pos: r.left + r.width / 2,  isCenter: true,  rect: r },
     ];
   }
   function yCandidates(r) {
     return [
-      { pos: r.top,                  isCenter: false },
-      { pos: r.bottom,               isCenter: false },
-      { pos: r.top + r.height / 2,   isCenter: true  },
+      { pos: r.top,                  isCenter: false, rect: r },
+      { pos: r.bottom,               isCenter: false, rect: r },
+      { pos: r.top + r.height / 2,   isCenter: true,  rect: r },
     ];
   }
   // Drag element's own snap anchors at the current offset.
@@ -223,13 +223,14 @@ const BRIDGE_SCRIPT = `
     ];
   }
 
-  // Resolve snap on one axis. Returns { snappedOffset, guidePosition }.
+  // Resolve snap on one axis. Returns { snappedOffset, guidePosition, rect }.
   // No snap fires if no candidate is within threshold (constraint #6).
   function resolveSnapAxis(rawOffset, dragAnchors, sibCands, threshold) {
     var bestDelta = Infinity;
     var bestGuide = null;
     var bestIsCenter = true;
     var bestAnchorOffset = 0;
+    var bestRect = null;
     for (var i = 0; i < dragAnchors.length; i++) {
       var da = dragAnchors[i];
       for (var j = 0; j < sibCands.length; j++) {
@@ -249,10 +250,11 @@ const BRIDGE_SCRIPT = `
           bestGuide        = cp.pos;
           bestIsCenter     = currentIsCenter;
           bestAnchorOffset = cp.pos - da.anchor;
+          bestRect         = cp.rect;
         }
       }
     }
-    return { snappedOffset: bestGuide === null ? rawOffset : rawOffset + bestAnchorOffset, guidePosition: bestGuide };
+    return { snappedOffset: bestGuide === null ? rawOffset : rawOffset + bestAnchorOffset, guidePosition: bestGuide, rect: bestRect };
   }
 
   // Full object-snap: resolve X and Y independently, return guides.
@@ -269,10 +271,105 @@ const BRIDGE_SCRIPT = `
     }
     var xr = resolveSnapAxis(dx, dragXAnchors(dragRect, dx), xCands, OUR_SNAP_THRESHOLD_PX);
     var yr = resolveSnapAxis(dy, dragYAnchors(dragRect, dy), yCands, OUR_SNAP_THRESHOLD_PX);
+    
     var guides = [];
-    if (xr.guidePosition !== null) guides.push({ axis: 'x', position: xr.guidePosition });
-    if (yr.guidePosition !== null) guides.push({ axis: 'y', position: yr.guidePosition });
-    return { dx: xr.snappedOffset, dy: yr.snappedOffset, guides: guides };
+    var snappedDx = xr.snappedOffset;
+    var snappedDy = yr.snappedOffset;
+
+    if (xr.guidePosition !== null && xr.rect) {
+      var y1 = Math.min(dragRect.top + snappedDy, xr.rect.top);
+      var y2 = Math.max(dragRect.bottom + snappedDy, xr.rect.bottom);
+      guides.push({
+        type: 'snap-line',
+        x1: xr.guidePosition,
+        y1: y1,
+        x2: xr.guidePosition,
+        y2: y2
+      });
+    }
+    if (yr.guidePosition !== null && yr.rect) {
+      var x1 = Math.min(dragRect.left + snappedDx, yr.rect.left);
+      var x2 = Math.max(dragRect.right + snappedDx, yr.rect.right);
+      guides.push({
+        type: 'snap-line',
+        x1: x1,
+        y1: yr.guidePosition,
+        x2: x2,
+        y2: yr.guidePosition
+      });
+    }
+
+    // Adjacent distance indicators
+    for (var i = 0; i < siblings.length; i++) {
+      var s = siblings[i];
+      // Check horizontal alignment
+      var dTop = Math.abs((dragRect.top + snappedDy) - s.top);
+      var dBottom = Math.abs((dragRect.bottom + snappedDy) - s.bottom);
+      if (dTop < 2 || dBottom < 2) {
+        if (dragRect.left + snappedDx > s.right) {
+          var gap = (dragRect.left + snappedDx) - s.right;
+          if (gap > 0 && gap < 120) {
+            var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
+            guides.push({
+              type: 'distance-indicator',
+              x1: s.right,
+              y1: midY,
+              x2: dragRect.left + snappedDx,
+              y2: midY,
+              text: Math.round(gap) + 'px'
+            });
+          }
+        } else if (s.left > dragRect.right + snappedDx) {
+          var gap = s.left - (dragRect.right + snappedDx);
+          if (gap > 0 && gap < 120) {
+            var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
+            guides.push({
+              type: 'distance-indicator',
+              x1: dragRect.right + snappedDx,
+              y1: midY,
+              x2: s.left,
+              y2: midY,
+              text: Math.round(gap) + 'px'
+            });
+          }
+        }
+      }
+
+      // Check vertical alignment
+      var dLeft = Math.abs((dragRect.left + snappedDx) - s.left);
+      var dRight = Math.abs((dragRect.right + snappedDx) - s.right);
+      if (dLeft < 2 || dRight < 2) {
+        if (dragRect.top + snappedDy > s.bottom) {
+          var gap = (dragRect.top + snappedDy) - s.bottom;
+          if (gap > 0 && gap < 120) {
+            var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
+            guides.push({
+              type: 'distance-indicator',
+              x1: midX,
+              y1: s.bottom,
+              x2: midX,
+              y2: dragRect.top + snappedDy,
+              text: Math.round(gap) + 'px'
+            });
+          }
+        } else if (s.top > dragRect.bottom + snappedDy) {
+          var gap = s.top - (dragRect.bottom + snappedDy);
+          if (gap > 0 && gap < 120) {
+            var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
+            guides.push({
+              type: 'distance-indicator',
+              x1: midX,
+              y1: dragRect.bottom + snappedDy,
+              x2: midX,
+              y2: s.top,
+              text: Math.round(gap) + 'px'
+            });
+          }
+        }
+      }
+    }
+
+    return { dx: snappedDx, dy: snappedDy, guides: guides };
   }
 
   // Pixel-grid snap — separate final pass (spec constraint #5).
@@ -285,6 +382,9 @@ const BRIDGE_SCRIPT = `
     var parent = el.parentNode;
     if (!parent) return [];
     var rects = [];
+    if (parent && parent.getBoundingClientRect && parent.tagName.toLowerCase() !== 'body' && parent.tagName.toLowerCase() !== 'html') {
+      rects.push(parent.getBoundingClientRect());
+    }
     var children = parent.querySelectorAll('[data-gl-source]');
     for (var i = 0; i < children.length; i++) {
       if (children[i] === el) continue; // skip the dragged element itself

@@ -2701,21 +2701,102 @@ export function getEditorHTML(port: number): string {
             gGroup.innerHTML = '';
             
             guides.forEach(guide => {
-              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-              if (guide.axis === 'x') {
-                line.setAttribute('x1', guide.position);
-                line.setAttribute('y1', '0');
-                line.setAttribute('x2', guide.position);
-                line.setAttribute('y2', '100%');
+              if (guide.type === 'distance-indicator') {
+                // Distance indicator line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', guide.x1);
+                line.setAttribute('y1', guide.y1);
+                line.setAttribute('x2', guide.x2);
+                line.setAttribute('y2', guide.y2);
+                line.setAttribute('stroke', '#ff4444');
+                line.setAttribute('stroke-width', '1.5');
+                gGroup.appendChild(line);
+
+                // Start cross-tick
+                const tick1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                if (guide.y1 === guide.y2) {
+                  // Horizontal line, vertical ticks
+                  tick1.setAttribute('x1', guide.x1);
+                  tick1.setAttribute('y1', guide.y1 - 4);
+                  tick1.setAttribute('x2', guide.x1);
+                  tick1.setAttribute('y2', guide.y1 + 4);
+                } else {
+                  // Vertical line, horizontal ticks
+                  tick1.setAttribute('x1', guide.x1 - 4);
+                  tick1.setAttribute('y1', guide.y1);
+                  tick1.setAttribute('x2', guide.x1 + 4);
+                  tick1.setAttribute('y2', guide.y1);
+                }
+                tick1.setAttribute('stroke', '#ff4444');
+                tick1.setAttribute('stroke-width', '1.5');
+                gGroup.appendChild(tick1);
+
+                // End cross-tick
+                const tick2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                if (guide.y1 === guide.y2) {
+                  tick2.setAttribute('x1', guide.x2);
+                  tick2.setAttribute('y1', guide.y2 - 4);
+                  tick2.setAttribute('x2', guide.x2);
+                  tick2.setAttribute('y2', guide.y2 + 4);
+                } else {
+                  tick2.setAttribute('x1', guide.x2 - 4);
+                  tick2.setAttribute('y1', guide.y2);
+                  tick2.setAttribute('x2', guide.x2 + 4);
+                  tick2.setAttribute('y2', guide.y2);
+                }
+                tick2.setAttribute('stroke', '#ff4444');
+                tick2.setAttribute('stroke-width', '1.5');
+                gGroup.appendChild(tick2);
+
+                // Text background rect
+                const midX = (parseFloat(guide.x1) + parseFloat(guide.x2)) / 2;
+                const midY = (parseFloat(guide.y1) + parseFloat(guide.y2)) / 2;
+
+                const textBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                textBg.setAttribute('x', midX - 16);
+                textBg.setAttribute('y', midY - 8);
+                textBg.setAttribute('width', '32');
+                textBg.setAttribute('height', '16');
+                textBg.setAttribute('fill', '#ff4444');
+                textBg.setAttribute('rx', '3');
+                gGroup.appendChild(textBg);
+
+                // Text node
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', midX);
+                text.setAttribute('y', midY + 4);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', '#ffffff');
+                text.setAttribute('font-size', '9px');
+                text.setAttribute('font-family', 'monospace');
+                text.setAttribute('font-weight', '700');
+                text.textContent = guide.text.replace('px', '');
+                gGroup.appendChild(text);
               } else {
-                line.setAttribute('x1', '0');
-                line.setAttribute('y1', guide.position);
-                line.setAttribute('x2', '100%');
-                line.setAttribute('y2', guide.position);
+                // Snap line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                if (guide.x1 !== undefined) {
+                  line.setAttribute('x1', guide.x1);
+                  line.setAttribute('y1', guide.y1);
+                  line.setAttribute('x2', guide.x2);
+                  line.setAttribute('y2', guide.y2);
+                } else {
+                  if (guide.axis === 'x') {
+                    line.setAttribute('x1', guide.position);
+                    line.setAttribute('y1', '0');
+                    line.setAttribute('x2', guide.position);
+                    line.setAttribute('y2', '100%');
+                  } else {
+                    line.setAttribute('x1', '0');
+                    line.setAttribute('y1', guide.position);
+                    line.setAttribute('x2', '100%');
+                    line.setAttribute('y2', guide.position);
+                  }
+                }
+                line.setAttribute('stroke', '#ff4444');
+                line.setAttribute('stroke-width', '1');
+                gGroup.appendChild(line);
               }
-              line.setAttribute('stroke', '#38bdf8'); // Accent color
-              line.setAttribute('stroke-width', '1');
-              gGroup.appendChild(line);
             });
           }
 
