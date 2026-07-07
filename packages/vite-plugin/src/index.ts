@@ -191,6 +191,7 @@ const BRIDGE_SCRIPT = `
   var snapDisabledForDrag = false; // true while Ctrl/Cmd is held during a drag
   var dragStartRect = null;        // live rect captured fresh on drag start
   var siblingRects  = [];          // fresh rects of siblings, captured on drag start
+  var userGuides    = [];          // synchronized user-created ruler guides
 
   // Compute six snap candidates (left/right/hCenter, top/bottom/vCenter) from a rect.
   function xCandidates(r) {
@@ -269,6 +270,14 @@ const BRIDGE_SCRIPT = `
       xCands = xCands.concat(xCandidates(s));
       yCands = yCands.concat(yCandidates(s));
     }
+    for (var i = 0; i < userGuides.length; i++) {
+      var ug = userGuides[i];
+      if (ug.axis === 'x') {
+        xCands.push({ pos: ug.position, isCenter: false, rect: null });
+      } else {
+        yCands.push({ pos: ug.position, isCenter: false, rect: null });
+      }
+    }
     var xr = resolveSnapAxis(dx, dragXAnchors(dragRect, dx), xCands, OUR_SNAP_THRESHOLD_PX);
     var yr = resolveSnapAxis(dy, dragYAnchors(dragRect, dy), yCands, OUR_SNAP_THRESHOLD_PX);
     
@@ -276,27 +285,59 @@ const BRIDGE_SCRIPT = `
     var snappedDx = xr.snappedOffset;
     var snappedDy = yr.snappedOffset;
 
-    if (xr.guidePosition !== null && xr.rect) {
-      var y1 = Math.min(dragRect.top + snappedDy, xr.rect.top);
-      var y2 = Math.max(dragRect.bottom + snappedDy, xr.rect.bottom);
-      guides.push({
-        type: 'snap-line',
-        x1: xr.guidePosition,
-        y1: y1,
-        x2: xr.guidePosition,
-        y2: y2
-      });
+    if (xr.guidePosition !== null) {
+      if (xr.rect) {
+        for (var i = 0; i < siblings.length; i++) {
+          var s = siblings[i];
+          var cands = xCandidates(s);
+          for (var j = 0; j < cands.length; j++) {
+            if (Math.abs(cands[j].pos - xr.guidePosition) < 0.1) {
+              var y1 = Math.min(dragRect.top + snappedDy, s.top);
+              var y2 = Math.max(dragRect.bottom + snappedDy, s.bottom);
+              guides.push({
+                type: 'snap-line',
+                x1: xr.guidePosition,
+                y1: y1,
+                x2: xr.guidePosition,
+                y2: y2
+              });
+            }
+          }
+        }
+      } else {
+        guides.push({
+          type: 'snap-line',
+          axis: 'x',
+          position: xr.guidePosition
+        });
+      }
     }
-    if (yr.guidePosition !== null && yr.rect) {
-      var x1 = Math.min(dragRect.left + snappedDx, yr.rect.left);
-      var x2 = Math.max(dragRect.right + snappedDx, yr.rect.right);
-      guides.push({
-        type: 'snap-line',
-        x1: x1,
-        y1: yr.guidePosition,
-        x2: x2,
-        y2: yr.guidePosition
-      });
+    if (yr.guidePosition !== null) {
+      if (yr.rect) {
+        for (var i = 0; i < siblings.length; i++) {
+          var s = siblings[i];
+          var cands = yCandidates(s);
+          for (var j = 0; j < cands.length; j++) {
+            if (Math.abs(cands[j].pos - yr.guidePosition) < 0.1) {
+              var x1 = Math.min(dragRect.left + snappedDx, s.left);
+              var x2 = Math.max(dragRect.right + snappedDx, s.right);
+              guides.push({
+                type: 'snap-line',
+                x1: x1,
+                y1: yr.guidePosition,
+                x2: x2,
+                y2: yr.guidePosition
+              });
+            }
+          }
+        }
+      } else {
+        guides.push({
+          type: 'snap-line',
+          axis: 'y',
+          position: yr.guidePosition
+        });
+      }
     }
 
     // Adjacent distance indicators
@@ -425,6 +466,16 @@ const BRIDGE_SCRIPT = `
     var snap = resolveObjectSnap(dragStartRect, currentDx, currentDy, siblingRects);
     var snappedDx = snap.dx;
     var snappedDy = snap.dy;
+    
+    if (snapPixelEnabled) {
+      var rawLeft = initialLeft + snappedDx;
+      var rawTop = initialTop + snappedDy;
+      var snapL = Math.round(rawLeft / 8) * 8;
+      var snapT = Math.round(rawTop / 8) * 8;
+      snappedDx = snapL - initialLeft;
+      snappedDy = snapT - initialTop;
+    }
+    
     dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)';
     dragEl.style.zIndex = '9999';
     window.parent.postMessage({ type: 'glide:drag-delta', dx: snappedDx, dy: snappedDy, guides: snap.guides }, '*');
@@ -530,11 +581,9 @@ const BRIDGE_SCRIPT = `
 
   document.addEventListener('pointermove', function(e) {
     if (isDragging && dragEl) {
-      // Ctrl/Cmd held during drag disables object-snap for this entire drag operation
+      // Ctrl/Cmd held during drag disables object-snap dynamically
       // (mirrors Figma's documented Ctrl/Cmd override behavior).
-      if (e.ctrlKey || e.metaKey) {
-        snapDisabledForDrag = true;
-      }
+      snapDisabledForDrag = !!(e.ctrlKey || e.metaKey);
 
       currentDx = e.clientX - startX;
       currentDy = e.clientY - startY;
@@ -593,9 +642,12 @@ const BRIDGE_SCRIPT = `
 
       // Pixel-grid snap: separate final pass after object-snap (spec constraint #5).
       if (snapPixelEnabled) {
-        var pg = resolvePixelGridSnap(finalDx, finalDy);
-        finalDx = pg.x;
-        finalDy = pg.y;
+        var rawLeft = initialLeft + finalDx;
+        var rawTop = initialTop + finalDy;
+        var snapL = Math.round(rawLeft / 8) * 8;
+        var snapT = Math.round(rawTop / 8) * 8;
+        finalDx = snapL - initialLeft;
+        finalDy = snapT - initialTop;
       }
 
       var finalLeft = initialLeft + finalDx;
@@ -711,6 +763,9 @@ const BRIDGE_SCRIPT = `
     }
     if (e.data.type === 'glide:update-component-roots') {
       componentRoots = new Set(e.data.roots || []);
+    }
+    if (e.data.type === 'glide:update-user-guides') {
+      userGuides = e.data.guides || [];
     }
     if (e.data.type === 'glide:set-snap-object') {
       snapObjectEnabled = !!e.data.enabled;

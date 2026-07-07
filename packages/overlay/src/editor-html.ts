@@ -2258,13 +2258,16 @@ export function getEditorHTML(port: number): string {
                 const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
 
                 if (draggingGuide.axis === 'x') {
-                  const pageX = Math.round((e.clientX - canvasContainerRect.left - originX) / zoomLevel);
+                  const rawX = (e.clientX - canvasContainerRect.left - originX) / zoomLevel;
+                  const pageX = Math.round(rawX / 8) * 8;
                   guides[draggingGuide.index].position = pageX;
                 } else {
-                  const pageY = Math.round((e.clientY - canvasContainerRect.top - originY) / zoomLevel);
+                  const rawY = (e.clientY - canvasContainerRect.top - originY) / zoomLevel;
+                  const pageY = Math.round(rawY / 8) * 8;
                   guides[draggingGuide.index].position = pageY;
                 }
                 drawOverlay();
+                syncUserGuidesToIframe();
               }
             }
             if (isResizing && startRect && selectedElement) {
@@ -2412,6 +2415,7 @@ export function getEditorHTML(port: number): string {
               }
               draggingGuide = null;
               drawOverlay();
+              syncUserGuidesToIframe();
             }
           });
 
@@ -2646,6 +2650,7 @@ export function getEditorHTML(port: number): string {
                 e.stopPropagation();
                 guides.splice(idx, 1);
                 drawGuides();
+                syncUserGuidesToIframe();
               });
 
               svgEl.appendChild(line);
@@ -2798,6 +2803,16 @@ export function getEditorHTML(port: number): string {
                 gGroup.appendChild(line);
               }
             });
+          }
+
+          function syncUserGuidesToIframe() {
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:update-user-guides',
+                guides: guides
+              }, '*');
+            }
           }
 
           window.addEventListener('glide-jump-history', (e) => {
@@ -4637,11 +4652,13 @@ export function getEditorHTML(port: number): string {
               const fh = iframe.clientHeight;
               const ch = container.clientHeight;
               const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
-              const pageY = Math.round((e.clientY - canvasContainerRect.top - originY) / zoomLevel);
+              const rawY = (e.clientY - canvasContainerRect.top - originY) / zoomLevel;
+              const pageY = Math.round(rawY / 8) * 8;
               
               guides.push({ axis: 'y', position: pageY });
               draggingGuide = { index: guides.length - 1, axis: 'y' };
               drawOverlay();
+              syncUserGuidesToIframe();
             }
           });
 
@@ -4655,11 +4672,13 @@ export function getEditorHTML(port: number): string {
               const fw = iframe.clientWidth;
               const cw = container.clientWidth;
               const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
-              const pageX = Math.round((e.clientX - canvasContainerRect.left - originX) / zoomLevel);
+              const rawX = (e.clientX - canvasContainerRect.left - originX) / zoomLevel;
+              const pageX = Math.round(rawX / 8) * 8;
               
               guides.push({ axis: 'x', position: pageX });
               draggingGuide = { index: guides.length - 1, axis: 'x' };
               drawOverlay();
+              syncUserGuidesToIframe();
             }
           });
 
