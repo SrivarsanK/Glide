@@ -36,42 +36,48 @@ flowchart TD
 - **Node.js** v18+
 - **npm** v8+
 
-### Step 1 - Clone and install
+### Method 1: Run via npx (Easiest)
 
-```bash
-git clone https://github.com/srivarsank/glide.git
-cd glide
-npm install
-```
+You can run Glide directly on any frontend project without cloning this repository:
 
-### Step 2 - Build Glide
+1. Start your frontend app normally (e.g., `npm run dev` on port `5173`).
+2. In a separate terminal, run:
+   ```bash
+   npx @srivarsank/cli 5173
+   ```
+   *(Replace `5173` with whatever port your frontend app is running on).*
+3. Open **http://localhost:7777** in your browser to start editing.
 
-```bash
-npm run build
-```
+---
 
-### Step 3 - Start your frontend app
+### Method 2: Local Development & Source Build
 
-In a separate terminal, start your React/Vue/Svelte app as you normally would:
+If you want to run Glide from the source files:
 
-```bash
-# Example (Vite app on port 5173)
-npm run dev
-```
+1. **Clone and install dependencies**:
+   ```bash
+   git clone https://github.com/SrivarsanK/Glide.git
+   cd Glide
+   npm install
+   ```
 
-### Step 4 - Start Glide
+2. **Build Glide**:
+   ```bash
+   npm run build
+   ```
 
-From the Glide folder, run:
+3. **Start your frontend app**:
+   In a separate terminal, start your React/Vue/Svelte app normally (e.g., port `5173`).
 
-```bash
-node packages/cli/dist/index.js 5173
-```
+4. **Start the local Glide CLI**:
+   From the Glide repository folder, run:
+   ```bash
+   node packages/cli/dist/index.js 5173
+   ```
 
-> Replace `5173` with whatever port your app is running on.
+5. **Open the editor**:
+   Go to **http://localhost:7777** in your browser.
 
-### Step 5 - Open the editor
-
-Go to **http://localhost:7777** in your browser. Your app will appear inside the visual canvas. Click any element to start editing it.
 
 ---
 
