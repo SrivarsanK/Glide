@@ -1824,6 +1824,7 @@ export function getEditorHTML(port: number): string {
           let hiddenIds = new Set();
           let shadowCount = 0;
           let isResizing = false;
+          let isDragging = false;
           let resizeDir = '';
           let startPointerX = 0;
           let startPointerY = 0;
@@ -2752,6 +2753,10 @@ export function getEditorHTML(port: number): string {
                 // fresh computed styles and confirms actual rendered dimensions)
                 const rIframe = document.getElementById('app-iframe');
                 if (rIframe && rIframe.contentWindow && selectedElement) {
+                  rIframe.contentWindow.postMessage({
+                    type: 'glide:resize-end',
+                    source: selectedElement.source
+                  }, '*');
                   setTimeout(() => {
                     rIframe.contentWindow.postMessage({
                       type: 'glide:select-element-by-id',
@@ -2920,6 +2925,14 @@ export function getEditorHTML(port: number): string {
                   if (blocker) blocker.style.display = 'block';
 
                   h.setPointerCapture(e.pointerId);
+
+                  const rIframe = document.getElementById('app-iframe');
+                  if (rIframe && rIframe.contentWindow && selectedElement) {
+                    rIframe.contentWindow.postMessage({
+                      type: 'glide:resize-start',
+                      source: selectedElement.source
+                    }, '*');
+                  }
                 });
                 container.appendChild(h);
               });
@@ -3282,6 +3295,7 @@ export function getEditorHTML(port: number): string {
               updateLayersPanel(data);
             }
             if (data.type === 'glide:overlay') {
+              if (isResizing || isDragging) return;
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
@@ -3357,6 +3371,10 @@ export function getEditorHTML(port: number): string {
               drawOverlay();
             }
 
+            if (data.type === 'glide:element-drag-start') {
+              isDragging = true;
+            }
+
             if (data.type === 'glide:drag-delta') {
               const g = document.getElementById('selection-group');
               if (g) {
@@ -3365,14 +3383,26 @@ export function getEditorHTML(port: number): string {
               renderSnapGuides(data.guides || []);
             }
             if (data.type === 'glide:element-drag-end') {
+              isDragging = false;
               sendPositionChange(data.source, {
                 position: 'relative',
                 left: data.dx + 'px',
                 top: data.dy + 'px'
               });
-              selectedRect = null;
-              clearOverlay();
+              
+              if (data.rect) {
+                selectedRect = data.rect;
+                if (selectedRects && selectedRects.length > 0) {
+                  selectedRects[0] = data.rect;
+                }
+              }
+              
+              const g = document.getElementById('selection-group');
+              if (g) {
+                g.removeAttribute('transform');
+              }
               renderSnapGuides([]);
+              drawOverlay();
             }
             if (data.type === 'glide:snap-guides-clear') {
               renderSnapGuides([]);

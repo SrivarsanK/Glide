@@ -854,17 +854,31 @@ const BRIDGE_SCRIPT = `
       dragEl.style.setProperty('position', 'relative', 'important');
       dragEl.style.setProperty('left', finalLeft + 'px', 'important');
       dragEl.style.setProperty('top', finalTop + 'px', 'important');
-
-      dragEl.style.removeProperty('transition');
-      dragEl.style.removeProperty('transition-property');
       dragEl.style.transform = '';
       dragEl.style.zIndex = '';
+
+      var finalR = dragEl.getBoundingClientRect();
+      var elForTransition = dragEl;
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          if (elForTransition) {
+            elForTransition.style.removeProperty('transition');
+            elForTransition.style.removeProperty('transition-property');
+          }
+        });
+      });
 
       window.parent.postMessage({
         type: 'glide:element-drag-end',
         source: dragEl.getAttribute('data-gl-source'),
         dx: finalLeft,
-        dy: finalTop
+        dy: finalTop,
+        rect: {
+          x: finalR.left,
+          y: finalR.top,
+          width: finalR.width,
+          height: finalR.height
+        }
       }, '*');
 
       dragEl = null;
@@ -1045,6 +1059,26 @@ const BRIDGE_SCRIPT = `
             el.style[prop] = styles[prop];
           }
         }
+      }
+    }
+    if (e.data.type === 'glide:resize-start') {
+      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      if (el) {
+        el.style.setProperty('transition', 'none', 'important');
+        el.style.setProperty('transition-property', 'none', 'important');
+      }
+    }
+    if (e.data.type === 'glide:resize-end') {
+      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      if (el) {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            if (el) {
+              el.style.removeProperty('transition');
+              el.style.removeProperty('transition-property');
+            }
+          });
+        });
       }
     }
     if (e.data.type === 'glide:update-component-roots') {
