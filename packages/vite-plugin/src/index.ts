@@ -1023,6 +1023,13 @@ const BRIDGE_SCRIPT = `
 
   window.addEventListener('message', function(e) {
     if (!e.data) return;
+    if (e.data.type === 'glide:scroll-by') {
+      window.scrollBy({
+        top: e.data.y,
+        left: e.data.x,
+        behavior: 'auto'
+      });
+    }
     if (e.data.type === 'glide:optimistic-style') {
       var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
       if (el) {

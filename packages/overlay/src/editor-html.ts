@@ -2305,7 +2305,7 @@ export function getEditorHTML(port: number): string {
             applyTransform();
           }
 
-          // Ctrl+Scroll zoom, normal Scroll to scroll iframe
+          // Ctrl+Scroll zoom, normal Scroll to scroll iframe via postMessage
           document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
               e.preventDefault();
@@ -2315,11 +2315,11 @@ export function getEditorHTML(port: number): string {
               e.preventDefault();
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.scrollBy({
-                  top: e.deltaY,
-                  left: e.deltaX,
-                  behavior: 'auto'
-                });
+                iframe.contentWindow.postMessage({
+                  type: 'glide:scroll-by',
+                  x: e.deltaX,
+                  y: e.deltaY
+                }, '*');
               }
             }
           }, { passive: false });
