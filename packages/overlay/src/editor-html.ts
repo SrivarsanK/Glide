@@ -3839,6 +3839,7 @@ export function getEditorHTML(port: number): string {
           Object.entries(numericClassMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+          });
           // Font family
           document.getElementById('prop-font-family').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontFamily',value:e.target.value}); });
           document.getElementById('prop-font-weight').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontWeight',value:e.target.value}); });
