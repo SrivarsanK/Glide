@@ -2918,6 +2918,26 @@ export function getEditorHTML(port: number): string {
               }
             }
 
+            if (data.type === 'glide:text-edited') {
+              if (selectedElement && selectedElement.source === data.source) {
+                sendEdit({ type: 'text', value: data.value });
+              } else {
+                const parsed = parseSource(data.source);
+                if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: 'edit',
+                    file: parsed.file,
+                    line: parsed.line,
+                    column: parsed.column,
+                    hash: parsed.hash,
+                    generation: currentGeneration,
+                    viewportWidth: iframeWidth.current,
+                    change: { type: 'text', value: data.value }
+                  }));
+                }
+              }
+            }
+
             if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
               updateLayersPanel(data);
             }
@@ -2943,7 +2963,7 @@ export function getEditorHTML(port: number): string {
                 selectedElement = { source: source };
                 selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
-                populatePropsFromComputed(data.computedStyles || {}, rect || {});
+                populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
                 
                 // Highlight selected items in layers tree
                 document.querySelectorAll('.layer-item').forEach(item => {
@@ -3541,6 +3561,8 @@ export function getEditorHTML(port: number): string {
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
+            const contentSec = document.getElementById('section-content');
+            if (contentSec) contentSec.style.display = 'none';
           }
 
           function showPropsPanel(tagName) {
@@ -3554,7 +3576,7 @@ export function getEditorHTML(port: number): string {
             return parseInt(val, 10) || 0;
           }
 
-          function populatePropsFromComputed(styles, rect) {
+          function populatePropsFromComputed(styles, rect, textContent) {
             showPropsPanel(styles.tagName);
             const activeEl = document.activeElement;
 
@@ -3729,6 +3751,30 @@ export function getEditorHTML(port: number): string {
             if (elOpacity) elOpacity.value = opacity;
             const elOpacitySlider = document.getElementById('prop-opacity-slider');
             if (elOpacitySlider) elOpacitySlider.value = opacity;
+
+            // Content (Text Editing) Section updates
+            const contentSec = document.getElementById('section-content');
+            const contentTextarea = document.getElementById('prop-text-content');
+            if (contentSec && contentTextarea) {
+              if (typeof textContent === 'string') {
+                contentSec.style.display = 'block';
+                if (document.activeElement !== contentTextarea) {
+                  contentTextarea.value = textContent;
+                }
+                const charCount = document.getElementById('prop-text-char-count');
+                if (charCount) charCount.textContent = textContent.length + ' chars';
+                const previewLabel = document.getElementById('prop-text-preview-label');
+                if (previewLabel && styles.fontFamily) {
+                  const fontName = styles.fontFamily.split(',')[0].replace(/['"]/g, '');
+                  previewLabel.textContent = (styles.fontSize || '') + ' ' + fontName;
+                }
+                // Style the textarea preview using the element's actual font family/weight
+                if (styles.fontFamily) contentTextarea.style.fontFamily = styles.fontFamily;
+                if (styles.fontWeight) contentTextarea.style.fontWeight = styles.fontWeight;
+              } else {
+                contentSec.style.display = 'none';
+              }
+            }
           }
 
           function setActiveBtn(ids, activeId) {
@@ -4014,6 +4060,25 @@ export function getEditorHTML(port: number): string {
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
           // (border colour is handled by the custom popup + hex input above)
+
+          // Content (Text Editing) event listeners
+          const textContentEl = document.getElementById('prop-text-content');
+          if (textContentEl) {
+            textContentEl.addEventListener('input', (e) => {
+              const charCount = document.getElementById('prop-text-char-count');
+              if (charCount) charCount.textContent = e.target.value.length + ' chars';
+            });
+            textContentEl.addEventListener('change', (e) => {
+              sendEdit({ type: 'text', value: e.target.value });
+            });
+            textContentEl.addEventListener('keydown', (e) => {
+              // Pressing Enter commits changes. Shift+Enter creates new line.
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                textContentEl.blur();
+              }
+            });
+          }
 
           // ─── Custom Colour Picker Popup JS ────────────────────────────────────
           // NEVER use <input type="color">.click() — that opens the OS dialog which
