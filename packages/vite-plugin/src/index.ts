@@ -258,6 +258,40 @@ const BRIDGE_SCRIPT = `
     return { snappedOffset: bestGuide === null ? rawOffset : rawOffset + bestAnchorOffset, guidePosition: bestGuide, rect: bestRect };
   }
 
+  function findHorizontalGaps(siblings) {
+    var gaps = [];
+    var sorted = siblings.slice().sort(function(a, b) { return a.left - b.left; });
+    for (var i = 0; i < sorted.length - 1; i++) {
+      var a = sorted[i];
+      var b = sorted[i+1];
+      var overlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (overlap > 0) {
+        var gap = b.left - a.right;
+        if (gap > 0 && gap < 500) {
+          gaps.push({ type: 'h', a: a, b: b, size: gap });
+        }
+      }
+    }
+    return gaps;
+  }
+
+  function findVerticalGaps(siblings) {
+    var gaps = [];
+    var sorted = siblings.slice().sort(function(a, b) { return a.top - b.top; });
+    for (var i = 0; i < sorted.length - 1; i++) {
+      var a = sorted[i];
+      var b = sorted[i+1];
+      var overlap = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      if (overlap > 0) {
+        var gap = b.top - a.bottom;
+        if (gap > 0 && gap < 500) {
+          gaps.push({ type: 'v', a: a, b: b, size: gap });
+        }
+      }
+    }
+    return gaps;
+  }
+
   // Full object-snap: resolve X and Y independently, return guides.
   function resolveObjectSnap(dragRect, dx, dy, siblings) {
     if (!snapObjectEnabled || snapDisabledForDrag) {
@@ -285,6 +319,82 @@ const BRIDGE_SCRIPT = `
     var snappedDx = xr.snappedOffset;
     var snappedDy = yr.snappedOffset;
 
+    // Horizontal Gap Snapping
+    var hGaps = findHorizontalGaps(siblings);
+    var bestHGapDelta = OUR_SNAP_THRESHOLD_PX;
+    var snappedHGapDx = null;
+    var hGapGuide = null;
+
+    for (var i = 0; i < hGaps.length; i++) {
+      var gap = hGaps[i];
+      if (dragRect.left + dx > gap.b.right - 20) {
+        var targetLeft = gap.b.right + gap.size;
+        var delta = Math.abs((dragRect.left + dx) - targetLeft);
+        if (delta < bestHGapDelta) {
+          bestHGapDelta = delta;
+          snappedHGapDx = targetLeft - dragRect.left;
+          hGapGuide = {
+            type: 'gap-distribution',
+            axis: 'x',
+            gapSize: gap.size,
+            rects: [gap.a, gap.b, { left: targetLeft, right: targetLeft + dragRect.width, top: dragRect.top + dy, bottom: dragRect.bottom + dy }]
+          };
+        }
+      }
+      if (gap.a.left > dragRect.right + dx - 20) {
+        var targetRight = gap.a.left - gap.size;
+        var delta = Math.abs((dragRect.right + dx) - targetRight);
+        if (delta < bestHGapDelta) {
+          bestHGapDelta = delta;
+          snappedHGapDx = targetRight - dragRect.right;
+          hGapGuide = {
+            type: 'gap-distribution',
+            axis: 'x',
+            gapSize: gap.size,
+            rects: [{ left: targetRight - dragRect.width, right: targetRight, top: dragRect.top + dy, bottom: dragRect.bottom + dy }, gap.a, gap.b]
+          };
+        }
+      }
+    }
+
+    // Vertical Gap Snapping
+    var vGaps = findVerticalGaps(siblings);
+    var bestVGapDelta = OUR_SNAP_THRESHOLD_PX;
+    var snappedVGapDy = null;
+    var vGapGuide = null;
+
+    for (var i = 0; i < vGaps.length; i++) {
+      var gap = vGaps[i];
+      if (dragRect.top + dy > gap.b.bottom - 20) {
+        var targetTop = gap.b.bottom + gap.size;
+        var delta = Math.abs((dragRect.top + dy) - targetTop);
+        if (delta < bestVGapDelta) {
+          bestVGapDelta = delta;
+          snappedVGapDy = targetTop - dragRect.top;
+          vGapGuide = {
+            type: 'gap-distribution',
+            axis: 'y',
+            gapSize: gap.size,
+            rects: [gap.a, gap.b, { left: dragRect.left + dx, right: dragRect.right + dx, top: targetTop, bottom: targetTop + dragRect.height }]
+          };
+        }
+      }
+      if (gap.a.top > dragRect.bottom + dy - 20) {
+        var targetBottom = gap.a.top - gap.size;
+        var delta = Math.abs((dragRect.bottom + dy) - targetBottom);
+        if (delta < bestVGapDelta) {
+          bestVGapDelta = delta;
+          snappedVGapDy = targetBottom - dragRect.bottom;
+          vGapGuide = {
+            type: 'gap-distribution',
+            axis: 'y',
+            gapSize: gap.size,
+            rects: [{ left: dragRect.left + dx, right: dragRect.right + dx, top: targetBottom - dragRect.height, bottom: targetBottom }, gap.a, gap.b]
+          };
+        }
+      }
+    }
+
     if (xr.guidePosition !== null) {
       if (xr.rect) {
         for (var i = 0; i < siblings.length; i++) {
@@ -311,7 +421,32 @@ const BRIDGE_SCRIPT = `
           position: xr.guidePosition
         });
       }
+    } else if (snappedHGapDx !== null) {
+      snappedDx = snappedHGapDx;
+      var r0 = hGapGuide.rects[0];
+      var r1 = hGapGuide.rects[1];
+      var r2 = hGapGuide.rects[2];
+      var midY01 = (Math.max(r0.top, r1.top) + Math.min(r0.bottom, r1.bottom))/2;
+      var midY12 = (Math.max(r1.top, r2.top) + Math.min(r1.bottom, r2.bottom))/2;
+      
+      guides.push({
+        type: 'distance-indicator',
+        x1: r0.right,
+        y1: midY01,
+        x2: r1.left,
+        y2: midY01,
+        text: Math.round(hGapGuide.gapSize) + 'px'
+      });
+      guides.push({
+        type: 'distance-indicator',
+        x1: r1.right,
+        y1: midY12,
+        x2: r2.left + snappedDx,
+        y2: midY12,
+        text: Math.round(hGapGuide.gapSize) + 'px'
+      });
     }
+
     if (yr.guidePosition !== null) {
       if (yr.rect) {
         for (var i = 0; i < siblings.length; i++) {
@@ -338,73 +473,99 @@ const BRIDGE_SCRIPT = `
           position: yr.guidePosition
         });
       }
+    } else if (snappedVGapDy !== null) {
+      snappedDy = snappedVGapDy;
+      var r0 = vGapGuide.rects[0];
+      var r1 = vGapGuide.rects[1];
+      var r2 = vGapGuide.rects[2];
+      var midX01 = (Math.max(r0.left, r1.left) + Math.min(r0.right, r1.right))/2;
+      var midX12 = (Math.max(r1.left, r2.left) + Math.min(r1.right, r2.right))/2;
+
+      guides.push({
+        type: 'distance-indicator',
+        x1: midX01,
+        y1: r0.bottom,
+        x2: midX01,
+        y2: r1.top,
+        text: Math.round(vGapGuide.gapSize) + 'px'
+      });
+      guides.push({
+        type: 'distance-indicator',
+        x1: midX12,
+        y1: r1.bottom,
+        x2: midX12,
+        y2: r2.top + snappedDy,
+        text: Math.round(vGapGuide.gapSize) + 'px'
+      });
     }
 
-    // Adjacent distance indicators
-    for (var i = 0; i < siblings.length; i++) {
-      var s = siblings[i];
-      // Check horizontal alignment
-      var dTop = Math.abs((dragRect.top + snappedDy) - s.top);
-      var dBottom = Math.abs((dragRect.bottom + snappedDy) - s.bottom);
-      if (dTop < 2 || dBottom < 2) {
-        if (dragRect.left + snappedDx > s.right) {
-          var gap = (dragRect.left + snappedDx) - s.right;
-          if (gap > 0 && gap < 120) {
-            var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
-            guides.push({
-              type: 'distance-indicator',
-              x1: s.right,
-              y1: midY,
-              x2: dragRect.left + snappedDx,
-              y2: midY,
-              text: Math.round(gap) + 'px'
-            });
-          }
-        } else if (s.left > dragRect.right + snappedDx) {
-          var gap = s.left - (dragRect.right + snappedDx);
-          if (gap > 0 && gap < 120) {
-            var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
-            guides.push({
-              type: 'distance-indicator',
-              x1: dragRect.right + snappedDx,
-              y1: midY,
-              x2: s.left,
-              y2: midY,
-              text: Math.round(gap) + 'px'
-            });
+    // Adjacent distance indicators (only if not snapped to gaps)
+    if (snappedHGapDx === null && snappedVGapDy === null) {
+      for (var i = 0; i < siblings.length; i++) {
+        var s = siblings[i];
+        // Check horizontal alignment
+        var dTop = Math.abs((dragRect.top + snappedDy) - s.top);
+        var dBottom = Math.abs((dragRect.bottom + snappedDy) - s.bottom);
+        if (dTop < 2 || dBottom < 2) {
+          if (dragRect.left + snappedDx > s.right) {
+            var gap = (dragRect.left + snappedDx) - s.right;
+            if (gap > 0 && gap < 120) {
+              var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
+              guides.push({
+                type: 'distance-indicator',
+                x1: s.right,
+                y1: midY,
+                x2: dragRect.left + snappedDx,
+                y2: midY,
+                text: Math.round(gap) + 'px'
+              });
+            }
+          } else if (s.left > dragRect.right + snappedDx) {
+            var gap = s.left - (dragRect.right + snappedDx);
+            if (gap > 0 && gap < 120) {
+              var midY = (dragRect.top + dragRect.bottom)/2 + snappedDy;
+              guides.push({
+                type: 'distance-indicator',
+                x1: dragRect.right + snappedDx,
+                y1: midY,
+                x2: s.left,
+                y2: midY,
+                text: Math.round(gap) + 'px'
+              });
+            }
           }
         }
-      }
 
-      // Check vertical alignment
-      var dLeft = Math.abs((dragRect.left + snappedDx) - s.left);
-      var dRight = Math.abs((dragRect.right + snappedDx) - s.right);
-      if (dLeft < 2 || dRight < 2) {
-        if (dragRect.top + snappedDy > s.bottom) {
-          var gap = (dragRect.top + snappedDy) - s.bottom;
-          if (gap > 0 && gap < 120) {
-            var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
-            guides.push({
-              type: 'distance-indicator',
-              x1: midX,
-              y1: s.bottom,
-              x2: midX,
-              y2: dragRect.top + snappedDy,
-              text: Math.round(gap) + 'px'
-            });
-          }
-        } else if (s.top > dragRect.bottom + snappedDy) {
-          var gap = s.top - (dragRect.bottom + snappedDy);
-          if (gap > 0 && gap < 120) {
-            var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
-            guides.push({
-              type: 'distance-indicator',
-              x1: midX,
-              y1: dragRect.bottom + snappedDy,
-              x2: midX,
-              y2: s.top,
-              text: Math.round(gap) + 'px'
-            });
+        // Check vertical alignment
+        var dLeft = Math.abs((dragRect.left + snappedDx) - s.left);
+        var dRight = Math.abs((dragRect.right + snappedDx) - s.right);
+        if (dLeft < 2 || dRight < 2) {
+          if (dragRect.top + snappedDy > s.bottom) {
+            var gap = (dragRect.top + snappedDy) - s.bottom;
+            if (gap > 0 && gap < 120) {
+              var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
+              guides.push({
+                type: 'distance-indicator',
+                x1: midX,
+                y1: s.bottom,
+                x2: midX,
+                y2: dragRect.top + snappedDy,
+                text: Math.round(gap) + 'px'
+              });
+            }
+          } else if (s.top > dragRect.bottom + snappedDy) {
+            var gap = s.top - (dragRect.bottom + snappedDy);
+            if (gap > 0 && gap < 120) {
+              var midX = (dragRect.left + dragRect.right)/2 + snappedDx;
+              guides.push({
+                type: 'distance-indicator',
+                x1: midX,
+                y1: dragRect.bottom + snappedDy,
+                x2: midX,
+                y2: s.top,
+                text: Math.round(gap) + 'px'
+              });
+            }
           }
         }
       }
@@ -747,6 +908,17 @@ const BRIDGE_SCRIPT = `
       sendMsg('glide:element-selected', el, false);
     }
   }, true);
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Alt') {
+      window.parent.postMessage({ type: 'glide:alt-state', pressed: true }, '*');
+    }
+  });
+  window.addEventListener('keyup', function(e) {
+    if (e.key === 'Alt') {
+      window.parent.postMessage({ type: 'glide:alt-state', pressed: false }, '*');
+    }
+  });
 
   window.addEventListener('message', function(e) {
     if (!e.data) return;

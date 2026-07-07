@@ -1498,6 +1498,7 @@ export function getEditorHTML(port: number): string {
           let guides = []; // Array of { axis: 'x' | 'y', position: number }
           let activeBranch = null;
           let draggingGuide = null;
+          let altPressed = false;
 
           function findNodeBySource(nodes, source) {
             for (const node of nodes) {
@@ -2422,6 +2423,10 @@ export function getEditorHTML(port: number): string {
           // Spacebar = temp hand tool
           let spaceHeld = false;
           document.addEventListener('keydown', (e) => {
+            if (e.key === 'Alt') {
+              altPressed = true;
+              drawOverlay();
+            }
             if (e.code === 'Space' && !spaceHeld && document.activeElement.tagName !== 'INPUT') {
               spaceHeld = true;
               canvasContainer.style.cursor = 'grab';
@@ -2429,6 +2434,10 @@ export function getEditorHTML(port: number): string {
             }
           });
           document.addEventListener('keyup', (e) => {
+            if (e.key === 'Alt') {
+              altPressed = false;
+              drawOverlay();
+            }
             if (e.code === 'Space') {
               spaceHeld = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
@@ -2663,7 +2672,7 @@ export function getEditorHTML(port: number): string {
               if (selectedRects.length === 1) {
                 if (selectedRects[0]) {
                   drawSelectionBox(selectedRects[0], false);
-                  if (hoveredRect && hoveredElement && !selectedSources.includes(hoveredElement.source)) {
+                  if (altPressed && hoveredRect && hoveredElement && !selectedSources.includes(hoveredElement.source)) {
                     drawDistanceIndicators(selectedRects[0], hoveredRect);
                   }
                 }
@@ -2828,6 +2837,12 @@ export function getEditorHTML(port: number): string {
           window.addEventListener('message', (event) => {
             const data = event.data;
             if (!data || !data.type) return;
+
+            if (data.type === 'glide:alt-state') {
+              altPressed = !!data.pressed;
+              drawOverlay();
+              return;
+            }
 
             if (data.type === 'glide:document-height') {
               const iframe = document.getElementById('app-iframe');
@@ -3951,6 +3966,23 @@ export function getEditorHTML(port: number): string {
 
           // Rotation
           document.getElementById('prop-rotation').addEventListener('change', (e) => { sendEdit({type:'class',property:'transform',value:'rotate('+e.target.value+'deg)'}); });
+          document.getElementById('prop-rotation').addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+              if (e.shiftKey) {
+                e.preventDefault();
+                const currentVal = parseFloat(e.target.value) || 0;
+                const step = 15;
+                let newVal = 0;
+                if (e.key === 'ArrowUp') {
+                  newVal = Math.ceil((currentVal + 0.1) / step) * step;
+                } else {
+                  newVal = Math.floor((currentVal - 0.1) / step) * step;
+                }
+                e.target.value = newVal;
+                e.target.dispatchEvent(new Event('change'));
+              }
+            }
+          });
 
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
