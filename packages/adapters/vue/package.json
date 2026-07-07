@@ -1,15 +1,20 @@
 {
   "name": "@srivarsank/adapter-vue",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
   "dependencies": {
     "@vue/compiler-sfc": "^3.4.21"
   },
-  "devDependencies": { "typescript": "^5.4.2" }
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  }
 }

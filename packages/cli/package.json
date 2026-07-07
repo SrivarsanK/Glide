@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/cli",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -10,13 +10,16 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
   "dependencies": {
-    "@srivarsank/server": "*",
-    "@srivarsank/ast-writer": "*",
-    "@srivarsank/adapter-vue": "*",
-    "@srivarsank/adapter-svelte": "*",
-    "@srivarsank/adapter-html": "*"
+    "@srivarsank/adapter-html": "^1.0.0",
+    "@srivarsank/adapter-svelte": "^1.0.0",
+    "@srivarsank/adapter-vue": "^1.0.0",
+    "@srivarsank/ast-writer": "^1.0.0",
+    "@srivarsank/server": "^1.0.0"
   },
   "devDependencies": {
     "typescript": "^5.4.2"

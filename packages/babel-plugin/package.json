@@ -1,13 +1,16 @@
 {
   "name": "@srivarsank/babel-plugin",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
   "dependencies": {
     "@babel/core": "^7.24.0",
     "@babel/helper-plugin-utils": "^7.0.0",
