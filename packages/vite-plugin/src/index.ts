@@ -161,7 +161,17 @@ const BRIDGE_SCRIPT = `
         height: r.height
       },
       isHover: type === 'glide:element-hovered',
-      computedStyles: computedStyles
+      computedStyles: computedStyles,
+      textContent: (function() {
+        // Collect only direct JSXText children (not text from nested elements)
+        var directText = '';
+        el.childNodes.forEach(function(n) {
+          if (n.nodeType === 3) {
+            directText += n.textContent;
+          }
+        });
+        return directText.trim();
+      })()
     }, '*');
   }
 
