@@ -18,5 +18,10 @@
   },
   "devDependencies": {
     "typescript": "^5.4.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SrivarsanK/Glide.git",
+    "directory": "packages/overlay"
   }
 }
