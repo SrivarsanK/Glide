@@ -664,6 +664,9 @@ const BRIDGE_SCRIPT = `
   }
 
   document.addEventListener('pointerdown', function(e) {
+    if (e.target.contentEditable === 'true' || e.target.closest('[contenteditable="true"]')) {
+      return;
+    }
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
     var el = target && target.closest && target.closest('[data-gl-source]');
@@ -935,6 +938,73 @@ const BRIDGE_SCRIPT = `
       selected = el;
       el.setAttribute('data-glide-selected', '');
       sendMsg('glide:element-selected', el, false);
+
+      // Check if this element has direct text node children
+      var hasText = false;
+      el.childNodes.forEach(function(n) {
+        if (n.nodeType === 3 && n.textContent.trim().length > 0) {
+          hasText = true;
+        }
+      });
+
+      if (hasText) {
+        var originalText = el.textContent;
+        el.contentEditable = "true";
+        el.focus();
+        
+        // Select all text content
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+
+        // Add visual indicator styling
+        var prevOutline = el.style.outline;
+        el.style.outline = '2px dashed #38bdf8';
+        el.style.outlineOffset = '2px';
+        
+        window.__glide_inline_editing__ = el;
+
+        var finished = false;
+        function commitInlineEdit() {
+          if (finished) return;
+          finished = true;
+          el.contentEditable = "false";
+          el.style.outline = prevOutline;
+          window.__glide_inline_editing__ = null;
+          
+          var newText = el.textContent;
+          if (newText !== originalText) {
+            window.parent.postMessage({
+              type: 'glide:text-edited',
+              source: el.getAttribute('data-gl-source'),
+              value: newText
+            }, '*');
+          }
+        }
+
+        el.addEventListener('blur', function onBlur() {
+          commitInlineEdit();
+          el.removeEventListener('blur', onBlur);
+        });
+
+        el.addEventListener('keydown', function onKeyDown(ev) {
+          if (ev.key === 'Enter' && !ev.shiftKey) {
+            ev.preventDefault();
+            el.blur();
+            el.removeEventListener('keydown', onKeyDown);
+          }
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            el.textContent = originalText;
+            el.blur();
+            el.removeEventListener('keydown', onKeyDown);
+          }
+        });
+      }
     }
   }, true);
 
