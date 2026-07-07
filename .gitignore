@@ -126,3 +126,7 @@ Thumbs.db
 .agents/skills/
 skills-lock.json
 
+# Graphify & Scratch
+graphify-out/
+scratch/
+
