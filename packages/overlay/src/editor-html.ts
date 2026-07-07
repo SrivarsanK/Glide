@@ -2031,6 +2031,16 @@ export function getEditorHTML(port: number): string {
             if (change.type === 'class' && change.property) {
               applyOptimisticStyle(selectedElement.source, { [change.property]: change.value });
             }
+            if (change.type === 'text') {
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:optimistic-text',
+                  source: selectedElement.source,
+                  value: change.value
+                }, '*');
+              }
+            }
             // Debounce rapid-fire edits (e.g. color picker drag)
             if (_editTimer) clearTimeout(_editTimer);
             _editTimer = setTimeout(() => {
@@ -3285,7 +3295,7 @@ export function getEditorHTML(port: number): string {
                 selectedElement = { source: source };
                 selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
-                populatePropsFromComputed(data.computedStyles || {}, rect || {});
+                populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
                 
                 // Highlight selected items in layers tree
                 document.querySelectorAll('.layer-item').forEach(item => {
@@ -3889,7 +3899,7 @@ export function getEditorHTML(port: number): string {
             return parseInt(val, 10) || 0;
           }
 
-          function populatePropsFromComputed(styles, rect) {
+          function populatePropsFromComputed(styles, rect, textContent) {
             showPropsPanel(styles.tagName);
             const activeEl = document.activeElement;
 
@@ -3897,6 +3907,28 @@ export function getEditorHTML(port: number): string {
               const el = document.getElementById(id);
               if (el) el.value = val;
             };
+
+            // Content Section
+            const contentSec = document.getElementById('section-content');
+            const contentInput = document.getElementById('prop-text-content');
+            if (contentSec) {
+              if (textContent !== undefined && textContent !== null) {
+                contentSec.style.display = 'block';
+                if (contentInput && activeEl?.id !== 'prop-text-content') {
+                  contentInput.value = textContent;
+                }
+                const charCount = document.getElementById('prop-text-char-count');
+                if (charCount) charCount.textContent = textContent.length + ' chars';
+                const previewLabel = document.getElementById('prop-text-preview-label');
+                if (previewLabel) {
+                  const size = parsePixels(styles.fontSize) || 12;
+                  const family = styles.fontFamily ? styles.fontFamily.split(',')[0].replace(/['"]/g, '') : 'Inter';
+                  previewLabel.textContent = size + 'px ' + family;
+                }
+              } else {
+                contentSec.style.display = 'none';
+              }
+            }
 
             // Position & Size
             if (rect) {
@@ -4361,6 +4393,17 @@ export function getEditorHTML(port: number): string {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
           });
+
+          // Text content editing
+          const elTextContent = document.getElementById('prop-text-content');
+          if (elTextContent) {
+            elTextContent.addEventListener('input', (e) => {
+              const text = e.target.value;
+              const charCount = document.getElementById('prop-text-char-count');
+              if (charCount) charCount.textContent = text.length + ' chars';
+              sendEdit({ type: 'text', value: text });
+            });
+          }
 
           // Font family
           const elFontFamily = document.getElementById('prop-font-family');

@@ -1030,6 +1030,12 @@ const BRIDGE_SCRIPT = `
         behavior: 'auto'
       });
     }
+    if (e.data.type === 'glide:optimistic-text') {
+      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      if (el) {
+        el.textContent = e.data.value;
+      }
+    }
     if (e.data.type === 'glide:optimistic-style') {
       var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
       if (el) {
