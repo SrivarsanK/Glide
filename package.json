@@ -1,8 +1,7 @@
 {
-  "name": "glide-dev",
-  "version": "1.0.0",
+  "name": "@srivarsank/glide",
+  "version": "1.0.2",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte app visually and write back to source.",
-  "private": true,
   "workspaces": [
     "packages/*",
     "packages/adapters/*"
@@ -12,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/srivarsank/glide.git"
+    "url": "git+https://github.com/SrivarsanK/Glide.git"
   },
   "files": [
     "dist"
@@ -23,31 +22,42 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./vite-plugin": {
+      "types": "./dist/vite-plugin.d.ts",
+      "default": "./dist/vite-plugin.js"
+    },
+    "./babel-plugin": {
+      "types": "./dist/babel-plugin.d.ts",
+      "default": "./dist/babel-plugin.js"
     }
   },
   "bin": {
-    "glide": "packages/cli/dist/index.js"
+    "glide": "dist/cli.js"
   },
   "type": "module",
   "scripts": {
-    "dev": "tsc --watch",
-    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/ast-writer && npm run build --workspace=packages/overlay && npm run build --workspace=packages/server && npm run build --workspace=packages/vite-plugin && npm run build --workspace=packages/babel-plugin && npm run build --workspace=packages/cli && tsc",
+    "dev": "node scripts/build-single-package.js",
+    "build": "node scripts/build-single-package.js",
     "test": "vitest run",
-    "release": "lerna publish",
-    "build:packages": "turbo run build"
+    "release": "npm publish"
   },
   "dependencies": {
+    "@babel/core": "^7.24.0",
     "@babel/generator": "^7.24.0",
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
+    "@babel/types": "^7.24.0",
     "@chenglou/pretext": "^0.0.8",
     "@vue/compiler-sfc": "^3.4.21",
     "chokidar": "^3.6.0",
     "html-dom-parser": "^8.0.0",
     "html-react-parser": "^6.1.3",
     "picocolors": "^1.0.0",
+    "postcss": "^8.4.0",
     "recast": "^0.23.12",
     "svelte": "^4.2.12",
+    "vite": "^5.1.6",
     "ws": "^8.16.0"
   },
   "devDependencies": {
@@ -56,6 +66,7 @@
     "@types/node": "^20.11.28",
     "@types/react": "^19.2.17",
     "@types/ws": "^8.5.10",
+    "dts-bundle-generator": "^9.5.1",
     "lerna": "^9.0.7",
     "turbo": "latest",
     "typescript": "^5.4.2",

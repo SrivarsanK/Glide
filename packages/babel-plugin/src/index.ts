@@ -6,7 +6,7 @@
 import type { PluginObj } from '@babel/core';
 import * as babelCore from '@babel/core';
 
-export default function glideSourceStampingPlugin(babel: typeof babelCore): PluginObj {
+export default function glideSourceStampingPlugin(babel: any): PluginObj {
   const t = babel.types;
 
   return {

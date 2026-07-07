@@ -43,7 +43,7 @@ You can run Glide directly on any frontend project without cloning this reposito
 1. Start your frontend app normally (e.g., `npm run dev` on port `5173`).
 2. In a separate terminal, run:
    ```bash
-   npx @srivarsank/cli 5173
+   npx @srivarsank/glide 5173
    ```
    *(Replace `5173` with whatever port your frontend app is running on).*
 3. Open **http://localhost:7777** in your browser to start editing.
@@ -72,7 +72,7 @@ If you want to run Glide from the source files:
 4. **Start the local Glide CLI**:
    From the Glide repository folder, run:
    ```bash
-   node packages/cli/dist/index.js 5173
+   node dist/cli.js 5173
    ```
 
 5. **Open the editor**:
