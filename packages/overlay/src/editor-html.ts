@@ -3474,6 +3474,21 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           // LOAD APP IFRAME
           // ═══════════════════════════════════════════════════════════════
+          let connectionTimeout;
+          
+          function updateConnectionState(state) {
+            const btn = document.getElementById('btn-load');
+            if (!btn) return;
+            btn.className = 'connection-btn ' + state;
+            if (state === 'disconnected') {
+              btn.textContent = 'Disconnected';
+            } else if (state === 'connecting') {
+              btn.textContent = 'Connecting';
+            } else if (state === 'connected') {
+              btn.textContent = 'Connected';
+            }
+          }
+
           function loadApp(url) {
             const iframe = document.getElementById('app-iframe');
             const loading = document.getElementById('canvas-loading');
@@ -3482,7 +3497,17 @@ export function getEditorHTML(port: number): string {
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
 
+            updateConnectionState('connecting');
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            
+            // Timeout after 6 seconds if iframe fails to load or load fails
+            connectionTimeout = setTimeout(() => {
+              updateConnectionState('disconnected');
+            }, 6000);
+
             iframe.onload = () => {
+              if (connectionTimeout) clearTimeout(connectionTimeout);
+              updateConnectionState('connected');
               setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
               // Send the component roots and snap settings on load
               if (iframe.contentWindow) {
@@ -3501,6 +3526,8 @@ export function getEditorHTML(port: number): string {
               }
             };
             iframe.onerror = () => {
+              if (connectionTimeout) clearTimeout(connectionTimeout);
+              updateConnectionState('disconnected');
               if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
             };
 
@@ -4651,7 +4678,7 @@ export function getEditorHTML(port: number): string {
             const branchName = document.getElementById('branch-name-input').value.trim();
             if (branchName) {
               if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'git-branch-create', branchName }));
+                socket.send(JSON.stringify({ type: 'git-branch-create', branchName, projectDir: currentFile }));
                 showToast('info', 'Creating git branch ' + branchName + '...');
               }
             }
@@ -4666,7 +4693,7 @@ export function getEditorHTML(port: number): string {
             const commitMessage = document.getElementById('commit-msg-input').value.trim();
             if (commitMessage) {
               if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'git-branch-finalize', commitMessage }));
+                socket.send(JSON.stringify({ type: 'git-branch-finalize', commitMessage, projectDir: currentFile }));
                 showToast('info', 'Finalizing git branch and committing...');
               }
             }
