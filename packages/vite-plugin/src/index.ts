@@ -1196,6 +1196,11 @@ const BRIDGE_SCRIPT = `
       }
       selected = null;
     }
+    if (e.data.type === 'glide:refresh-selection') {
+      if (window.__glide_refresh_selection__) {
+        window.__glide_refresh_selection__();
+      }
+    }
   });
   document.addEventListener('dragstart', function(e) {
     // Prevent native dragging of buttons, links, images, etc. inside the iframe
@@ -1236,6 +1241,26 @@ const BRIDGE_SCRIPT = `
       sendMsg('glide:element-hovered', hovered);
     }
   });
+
+  // Real-time selection outline alignment loop
+  var lastSentRect = null;
+  function updateSelectionLoop() {
+    if (selected && !isDragging) {
+      var r = selected.getBoundingClientRect();
+      if (!lastSentRect ||
+          lastSentRect.left !== r.left ||
+          lastSentRect.top !== r.top ||
+          lastSentRect.width !== r.width ||
+          lastSentRect.height !== r.height) {
+        lastSentRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+        sendMsg('glide:element-selected', selected);
+      }
+    } else {
+      lastSentRect = null;
+    }
+    requestAnimationFrame(updateSelectionLoop);
+  }
+  requestAnimationFrame(updateSelectionLoop);
 
   // Watch for HMR updates and DOM structural changes to keep selection/hover overlays perfectly aligned
   if (typeof MutationObserver !== 'undefined') {
@@ -1392,7 +1417,7 @@ export function glideSourceStamping(): Plugin {
     transformIndexHtml(html) {
       if (!isDev) return html;
       const initialCSS = buildPositionCSS();
-      const positionInjector = `<script>
+      const positionInjector = `<script type="module">
 (function() {
   var styleEl = document.createElement('style');
   styleEl.id = '__glide_positions__';
@@ -1400,18 +1425,19 @@ export function glideSourceStamping(): Plugin {
   document.head.appendChild(styleEl);
 
   // Listen for position updates from the Vite HMR websocket
-  if (import.meta && import.meta.hot) {
     import.meta.hot.on('glide:positions-updated', function(data) {
       var el = document.getElementById('__glide_positions__');
       if (el) el.textContent = data.css;
+      if (window.__glide_refresh_selection__) {
+        window.__glide_refresh_selection__();
+      }
+      window.parent.postMessage({ type: 'glide:positions-applied' }, '*');
     });
-  }
 })();
 </script>`;
-      const initialStyle = `<style id="__glide_positions__">${initialCSS}</style>`;
       return html.replace(
         '<head>',
-        `<head>${initialStyle}<script>${BRIDGE_SCRIPT}<\/script>`
+        `<head>${positionInjector}<script>${BRIDGE_SCRIPT}<\/script>`
       );
     },
 

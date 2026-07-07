@@ -1823,8 +1823,9 @@ export function getEditorHTML(port: number): string {
           let lockedIds = new Set();
           let hiddenIds = new Set();
           let shadowCount = 0;
-          let isResizing = false;
+           let isResizing = false;
           let isDragging = false;
+          let isPendingPositionUpdate = false;
           let resizeDir = '';
           let startPointerX = 0;
           let startPointerY = 0;
@@ -2753,16 +2754,16 @@ export function getEditorHTML(port: number): string {
                 // fresh computed styles and confirms actual rendered dimensions)
                 const rIframe = document.getElementById('app-iframe');
                 if (rIframe && rIframe.contentWindow && selectedElement) {
+                  isPendingPositionUpdate = true;
+                  clearTimeout(window.__glide_pending_position_timeout);
+                  window.__glide_pending_position_timeout = setTimeout(() => {
+                    isPendingPositionUpdate = false;
+                  }, 1000);
+
                   rIframe.contentWindow.postMessage({
                     type: 'glide:resize-end',
                     source: selectedElement.source
                   }, '*');
-                  setTimeout(() => {
-                    rIframe.contentWindow.postMessage({
-                      type: 'glide:select-element-by-id',
-                      id: selectedElement.source
-                    }, '*');
-                  }, 500);
                 }
               }
               startRect = null;
@@ -3295,7 +3296,7 @@ export function getEditorHTML(port: number): string {
               updateLayersPanel(data);
             }
             if (data.type === 'glide:overlay') {
-              if (isResizing || isDragging) return;
+              if (isResizing || isDragging || isPendingPositionUpdate) return;
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
@@ -3331,6 +3332,7 @@ export function getEditorHTML(port: number): string {
               drawOverlay();
             }
             if (data.type === 'glide:element-deselected') {
+              isPendingPositionUpdate = false;
               const source = data.source;
               const idx = selectedSources.indexOf(source);
               if (idx !== -1) {
@@ -3357,6 +3359,7 @@ export function getEditorHTML(port: number): string {
               });
             }
             if (data.type === 'glide:clear-selection') {
+              isPendingPositionUpdate = false;
               selectedSources = [];
               selectedRects = [];
               selectedElement = null;
@@ -3382,8 +3385,14 @@ export function getEditorHTML(port: number): string {
               }
               renderSnapGuides(data.guides || []);
             }
-            if (data.type === 'glide:element-drag-end') {
+             if (data.type === 'glide:element-drag-end') {
               isDragging = false;
+              isPendingPositionUpdate = true;
+              clearTimeout(window.__glide_pending_position_timeout);
+              window.__glide_pending_position_timeout = setTimeout(() => {
+                isPendingPositionUpdate = false;
+              }, 1000);
+
               sendPositionChange(data.source, {
                 position: 'relative',
                 left: data.dx + 'px',
@@ -3403,6 +3412,15 @@ export function getEditorHTML(port: number): string {
               }
               renderSnapGuides([]);
               drawOverlay();
+            }
+            if (data.type === 'glide:positions-applied') {
+              isPendingPositionUpdate = false;
+              clearTimeout(window.__glide_pending_position_timeout);
+              // Tell iframe to refresh selection coordinates now that positions styles are fully applied
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({ type: 'glide:refresh-selection' }, '*');
+              }
             }
             if (data.type === 'glide:snap-guides-clear') {
               renderSnapGuides([]);

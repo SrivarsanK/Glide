@@ -1,9 +1,6 @@
 {
   "name": "@srivarsank/core",
   "version": "1.0.1",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -29,5 +26,6 @@
     "type": "git",
     "url": "git+https://github.com/SrivarsanK/Glide.git",
     "directory": "packages/core"
-  }
+  },
+  "private": true
 }
