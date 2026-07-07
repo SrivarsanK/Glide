@@ -1081,7 +1081,7 @@ export function getEditorHTML(port: number): string {
               <input type="number" id="viewport-width-input" value="1440" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
               <span style="color: var(--text-secondary); font-size: 10px; user-select: none;">×</span>
               <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">H</span>
-              <input type="number" id="viewport-height-input" value="1024" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
+              <input type="number" id="viewport-height-input" value="1024" placeholder="Auto" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
             </div>
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
@@ -3177,9 +3177,7 @@ export function getEditorHTML(port: number): string {
               const iframe = document.getElementById('app-iframe');
               if (iframe) {
                 const heightInput = document.getElementById('viewport-height-input');
-                const triggerText = document.getElementById('viewport-trigger-text');
-                const isCustom = triggerText && triggerText.textContent === 'Custom Mode';
-                if (isCustom && (!heightInput || !heightInput.value)) {
+                if (!heightInput || !heightInput.value) {
                   iframe.style.height = data.height + 'px';
                 }
               }
@@ -5376,6 +5374,7 @@ export function getEditorHTML(port: number): string {
             customRow.addEventListener('click', () => {
               const triggerText = document.getElementById('viewport-trigger-text');
               if (triggerText) triggerText.textContent = 'Custom Mode';
+              if (vpHeightInput) vpHeightInput.value = '';
               vpWidthInput.select();
               menu.style.display = 'none';
             });
@@ -5432,6 +5431,7 @@ export function getEditorHTML(port: number): string {
               if (triggerText) triggerText.textContent = 'Custom Mode';
             };
 
+            vpWidthInput.addEventListener('input', updateCustomSize);
             vpWidthInput.addEventListener('change', updateCustomSize);
             vpWidthInput.addEventListener('keydown', (e) => {
               if (e.key === 'Enter') {
@@ -5440,6 +5440,7 @@ export function getEditorHTML(port: number): string {
               }
             });
 
+            vpHeightInput.addEventListener('input', updateCustomSize);
             vpHeightInput.addEventListener('change', updateCustomSize);
             vpHeightInput.addEventListener('keydown', (e) => {
               if (e.key === 'Enter') {
