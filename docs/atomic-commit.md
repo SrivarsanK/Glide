@@ -97,4 +97,4 @@ Never output all changes in one block and leave sequencing to the user.
 
 A few decisions worth noting: the self-check is intentionally phrased as questions rather than assertions — it forces active reasoning rather than passive compliance. The "and" test in question 1 is a practical heuristic that catches most atomicity violations immediately. The output format section is what makes this actionable in an AI context specifically, since without it a model will happily produce a wall of diffs and call it done.
 
-Want me to tune any section — stricter rules, a different commit message convention (Conventional Commits vs. bare imperative), or tailoring for a specific stack or workflow like trunk-based development?
+Any new feature introduced or any bugs solved or any known bug or issue is found it should be updated in the README.md
