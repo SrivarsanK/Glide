@@ -2918,26 +2918,6 @@ export function getEditorHTML(port: number): string {
               }
             }
 
-            if (data.type === 'glide:text-edited') {
-              if (selectedElement && selectedElement.source === data.source) {
-                sendEdit({ type: 'text', value: data.value });
-              } else {
-                const parsed = parseSource(data.source);
-                if (parsed && socket && socket.readyState === WebSocket.OPEN) {
-                  socket.send(JSON.stringify({
-                    type: 'edit',
-                    file: parsed.file,
-                    line: parsed.line,
-                    column: parsed.column,
-                    hash: parsed.hash,
-                    generation: currentGeneration,
-                    viewportWidth: iframeWidth.current,
-                    change: { type: 'text', value: data.value }
-                  }));
-                }
-              }
-            }
-
             if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
               updateLayersPanel(data);
             }
@@ -2963,7 +2943,7 @@ export function getEditorHTML(port: number): string {
                 selectedElement = { source: source };
                 selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
-                populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
+                populatePropsFromComputed(data.computedStyles || {}, rect || {});
                 
                 // Highlight selected items in layers tree
                 document.querySelectorAll('.layer-item').forEach(item => {
@@ -3410,16 +3390,10 @@ export function getEditorHTML(port: number): string {
               // Double-click → inline edit
               item.addEventListener('dblclick', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
-                // Only allow editing text of leaf elements (no children in the layers tree)
-                if (node.children && node.children.length > 0) {
-                  showToast('info', 'Cannot edit text of structural containers');
-                  return;
-                }
                 const nameSpan = item.querySelector('.layer-name-text');
-                const originalText = node.text || '';
+                const original = node.name + (node.text ? ': ' + node.text : '');
                 const inp = document.createElement('input');
-                inp.value = originalText;
-                inp.placeholder = 'Edit text content...';
+                inp.value = node.text || node.name;
                 inp.style.cssText = 'background:var(--bg-base);border:1px solid var(--accent-color);color:var(--text-primary);padding:2px 4px;border-radius:3px;font-size:12px;font-family:inherit;outline:none;width:100%;';
                 nameSpan.innerHTML = '';
                 nameSpan.appendChild(inp);
@@ -3447,7 +3421,7 @@ export function getEditorHTML(port: number): string {
 
                 const commit = () => {
                   const newText = inp.value.trim();
-                  if (newText && newText !== originalText) {
+                  if (newText && newText !== (node.text || node.name) && node.text !== undefined) {
                     if (socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({
                         type: 'edit',
@@ -3500,21 +3474,6 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           // LOAD APP IFRAME
           // ═══════════════════════════════════════════════════════════════
-          let connectionTimeout;
-          
-          function updateConnectionState(state) {
-            const btn = document.getElementById('btn-load');
-            if (!btn) return;
-            btn.className = 'connection-btn ' + state;
-            if (state === 'disconnected') {
-              btn.textContent = 'Disconnected';
-            } else if (state === 'connecting') {
-              btn.textContent = 'Connecting';
-            } else if (state === 'connected') {
-              btn.textContent = 'Connected';
-            }
-          }
-
           function loadApp(url) {
             const iframe = document.getElementById('app-iframe');
             const loading = document.getElementById('canvas-loading');
@@ -3523,17 +3482,7 @@ export function getEditorHTML(port: number): string {
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
 
-            updateConnectionState('connecting');
-            if (connectionTimeout) clearTimeout(connectionTimeout);
-            
-            // Timeout after 6 seconds if iframe fails to load or load fails
-            connectionTimeout = setTimeout(() => {
-              updateConnectionState('disconnected');
-            }, 6000);
-
             iframe.onload = () => {
-              if (connectionTimeout) clearTimeout(connectionTimeout);
-              updateConnectionState('connected');
               setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
               // Send the component roots and snap settings on load
               if (iframe.contentWindow) {
@@ -3552,8 +3501,6 @@ export function getEditorHTML(port: number): string {
               }
             };
             iframe.onerror = () => {
-              if (connectionTimeout) clearTimeout(connectionTimeout);
-              updateConnectionState('disconnected');
               if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
             };
 
@@ -3567,8 +3514,6 @@ export function getEditorHTML(port: number): string {
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
-            const contentSec = document.getElementById('section-content');
-            if (contentSec) contentSec.style.display = 'none';
           }
 
           function showPropsPanel(tagName) {
@@ -3582,7 +3527,7 @@ export function getEditorHTML(port: number): string {
             return parseInt(val, 10) || 0;
           }
 
-          function populatePropsFromComputed(styles, rect, textContent) {
+          function populatePropsFromComputed(styles, rect) {
             showPropsPanel(styles.tagName);
             const activeEl = document.activeElement;
 
@@ -3757,30 +3702,6 @@ export function getEditorHTML(port: number): string {
             if (elOpacity) elOpacity.value = opacity;
             const elOpacitySlider = document.getElementById('prop-opacity-slider');
             if (elOpacitySlider) elOpacitySlider.value = opacity;
-
-            // Content (Text Editing) Section updates
-            const contentSec = document.getElementById('section-content');
-            const contentTextarea = document.getElementById('prop-text-content');
-            if (contentSec && contentTextarea) {
-              if (typeof textContent === 'string') {
-                contentSec.style.display = 'block';
-                if (document.activeElement !== contentTextarea) {
-                  contentTextarea.value = textContent;
-                }
-                const charCount = document.getElementById('prop-text-char-count');
-                if (charCount) charCount.textContent = textContent.length + ' chars';
-                const previewLabel = document.getElementById('prop-text-preview-label');
-                if (previewLabel && styles.fontFamily) {
-                  const fontName = styles.fontFamily.split(',')[0].replace(/['"]/g, '');
-                  previewLabel.textContent = (styles.fontSize || '') + ' ' + fontName;
-                }
-                // Style the textarea preview using the element's actual font family/weight
-                if (styles.fontFamily) contentTextarea.style.fontFamily = styles.fontFamily;
-                if (styles.fontWeight) contentTextarea.style.fontWeight = styles.fontWeight;
-              } else {
-                contentSec.style.display = 'none';
-              }
-            }
           }
 
           function setActiveBtn(ids, activeId) {
@@ -4066,25 +3987,6 @@ export function getEditorHTML(port: number): string {
           // Border style
           document.getElementById('prop-border-style').addEventListener('change', (e) => { sendEdit({type:'class',property:'borderStyle',value:e.target.value}); });
           // (border colour is handled by the custom popup + hex input above)
-
-          // Content (Text Editing) event listeners
-          const textContentEl = document.getElementById('prop-text-content');
-          if (textContentEl) {
-            textContentEl.addEventListener('input', (e) => {
-              const charCount = document.getElementById('prop-text-char-count');
-              if (charCount) charCount.textContent = e.target.value.length + ' chars';
-            });
-            textContentEl.addEventListener('change', (e) => {
-              sendEdit({ type: 'text', value: e.target.value });
-            });
-            textContentEl.addEventListener('keydown', (e) => {
-              // Pressing Enter commits changes. Shift+Enter creates new line.
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                textContentEl.blur();
-              }
-            });
-          }
 
           // ─── Custom Colour Picker Popup JS ────────────────────────────────────
           // NEVER use <input type="color">.click() — that opens the OS dialog which
@@ -4749,7 +4651,7 @@ export function getEditorHTML(port: number): string {
             const branchName = document.getElementById('branch-name-input').value.trim();
             if (branchName) {
               if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'git-branch-create', branchName, projectDir: currentFile }));
+                socket.send(JSON.stringify({ type: 'git-branch-create', branchName }));
                 showToast('info', 'Creating git branch ' + branchName + '...');
               }
             }
@@ -4764,7 +4666,7 @@ export function getEditorHTML(port: number): string {
             const commitMessage = document.getElementById('commit-msg-input').value.trim();
             if (commitMessage) {
               if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'git-branch-finalize', commitMessage, projectDir: currentFile }));
+                socket.send(JSON.stringify({ type: 'git-branch-finalize', commitMessage }));
                 showToast('info', 'Finalizing git branch and committing...');
               }
             }
@@ -4879,24 +4781,8 @@ export function getEditorHTML(port: number): string {
           document.getElementById('btn-history-back').addEventListener('click', () => {
             toggleHistory();
           });
-          // Collapsible properties sections event listener
-          document.querySelectorAll('.props-section.collapsible .props-section-header').forEach(header => {
-            header.addEventListener('click', () => {
-              const section = header.parentElement;
-              const isCollapsed = section.classList.toggle('collapsed');
-              const caret = header.querySelector('.section-caret');
-              if (caret) {
-                if (isCollapsed) {
-                  caret.style.transform = 'rotate(-90deg)';
-                } else {
-                  caret.style.transform = 'rotate(0deg)';
-                }
-              }
-            });
-          });
 
           connectSocket();
-
           // Load default url on start
           const defaultUrl = document.getElementById('app-url').value.trim();
           if (defaultUrl) {
