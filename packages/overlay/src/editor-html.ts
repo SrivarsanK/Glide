@@ -4781,8 +4781,24 @@ export function getEditorHTML(port: number): string {
           document.getElementById('btn-history-back').addEventListener('click', () => {
             toggleHistory();
           });
+          // Collapsible properties sections event listener
+          document.querySelectorAll('.props-section.collapsible .props-section-header').forEach(header => {
+            header.addEventListener('click', () => {
+              const section = header.parentElement;
+              const isCollapsed = section.classList.toggle('collapsed');
+              const caret = header.querySelector('.section-caret');
+              if (caret) {
+                if (isCollapsed) {
+                  caret.style.transform = 'rotate(-90deg)';
+                } else {
+                  caret.style.transform = 'rotate(0deg)';
+                }
+              }
+            });
+          });
 
           connectSocket();
+
           // Load default url on start
           const defaultUrl = document.getElementById('app-url').value.trim();
           if (defaultUrl) {
