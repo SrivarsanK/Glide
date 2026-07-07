@@ -95,3 +95,16 @@ Never output all changes in one block and leave sequencing to the user.
 - State any assumption you made that wasn't verified.
 - If proposing a CST mutation, state exactly which node type/field you're targeting and how you confirmed that's the correct target.
 
+## Design Context (from PRODUCT.md)
+
+- **Register**: `product` (visual editor UI).
+- **Users**: Frontend developers and UI designers editing React/Vue/Svelte apps visually and writing directly to source code.
+- **Brand Personality**: Editorial, confident, playful yet precise (Figma-like monochrome frame + bold pastel blocks).
+- **Design Principles**:
+  1. *Source Code Integrity First*: AST transformations must be clean, minimal, and preserve developer formatting.
+  2. *Predictable Precision*: Snapping, resizing, and dragging must behave exactly as predicted, using Kd-Trees and smart guides.
+  3. *Clean Chrome, Rich Canvas*: The editor interface is a clear, high-contrast frame so the user's application stands out.
+  4. *Unified Component Tree*: Locally resolve custom component definitions in parsed ASTs to render nested sub-components under their instantiation node, preventing duplicate floating root nodes in the layers panel.
+- **Anti-references**: SaaS cliches (heavy shadows, gradient card borders, low-contrast gray text on tinted white surfaces).
+- **Accessibility & Inclusion**: WCAG AA contrast (>= 4.5:1) for controls, distinct focus states, and support for reduced motion.
+
