@@ -14,10 +14,12 @@ No cloud. No proprietary formats. No lock-in. Just your code, edited visually.
 
 ## How It Works
 
-```
-Your App (port 5173)  ←──→  Glide Server (port 7777)  ←──→  Your Source Files
-     ↑                              ↑
-  Browser iframe           Visual Editor UI
+```mermaid
+flowchart TD
+    App["Your App (port 5173)"] <--> Server["Glide Server (port 7777)"]
+    Server <--> Files["Your Source Files"]
+    Iframe["Browser iframe"] --> App
+    UI["Visual Editor UI"] --> Server
 ```
 
 1. Your app runs normally (e.g., `npm run dev` on port 5173)
