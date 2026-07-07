@@ -35,10 +35,22 @@ flowchart TD
 
 - **Node.js** v18+
 - **npm** v8+
+- **GitHub Packages Registry Configuration**:
+  Since this package is hosted on GitHub Packages under the `@srivarsank` scope, you need to configure `npm` to route requests for this scope to GitHub:
+  1. Add or update `.npmrc` in your project root or your global user directory (`~/.npmrc`) with:
+     ```ini
+     @srivarsank:registry=https://npm.pkg.github.com
+     ```
+  2. Authenticate by logging in with your GitHub Personal Access Token (PAT) with `read:packages` scope:
+     ```bash
+     npm login --registry=https://npm.pkg.github.com
+     ```
+     *Username: Your GitHub username*  
+     *Password: Your GitHub Personal Access Token (PAT)*
 
 ### Method 1: Run via npx (Easiest)
 
-You can run Glide directly on any frontend project without cloning this repository:
+Once the registry is configured, you can run Glide directly on any frontend project without cloning this repository:
 
 1. Start your frontend app normally (e.g., `npm run dev` on port `5173`).
 2. In a separate terminal, run:
