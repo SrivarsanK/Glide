@@ -130,7 +130,10 @@ const BRIDGE_SCRIPT = `
       height: cs.height,
       position: cs.position,
       top: cs.top,
-      left: cs.left
+      left: cs.left,
+      flex: cs.flex,
+      flexGrow: cs.flexGrow,
+      alignSelf: cs.alignSelf
     };
 
     window.parent.postMessage({
@@ -595,6 +598,17 @@ const BRIDGE_SCRIPT = `
 
   window.addEventListener('message', function(e) {
     if (!e.data) return;
+    if (e.data.type === 'glide:optimistic-style') {
+      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      if (el) {
+        var styles = e.data.styles || {};
+        for (var prop in styles) {
+          if (styles.hasOwnProperty(prop)) {
+            el.style[prop] = styles[prop];
+          }
+        }
+      }
+    }
     if (e.data.type === 'glide:update-component-roots') {
       componentRoots = new Set(e.data.roots || []);
     }

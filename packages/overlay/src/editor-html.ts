@@ -1197,6 +1197,24 @@ export function getEditorHTML(port: number): string {
                     <input class="props-input" id="prop-h" type="number" placeholder="auto">
                   </div>
                 </div>
+                <div class="props-grid" style="margin-bottom:6px;">
+                  <div class="props-field">
+                    <span class="props-label" style="font-size:8px;padding-right:1px;">W Mode</span>
+                    <select class="props-select" id="prop-w-mode">
+                      <option value="fixed">Fixed</option>
+                      <option value="hug">Hug</option>
+                      <option value="fill">Fill</option>
+                    </select>
+                  </div>
+                  <div class="props-field">
+                    <span class="props-label" style="font-size:8px;padding-right:1px;">H Mode</span>
+                    <select class="props-select" id="prop-h-mode">
+                      <option value="fixed">Fixed</option>
+                      <option value="hug">Hug</option>
+                      <option value="fill">Fill</option>
+                    </select>
+                  </div>
+                </div>
                 <div class="props-field">
                   <span class="props-label">Rotation (°)</span>
                   <input class="props-input" id="prop-rotation" type="number" placeholder="0" value="0">
@@ -1679,9 +1697,25 @@ export function getEditorHTML(port: number): string {
             });
           }
 
+          function applyOptimisticStyle(source, styles) {
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:optimistic-style',
+                id: source,
+                styles: styles
+              }, '*');
+            }
+          }
+
           let _editTimer = null;
           function sendEdit(change) {
             if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+            // Apply optimistically immediately
+            if (change.type === 'class' && change.property) {
+              applyOptimisticStyle(selectedElement.source, { [change.property]: change.value });
+            }
             // Debounce rapid-fire edits (e.g. color picker drag)
             if (_editTimer) clearTimeout(_editTimer);
             _editTimer = setTimeout(() => {
@@ -2279,6 +2313,11 @@ export function getEditorHTML(port: number): string {
               // Track final dimensions for commit on pointerup
               resizeFinalW = Math.round(width);
               resizeFinalH = Math.round(height);
+
+              applyOptimisticStyle(selectedElement.source, {
+                width: resizeFinalW + 'px',
+                height: resizeFinalH + 'px'
+              });
 
               const propX = document.getElementById('prop-x');
               if (propX) propX.value = Math.round(x);
@@ -3394,6 +3433,35 @@ export function getEditorHTML(port: number): string {
               setVal('prop-h', Math.round(rect.height || 0));
             }
 
+            // Width & Height Modes
+            const widthVal = styles.width || '';
+            const wModeSelect = document.getElementById('prop-w-mode');
+            const wInput = document.getElementById('prop-w');
+            if (widthVal === 'fit-content' || widthVal === 'auto' || widthVal.includes('fit-content')) {
+              if (wModeSelect) wModeSelect.value = 'hug';
+              if (wInput) wInput.disabled = true;
+            } else if (widthVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+              if (wModeSelect) wModeSelect.value = 'fill';
+              if (wInput) wInput.disabled = true;
+            } else {
+              if (wModeSelect) wModeSelect.value = 'fixed';
+              if (wInput) wInput.disabled = false;
+            }
+
+            const heightVal = styles.height || '';
+            const hModeSelect = document.getElementById('prop-h-mode');
+            const hInput = document.getElementById('prop-h');
+            if (heightVal === 'fit-content' || heightVal === 'auto' || heightVal.includes('fit-content')) {
+              if (hModeSelect) hModeSelect.value = 'hug';
+              if (hInput) hInput.disabled = true;
+            } else if (heightVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+              if (hModeSelect) hModeSelect.value = 'fill';
+              if (hInput) hInput.disabled = true;
+            } else {
+              if (hModeSelect) hModeSelect.value = 'fixed';
+              if (hInput) hInput.disabled = false;
+            }
+
             // Rotation
             const transform = styles.transform || '';
             const rotMatch = transform.match(/rotate\(([\d.-]+)deg\)/);
@@ -3661,6 +3729,54 @@ export function getEditorHTML(port: number): string {
             });
           });
 
+          ['prop-w', 'prop-h'].forEach((id) => {
+            const prop = id === 'prop-w' ? 'width' : 'height';
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', (e) => {
+              if (selectedElement) sendStylePropsChange(selectedElement.source, { [prop]: e.target.value + 'px' });
+            });
+          });
+
+          const wModeEl = document.getElementById('prop-w-mode');
+          if (wModeEl) {
+            wModeEl.addEventListener('change', (e) => {
+              if (!selectedElement) return;
+              const mode = e.target.value;
+              const wInput = document.getElementById('prop-w');
+              if (mode === 'hug') {
+                if (wInput) wInput.disabled = true;
+                sendStylePropsChange(selectedElement.source, { width: 'fit-content' });
+              } else if (mode === 'fill') {
+                if (wInput) wInput.disabled = true;
+                sendStylePropsChange(selectedElement.source, { width: '100%' });
+              } else {
+                if (wInput) wInput.disabled = false;
+                const val = (wInput && wInput.value) || 100;
+                sendStylePropsChange(selectedElement.source, { width: val + 'px' });
+              }
+            });
+          }
+
+          const hModeEl = document.getElementById('prop-h-mode');
+          if (hModeEl) {
+            hModeEl.addEventListener('change', (e) => {
+              if (!selectedElement) return;
+              const mode = e.target.value;
+              const hInput = document.getElementById('prop-h');
+              if (mode === 'hug') {
+                if (hInput) hInput.disabled = true;
+                sendStylePropsChange(selectedElement.source, { height: 'fit-content' });
+              } else if (mode === 'fill') {
+                if (hInput) hInput.disabled = true;
+                sendStylePropsChange(selectedElement.source, { height: '100%' });
+              } else {
+                if (hInput) hInput.disabled = false;
+                const val = (hInput && hInput.value) || 100;
+                sendStylePropsChange(selectedElement.source, { height: val + 'px' });
+              }
+            });
+          }
+
           // Opacity sync — write inline style
           document.getElementById('prop-opacity-slider').addEventListener('input', (e) => {
             document.getElementById('prop-opacity').value = e.target.value;
@@ -3723,16 +3839,6 @@ export function getEditorHTML(port: number): string {
           Object.entries(numericClassMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
-          });
-          // Width/height — write as inline style (works with plain CSS, not just Tailwind)
-          ['prop-w', 'prop-h'].forEach((id) => {
-            const prop = id === 'prop-w' ? 'width' : 'height';
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => {
-              if (selectedElement) sendStylePropsChange(selectedElement.source, { [prop]: e.target.value + 'px' });
-            });
-          });
-
           // Font family
           document.getElementById('prop-font-family').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontFamily',value:e.target.value}); });
           document.getElementById('prop-font-weight').addEventListener('change', (e) => { sendEdit({type:'class',property:'fontWeight',value:e.target.value}); });
@@ -4202,6 +4308,10 @@ export function getEditorHTML(port: number): string {
           let _styleTimer = null;
           function sendStylePropsChange(source, styles) {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+            // Apply optimistically immediately
+            applyOptimisticStyle(source, styles);
+
             if (_styleTimer) clearTimeout(_styleTimer);
             const capturedSource = source;
             const capturedStyles = styles;
