@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo/ascii-art.png" alt="Glide" width="100%">
+  <img src="./logo/ascii-art.png" alt="Glide" width="500">
 </p>
 
 ---
