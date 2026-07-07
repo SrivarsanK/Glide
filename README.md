@@ -1,20 +1,5 @@
-<h1 align="center"><img src="./.github/assets/logo.png" alt="Glide Logo" width="60" align="middle"> &nbsp; Glide</h1>
-
 <p align="center">
-  <i>Edit your React, Vue, or Svelte app visually — changes write back to your source code automatically.</i>
-</p>
-
-<h4 align="center">
-  <a href="https://github.com/srivarsank/glide/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/srivarsank/glide?color=yellow&style=flat-square" alt="contributors" style="height: 20px;">
-  </a>
-  <a href="https://opensource.org/licenses/Apache-2.0">
-    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" alt="license" style="height: 20px;">
-  </a>
-</h4>
-
-<p align="center">
-    <img src="./.github/assets/dashboard.png" alt="Glide Visual Designer Workspace" width="100%"/>
+  <img src="./logo/ascii-art.png" alt="Glide" width="100%">
 </p>
 
 ---
