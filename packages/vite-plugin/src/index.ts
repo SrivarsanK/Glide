@@ -188,6 +188,7 @@ const BRIDGE_SCRIPT = `
   var OUR_SNAP_THRESHOLD_PX = 4;
   var snapObjectEnabled = true;   // toggled by editor (postMessage)
   var snapPixelEnabled  = true;   // toggled by editor (postMessage)
+  var gridVisible       = false;  // toggled by editor (postMessage)
   var snapDisabledForDrag = false; // true while Ctrl/Cmd is held during a drag
   var dragStartRect = null;        // live rect captured fresh on drag start
   var siblingRects  = [];          // fresh rects of siblings, captured on drag start
@@ -628,13 +629,22 @@ const BRIDGE_SCRIPT = `
     var snappedDx = snap.dx;
     var snappedDy = snap.dy;
     
-    if (snapPixelEnabled) {
-      var rawLeft = initialLeft + snappedDx;
-      var rawTop = initialTop + snappedDy;
-      var snapL = Math.round(rawLeft / 8) * 8;
-      var snapT = Math.round(rawTop / 8) * 8;
-      snappedDx = snapL - initialLeft;
-      snappedDy = snapT - initialTop;
+    if (!snapDisabledForDrag) {
+      if (gridVisible) {
+        var rawLeft = initialLeft + snappedDx;
+        var rawTop = initialTop + snappedDy;
+        var snapL = Math.round(rawLeft / 8) * 8;
+        var snapT = Math.round(rawTop / 8) * 8;
+        snappedDx = snapL - initialLeft;
+        snappedDy = snapT - initialTop;
+      } else if (snapPixelEnabled) {
+        var rawLeft = initialLeft + snappedDx;
+        var rawTop = initialTop + snappedDy;
+        var snapL = Math.round(rawLeft);
+        var snapT = Math.round(rawTop);
+        snappedDx = snapL - initialLeft;
+        snappedDy = snapT - initialTop;
+      }
     }
     
     dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)';
@@ -802,13 +812,22 @@ const BRIDGE_SCRIPT = `
       var finalDy = snapResult.dy;
 
       // Pixel-grid snap: separate final pass after object-snap (spec constraint #5).
-      if (snapPixelEnabled) {
-        var rawLeft = initialLeft + finalDx;
-        var rawTop = initialTop + finalDy;
-        var snapL = Math.round(rawLeft / 8) * 8;
-        var snapT = Math.round(rawTop / 8) * 8;
-        finalDx = snapL - initialLeft;
-        finalDy = snapT - initialTop;
+      if (!snapDisabledForDrag) {
+        if (gridVisible) {
+          var rawLeft = initialLeft + finalDx;
+          var rawTop = initialTop + finalDy;
+          var snapL = Math.round(rawLeft / 8) * 8;
+          var snapT = Math.round(rawTop / 8) * 8;
+          finalDx = snapL - initialLeft;
+          finalDy = snapT - initialTop;
+        } else if (snapPixelEnabled) {
+          var rawLeft = initialLeft + finalDx;
+          var rawTop = initialTop + finalDy;
+          var snapL = Math.round(rawLeft);
+          var snapT = Math.round(rawTop);
+          finalDx = snapL - initialLeft;
+          finalDy = snapT - initialTop;
+        }
       }
 
       var finalLeft = initialLeft + finalDx;
@@ -944,6 +963,9 @@ const BRIDGE_SCRIPT = `
     }
     if (e.data.type === 'glide:set-snap-pixel') {
       snapPixelEnabled = !!e.data.enabled;
+    }
+    if (e.data.type === 'glide:set-grid-visible') {
+      gridVisible = !!e.data.enabled;
     }
     if (e.data.type === 'glide:select-marquee') {
       var x = e.data.x;
