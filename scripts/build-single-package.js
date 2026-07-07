@@ -76,10 +76,16 @@ async function runBuild() {
     target: 'node20',
     format: 'esm',
     banner: {
-      js: `#!/usr/bin/env node\n${esmBanner}`,
+      js: esmBanner,
     },
     external: externals,
   });
+
+  // Strip shebang from the bundled code and prepend a single shebang at the top
+  const cliPath = path.join(distDir, 'cli.js');
+  let cliContent = fs.readFileSync(cliPath, 'utf8');
+  cliContent = cliContent.split('\n').filter(line => !line.trim().startsWith('#!/usr/bin/env node')).join('\n');
+  fs.writeFileSync(cliPath, `#!/usr/bin/env node\n${cliContent}`, 'utf8');
 
   // 3. Vite plugin entry point
   await build({
