@@ -722,6 +722,14 @@ export function getEditorHTML(port: number): string {
             opacity: 0;
             cursor: pointer;
           }
+          input[type=number]::-webkit-outer-spin-button,
+          input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          input[type=number] {
+            -moz-appearance: textfield;
+          }
           .opacity-row { display: flex; align-items: center; gap: 6px; }
           .opacity-slider {
             flex: 1;
@@ -1078,10 +1086,10 @@ export function getEditorHTML(port: number): string {
             <!-- Custom Width & Height Inputs (Unified Capsule Widget) -->
             <div style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 8px; height: 28px; gap: 4px;">
               <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">W</span>
-              <input type="number" id="viewport-width-input" value="1440" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
+              <input type="number" id="viewport-width-input" value="1440" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
               <span style="color: var(--text-secondary); font-size: 10px; user-select: none;">×</span>
               <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">H</span>
-              <input type="number" id="viewport-height-input" value="1024" placeholder="Auto" style="width: 38px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
+              <input type="number" id="viewport-height-input" value="1024" placeholder="Auto" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
             </div>
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
