@@ -89,10 +89,12 @@ Go to **http://localhost:7777** in your browser. Your app will appear inside the
 | 📐 **Smart Snapping** | Automatically snaps to sibling edges, centers, and the pixel grid with guide lines |
 | ✍️ **Live Code Write-back** | Every change is saved directly to your JSX/TSX/Vue/Svelte source files |
 | ⚡ **Zero-Flicker Drag** | Positions are saved to `glide-positions.json` so dragging doesn't trigger a full HMR reload |
-| 🗂️ **Layers Panel** | Hierarchical tree view of all elements, with icons and hover controls (like Figma) |
+| 🗂️ **Layers Panel** | Hierarchical tree view of all elements, with Lucide-style icons and hover controls (like Figma) |
 | 🎛️ **Properties Panel** | Edit geometry (X, Y, W, H), spacing (margin/padding), border, radius, shadows, fills, and typography |
 | 🌈 **Color Picker** | Custom popup color picker with presets and hex input - no native OS dialog |
 | 📱 **Device Preview** | Switch between preset breakpoints (320px → 4K) or enter a custom width |
+| 🌿 **Git Branching Mode** | Safe branching sandbox (`git: <branch> ▾`) to preview and finalise changes before commit |
+| 🎛️ **Quick Toggles Navbar** | Compact header tools for snapping object/pixel options, grid layers, rulers, and custom logo/repository view |
 | ↩️ **Undo / Redo** | Full undo/redo history for the entire session |
 
 ---
