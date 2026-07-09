@@ -97,7 +97,7 @@ export function reorderJSXElement(
 
   let temp = targetPath.parentPath;
   while (temp) {
-    if (temp.isJSXElement()) {
+    if (temp.isJSXElement() || temp.isJSXFragment()) {
       oldParentPath = temp;
       break;
     }
@@ -226,7 +226,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
   let firstSelected = selectedPaths[0];
   let temp = firstSelected.parentPath;
   while (temp) {
-    if (temp.isJSXElement()) {
+    if (temp.isJSXElement() || temp.isJSXFragment()) {
       parentPath = temp;
       break;
     }
@@ -242,7 +242,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
     let p: any = null;
     let tPath = path.parentPath;
     while (tPath) {
-      if (tPath.isJSXElement()) {
+      if (tPath.isJSXElement() || tPath.isJSXFragment()) {
         p = tPath;
         break;
       }
@@ -283,7 +283,11 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
     )
   );
   
-  const groupOpening = t.jsxOpeningElement(t.jsxIdentifier('div'), [styleAttr]);
+  const idAttr = t.jsxAttribute(
+    t.jsxIdentifier('id'),
+    t.stringLiteral(`group-${Math.random().toString(36).substring(7)}`)
+  );
+  const groupOpening = t.jsxOpeningElement(t.jsxIdentifier('div'), [idAttr, styleAttr]);
   const groupClosing = t.jsxClosingElement(t.jsxIdentifier('div'));
   const groupElement = t.jsxElement(groupOpening, groupClosing, groupedChildrenNodes, false);
 
@@ -313,7 +317,7 @@ export function ungroupJSXElement(code: string, groupId: string): string {
 
   let temp = targetPath.parentPath;
   while (temp) {
-    if (temp.isJSXElement()) {
+    if (temp.isJSXElement() || temp.isJSXFragment()) {
       parentPath = temp;
       break;
     }
@@ -366,7 +370,7 @@ export function arrangeJSXElement(
 
   let temp = targetPath.parentPath;
   while (temp) {
-    if (temp.isJSXElement()) {
+    if (temp.isJSXElement() || temp.isJSXFragment()) {
       parentPath = temp;
       break;
     }

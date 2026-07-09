@@ -118,188 +118,31 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
   });
-
-  const componentDefs = new Map<string, any>();
-  const allComponents: string[] = [];
+  const roots: import('./types.js').ComponentTreeNode[] = [];
+  const nodeMap = new Map<any, import('./types.js').ComponentTreeNode>();
 
   traverse(ast, {
-    FunctionDeclaration(path: any) {
-      const name = path.node.id?.name;
-      if (name && name[0] === name[0].toUpperCase()) {
-        const jsx = getJSXFromFunction(path, code);
-        if (jsx) {
-          componentDefs.set(name, jsx);
-          allComponents.push(name);
-        }
-      }
+    JSXElement(path: any) {
+      processNode(path);
     },
-    VariableDeclarator(path: any) {
-      const name = path.node.id?.name;
-      if (name && name[0] === name[0].toUpperCase()) {
-        const init = path.node.init;
-        if (init && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
-          const funcPath = path.get('init');
-          const jsx = getJSXFromFunction(funcPath, code);
-          if (jsx) {
-            componentDefs.set(name, jsx);
-            allComponents.push(name);
-          }
-        }
-      }
+    JSXFragment(path: any) {
+      processNode(path);
     }
   });
 
-  // Resolve entry/main component
-  let entryName = '';
-  traverse(ast, {
-    ExportDefaultDeclaration(path: any) {
-      const decl = path.node.declaration;
-      if (decl.type === 'Identifier') {
-        entryName = decl.name;
-      } else if (decl.type === 'FunctionDeclaration') {
-        entryName = decl.id?.name || '';
-      }
-    }
-  });
-
-  if (!entryName || !componentDefs.has(entryName)) {
-    if (componentDefs.has('App')) {
-      entryName = 'App';
-    } else if (allComponents.length > 0) {
-      entryName = allComponents[allComponents.length - 1];
-    }
-  }
-
-  // Fallback: If no components are defined locally, use the old traversal
-  if (!entryName || !componentDefs.has(entryName)) {
-    const roots: import('./types.js').ComponentTreeNode[] = [];
-    const nodeMap = new Map<any, import('./types.js').ComponentTreeNode>();
-
-    traverse(ast, {
-      JSXElement(path: any) {
-        const openingEl = path.node.openingElement;
-        
-        let id = '';
-        openingEl.attributes.forEach((attr: any) => {
-          if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-            if (attr.value && attr.value.type === 'StringLiteral') {
-              id = attr.value.value;
-            }
-          }
-        });
-
-        if (!id) {
-          const loc = path.node.loc;
-          if (loc) {
-            const start = path.node.start;
-            const end = path.node.end;
-            let hash = 'nohash';
-            if (start != null && end != null) {
-              const slice = code.slice(start, end);
-              hash = computeNodeHash(slice);
-            }
-            id = `line:${loc.start.line}:col:${loc.start.column}:${hash}`;
-          } else {
-            id = Math.random().toString(36).substring(7);
-          }
-        }
-
-        let name = '';
-        const nameNode = openingEl.name;
-        if (nameNode.type === 'JSXIdentifier') {
-          name = nameNode.name;
-        } else if (nameNode.type === 'JSXMemberExpression') {
-          let current = nameNode;
-          const parts: string[] = [];
-          while (current.type === 'JSXMemberExpression') {
-            parts.unshift(current.property.name);
-            current = current.object as any;
-          }
-          parts.unshift((current as any).name);
-          name = parts.join('.');
-        }
-
-        let className = '';
-        openingEl.attributes.forEach((attr: any) => {
-          if (attr.type === 'JSXAttribute' && attr.name.name === 'className') {
-            if (attr.value && attr.value.type === 'StringLiteral') {
-              className = attr.value.value;
-            }
-          }
-        });
-
-        let text = '';
-        if (path.node.children) {
-          path.node.children.forEach((child: any) => {
-            if (child.type === 'JSXText') {
-              const val = child.value.trim();
-              if (val) text = val;
-            } else if (child.type === 'JSXExpressionContainer' && child.expression.type === 'StringLiteral') {
-              text = child.expression.value;
-            }
-          });
-        }
-        if (text && text.length > 25) {
-          text = text.substring(0, 22) + '...';
-        }
-
-        const treeNode: import('./types.js').ComponentTreeNode = {
-          id,
-          name,
-          children: [],
-          ...(className ? { className } : {}),
-          ...(text ? { text } : {}),
-        };
-
-        nodeMap.set(path.node, treeNode);
-
-        let parentPath = path.parentPath;
-        let jsxParent: any = null;
-        while (parentPath) {
-          if (parentPath.isJSXElement()) {
-            jsxParent = parentPath.node;
-            break;
-          }
-          parentPath = parentPath.parentPath;
-        }
-
-        if (jsxParent) {
-          const parentTreeNode = nodeMap.get(jsxParent);
-          if (parentTreeNode) {
-            parentTreeNode.children.push(treeNode);
-          }
-        } else {
-          roots.push(treeNode);
-        }
-      }
-    });
-
-    return roots;
-  }
-
-  // Recursive tree builder starting from the entry component
-  const visited = new Set<string>();
-
-  function buildNode(jsxNode: any): import('./types.js').ComponentTreeNode {
-    const isFragment = jsxNode.type === 'JSXFragment';
-    const openingEl = isFragment ? null : jsxNode.openingElement;
-    
+  function processNode(path: any) {
+    const isFragment = path.node.type === 'JSXFragment';
     let id = '';
-    if (openingEl) {
-      openingEl.attributes.forEach((attr: any) => {
-        if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
-          if (attr.value && attr.value.type === 'StringLiteral') {
-            id = attr.value.value;
-          }
-        }
-      });
+    if (!isFragment) {
+      id = path.node.openingElement.attributes.find((attr: any) =>
+        attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source'
+      )?.value?.value;
     }
-
     if (!id) {
-      const loc = jsxNode.loc;
+      const loc = path.node.loc;
       if (loc) {
-        const start = jsxNode.start;
-        const end = jsxNode.end;
+        const start = path.node.start;
+        const end = path.node.end;
         let hash = 'nohash';
         if (start != null && end != null) {
           const slice = code.slice(start, end);
@@ -311,26 +154,30 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
       }
     }
 
-    let name = 'Fragment';
-    if (openingEl) {
-      const nameNode = openingEl.name;
+    let name = isFragment ? 'Fragment' : 'div';
+    if (!isFragment) {
+      const nameNode = path.node.openingElement.name;
       if (nameNode.type === 'JSXIdentifier') {
         name = nameNode.name;
       } else if (nameNode.type === 'JSXMemberExpression') {
-        let current = nameNode;
-        const parts: string[] = [];
-        while (current.type === 'JSXMemberExpression') {
-          parts.unshift(current.property.name);
-          current = current.object as any;
+        let part = nameNode;
+        const nameParts: string[] = [];
+        while (part) {
+          if (part.type === 'JSXMemberExpression') {
+            nameParts.unshift(part.property.name);
+            part = part.object;
+          } else if (part.type === 'JSXIdentifier') {
+            nameParts.unshift(part.name);
+            break;
+          }
         }
-        parts.unshift((current as any).name);
-        name = parts.join('.');
+        name = nameParts.join('.');
       }
     }
 
     let className = '';
-    if (openingEl) {
-      openingEl.attributes.forEach((attr: any) => {
+    if (!isFragment) {
+      path.node.openingElement.attributes.forEach((attr: any) => {
         if (attr.type === 'JSXAttribute' && attr.name.name === 'className') {
           if (attr.value && attr.value.type === 'StringLiteral') {
             className = attr.value.value;
@@ -340,8 +187,8 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
     }
 
     let text = '';
-    if (jsxNode.children) {
-      jsxNode.children.forEach((child: any) => {
+    if (path.node.children) {
+      path.node.children.forEach((child: any) => {
         if (child.type === 'JSXText') {
           const val = child.value.trim();
           if (val) text = val;
@@ -362,49 +209,31 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
       ...(text ? { text } : {}),
     };
 
-    if (jsxNode.children) {
-      jsxNode.children.forEach((child: any) => {
-        if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
-          let childName = 'Fragment';
-          if (child.type === 'JSXElement') {
-            const childNameNode = child.openingElement.name;
-            if (childNameNode.type === 'JSXIdentifier') {
-              childName = childNameNode.name;
-            }
-          }
+    nodeMap.set(path.node, treeNode);
 
-          // Resolve component definition if locally defined and not cyclic
-          if (childName && childName[0] === childName[0].toUpperCase() && componentDefs.has(childName)) {
-            const compNode = buildNode(child);
-            if (!visited.has(childName)) {
-              visited.add(childName);
-              const compJSX = componentDefs.get(childName);
-              if (compJSX) {
-                const innerNode = buildNode(compJSX);
-                compNode.children.push(innerNode);
-              }
-              visited.delete(childName);
-            }
-            treeNode.children.push(compNode);
-          } else {
-            treeNode.children.push(buildNode(child));
-          }
-        }
-      });
+    let parentPath = path.parentPath;
+    let jsxParent: any = null;
+    while (parentPath) {
+      if (parentPath.isJSXElement() || parentPath.isJSXFragment()) {
+        jsxParent = parentPath.node;
+        break;
+      }
+      parentPath = parentPath.parentPath;
     }
 
-    return treeNode;
+    if (jsxParent) {
+      const parentTreeNode = nodeMap.get(jsxParent);
+      if (parentTreeNode) {
+        parentTreeNode.children.push(treeNode);
+      } else {
+        roots.push(treeNode);
+      }
+    } else {
+      roots.push(treeNode);
+    }
   }
 
-  const rootJSX = componentDefs.get(entryName);
-  if (!rootJSX) return [];
-
-  // Mark the entry component to prevent infinite recursion
-  visited.add(entryName);
-  const rootNode = buildNode(rootJSX);
-  visited.delete(entryName);
-
-  return [rootNode];
+  return roots;
 }
 
 export function getNestingPath(tree: import('./types.js').ComponentTreeNode[], selectedId: string): string[] {

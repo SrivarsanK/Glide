@@ -19,6 +19,7 @@
     "@babel/traverse": "^7.24.0",
     "@vue/compiler-sfc": "^3.4.21",
     "html-dom-parser": "^8.0.0",
+    "jiti": "^2.7.0",
     "postcss": "^8.4.0"
   },
   "devDependencies": {

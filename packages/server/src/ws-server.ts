@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@srivarsank/ast-writer';
@@ -77,6 +77,7 @@ export class GlideServer {
   private server: Server | null = null;
   private port: number;
   private targetPort: number;
+  private config: GlideConfig;
   private editCallbacks: EditCallback[] = [];
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
@@ -89,9 +90,14 @@ export class GlideServer {
     this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
   }
 
-  constructor(port = 7777, targetPort = 5173) {
+  constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG) {
     this.port = port;
     this.targetPort = targetPort;
+    this.config = {
+      ...config,
+      port,
+      targetPort
+    };
   }
 
   public start(): Promise<void> {
@@ -111,7 +117,7 @@ export class GlideServer {
 
         this.server = createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(getEditorHTML(this.targetPort));
+          res.end(getEditorHTML(this.config));
         });
 
 

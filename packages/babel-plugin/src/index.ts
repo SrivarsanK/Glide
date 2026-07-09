@@ -20,16 +20,17 @@ export default function glideSourceStampingPlugin(babel: any): PluginObj {
         const absolutePath = filename.replace(/\\/g, '/');
         const sourceVal = `${absolutePath}:${loc.start.line}:${loc.start.column + 1}`;
 
+        const sourceAttr = (state.opts as any)?.sourceAttribute ?? 'data-gl-source';
         // Check if already has data-gl-source
         const hasSourceAttr = path.node.attributes.some(
           (attr: any) =>
             attr.type === 'JSXAttribute' &&
-            attr.name.name === 'data-gl-source'
+            attr.name.name === sourceAttr
         );
 
         if (!hasSourceAttr) {
           const attr = t.jsxAttribute(
-            t.jsxIdentifier('data-gl-source'),
+            t.jsxIdentifier(sourceAttr),
             t.stringLiteral(sourceVal)
           );
           path.node.attributes.push(attr);

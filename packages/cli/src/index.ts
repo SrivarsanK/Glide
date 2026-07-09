@@ -7,10 +7,14 @@ import { updateSvelteClass } from '@srivarsank/adapter-svelte';
 import { updateHTMLClass, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadConfigFromDisk } from '@srivarsank/core';
 
-const port = process.env.PORT ? parseInt(process.env.PORT) : 7777;
-const targetPort = process.argv[2] ? parseInt(process.argv[2], 10) : 5173;
-const server = new GlideServer(port, targetPort);
+const config = await loadConfigFromDisk(process.cwd());
+
+// Precedence: CLI arg > env var > config file > default
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : config.port;
+const targetPort = process.argv[2] ? parseInt(process.argv[2], 10) : config.targetPort;
+const server = new GlideServer(port, targetPort, config);
 
 /**
  * Find the glide-positions.json file for a given source file.

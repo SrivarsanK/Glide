@@ -16,9 +16,15 @@ export class GlideBridge {
   private activeHoverElement: HTMLElement | null = null;
   private selectedElement: HTMLElement | null = null;
   private styleSheet: HTMLStyleElement | null = null;
+  private sourceAttribute: string;
+  private hoverAttribute: string;
+  private selectedAttribute: string;
 
-  constructor(targetWindow: Window = window) {
+  constructor(targetWindow: Window = window, options?: { sourceAttribute?: string; hoverAttribute?: string; selectedAttribute?: string }) {
     this.targetWindow = targetWindow;
+    this.sourceAttribute = options?.sourceAttribute ?? 'data-gl-source';
+    this.hoverAttribute = options?.hoverAttribute ?? 'data-glide-hover';
+    this.selectedAttribute = options?.selectedAttribute ?? 'data-glide-selected';
   }
 
   public init(): void {
@@ -47,11 +53,11 @@ export class GlideBridge {
     this.styleSheet = doc.createElement('style');
     this.styleSheet.id = '__glide_styles__';
     this.styleSheet.textContent = `
-      [data-glide-hover] {
+      [${this.hoverAttribute}] {
         outline: 2px solid rgba(56,189,248,0.6) !important;
         outline-offset: 1px;
       }
-      [data-glide-selected] {
+      [${this.selectedAttribute}] {
         outline: 2px solid #38bdf8 !important;
         outline-offset: 2px;
       }
@@ -61,14 +67,14 @@ export class GlideBridge {
 
   private clearHover(): void {
     if (this.activeHoverElement) {
-      this.activeHoverElement.removeAttribute('data-glide-hover');
+      this.activeHoverElement.removeAttribute(this.hoverAttribute);
       this.activeHoverElement = null;
     }
   }
 
   private clearSelection(): void {
     if (this.selectedElement) {
-      this.selectedElement.removeAttribute('data-glide-selected');
+      this.selectedElement.removeAttribute(this.selectedAttribute);
       this.selectedElement = null;
     }
   }
@@ -79,17 +85,39 @@ export class GlideBridge {
 
     if (data.type === 'glide:select-element-by-id') {
       const el = this.targetWindow.document.querySelector(
-        `[data-gl-source="${data.id}"]`
+        `[${this.sourceAttribute}="${data.id}"]`
       ) as HTMLElement | null;
       if (el) {
         this.clearSelection();
         this.selectedElement = el;
-        el.setAttribute('data-glide-selected', '');
+        el.setAttribute(this.selectedAttribute, '');
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         // Send telemetry so the editor gets glide:overlay with rect + computedStyles
         // This drives the canvas overlay highlight and properties panel population.
         this.sendTelemetry('glide:element-selected', el);
       }
+    }
+
+    if (data.type === 'glide:hover-element-by-id') {
+      const el = this.targetWindow.document.querySelector(
+        `[${this.sourceAttribute}="${data.id}"]`
+      ) as HTMLElement | null;
+      if (el) {
+        if (this.activeHoverElement && this.activeHoverElement !== el) {
+          this.activeHoverElement.removeAttribute(this.hoverAttribute);
+        }
+        this.activeHoverElement = el;
+        el.setAttribute(this.hoverAttribute, '');
+        this.sendTelemetry('glide:element-hovered', el);
+      }
+    }
+
+    if (data.type === 'glide:hover-element-exit') {
+      if (this.activeHoverElement) {
+        this.activeHoverElement.removeAttribute(this.hoverAttribute);
+        this.activeHoverElement = null;
+      }
+      this.targetWindow.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
   };
 
@@ -97,13 +125,13 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest('[data-gl-source]') as HTMLElement | null;
+    const sourceEl = target.closest(`[${this.sourceAttribute}]`) as HTMLElement | null;
 
     if (sourceEl) {
       if (this.activeHoverElement !== sourceEl) {
         this.clearHover();
         this.activeHoverElement = sourceEl;
-        sourceEl.setAttribute('data-glide-hover', '');
+        sourceEl.setAttribute(this.hoverAttribute, '');
         this.sendTelemetry('glide:element-hovered', sourceEl);
       }
     } else if (this.activeHoverElement) {
@@ -116,19 +144,19 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest('[data-gl-source]') as HTMLElement | null;
+    const sourceEl = target.closest(`[${this.sourceAttribute}]`) as HTMLElement | null;
     if (sourceEl) {
       event.preventDefault();
       event.stopPropagation();
       this.clearSelection();
       this.selectedElement = sourceEl;
-      sourceEl.setAttribute('data-glide-selected', '');
+      sourceEl.setAttribute(this.selectedAttribute, '');
       this.sendTelemetry('glide:element-selected', sourceEl);
     }
   };
 
   private sendTelemetry(type: string, el: HTMLElement): void {
-    const source = el.getAttribute('data-gl-source') || '';
+    const source = el.getAttribute(this.sourceAttribute) || '';
     const rect = el.getBoundingClientRect();
     const getCS = (this.targetWindow as any).getComputedStyle;
     const cs = typeof getCS === 'function' ? getCS(el) : {} as CSSStyleDeclaration;

@@ -9,3 +9,6 @@ export { buildComponentTree, getNestingPath } from './tree.js';
 export type { FrameworkAdapter, AdapterAST, AdapterNode } from './adapter.js';
 export { scanProject, scanFile } from './scanner.js';
 export type { ScanResult, ScannedElement, ResolvedValue, StateStyles, ScanOptions } from './scanner.js';
+export { DEFAULT_CONFIG, resolveConfig } from './config.js';
+export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from './config.js';
+export { loadConfigFromDisk } from './config-loader.js';

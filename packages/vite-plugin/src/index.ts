@@ -47,6 +47,24 @@ const BRIDGE_SCRIPT = `
 
   var hovered = null;
   var selected = null;
+  var readyStateSent = false;
+  var readyInterval = null;
+
+  function sendReadyState() {
+    if (readyStateSent) return;
+    var el = document.querySelector('[data-gl-source]');
+    if (el) {
+      var src = el.getAttribute('data-gl-source');
+      if (src) {
+        window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
+        readyStateSent = true;
+        if (readyInterval) {
+          clearInterval(readyInterval);
+          readyInterval = null;
+        }
+      }
+    }
+  }
 
   window.__glide_refresh_selection__ = function() {
     if (selected) {
@@ -1187,7 +1205,24 @@ const BRIDGE_SCRIPT = `
           el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           sendMsg('glide:element-selected', el, isShift);
         }
+    }
+    if (e.data.type === 'glide:hover-element-by-id') {
+      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      if (el) {
+        if (hovered && hovered !== el) {
+          hovered.removeAttribute('data-glide-hover');
+        }
+        hovered = el;
+        el.setAttribute('data-glide-hover', '');
+        sendMsg('glide:element-hovered', el, false);
       }
+    }
+    if (e.data.type === 'glide:hover-element-exit') {
+      if (hovered) {
+        hovered.removeAttribute('data-glide-hover');
+        hovered = null;
+      }
+      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
     if (e.data.type === 'glide:clear-selection') {
       var old = document.querySelectorAll('[data-glide-selected]');
@@ -1268,6 +1303,9 @@ const BRIDGE_SCRIPT = `
       // Disconnect observer to avoid recursion from our own DOM mutations
       observer.disconnect();
 
+      // Check if we can send the ready state now
+      sendReadyState();
+
       // If we are actively dragging, skip sending style and layout updates to the parent editor
       // to prevent layout thrashing, lagging, and screen flashing.
       if (isDragging) {
@@ -1319,6 +1357,14 @@ const BRIDGE_SCRIPT = `
     new ResizeObserver(sendHeight).observe(document.body);
   }
   setInterval(sendHeight, 500);
+
+  // Start polling to send ready state as soon as elements exist
+  readyInterval = setInterval(sendReadyState, 200);
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    sendReadyState();
+  } else {
+    window.addEventListener('DOMContentLoaded', sendReadyState);
+  }
 
   // Re-observe after mutations are complete
       observer.observe(document.documentElement, {

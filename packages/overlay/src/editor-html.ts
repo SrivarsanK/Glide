@@ -1,4 +1,6 @@
-export function getEditorHTML(port: number): string {
+import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
+
+export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -10,13 +12,13 @@ export function getEditorHTML(port: number): string {
         <style>
           :root {
             /* FIGMA CUSTOM THEME DESIGN TOKENS */
-            --bg-canvas: #1e1e1e; /* OBSERVED */
-            --bg-panel: #2c2c2c; /* INFERRED */
-            --bg-panel-elevated: #2c2c2c; /* INFERRED */
-            --border-subtle: #333333; /* INFERRED */
+            --bg-canvas: ${config.editorTheme.bgCanvas}; /* OBSERVED */
+            --bg-panel: ${config.editorTheme.bgPanel}; /* INFERRED */
+            --bg-panel-elevated: ${config.editorTheme.bgPanel}; /* INFERRED */
+            --border-subtle: ${config.editorTheme.borderColor}; /* INFERRED */
             --text-primary: #ffffff; /* INFERRED */
             --text-secondary: #b3b3b3; /* INFERRED */
-            --accent: #0c8ce9; /* OBSERVED */
+            --accent: ${config.editorTheme.accentColor}; /* OBSERVED */
 
             /* COMPATIBILITY ALIASES FOR VERIFIED CODEBASE LAYOUTS */
             --bg-base: var(--bg-canvas);
@@ -24,7 +26,7 @@ export function getEditorHTML(port: number): string {
             --bg-element: var(--bg-panel-elevated);
             --border-color: var(--border-subtle);
             --accent-color: var(--accent);
-            --accent-hover: #0a7ccf;
+            --accent-hover: ${config.editorTheme.accentColor};
             --danger: #ef4444;
             --success: #22c55e;
           }
@@ -223,7 +225,7 @@ export function getEditorHTML(port: number): string {
 
           /* ── SIDEBARS ── */
           .sidebar {
-            width: 260px;
+            width: ${config.sidebarWidth}px;
             flex-shrink: 0;
             background: var(--bg-surface);
             border-right: 1px solid var(--border-color);
@@ -235,7 +237,7 @@ export function getEditorHTML(port: number): string {
           .sidebar-right {
             border-right: none;
             border-left: 1px solid var(--border-color);
-            width: 270px;
+            width: ${config.sidebarWidth + 10}px;
             overflow-y: auto;
           }
           .sidebar-header {
@@ -297,6 +299,7 @@ export function getEditorHTML(port: number): string {
             color: var(--text-primary);
           }
           .layer-item:hover { background: rgba(255,255,255,0.04); }
+          .layer-item.hovered { background: rgba(255,255,255,0.08); }
           .layer-item.active {
             background: var(--accent-color) !important;
             color: #ffffff !important;
@@ -431,8 +434,8 @@ export function getEditorHTML(port: number): string {
             overflow: hidden;
           }
           #app-iframe {
-            width: 1440px;
-            height: 1024px;
+            width: ${config.defaultViewport.width}px;
+            height: ${config.defaultViewport.height}px;
             border: none;
             display: block;
           }
@@ -1020,7 +1023,7 @@ export function getEditorHTML(port: number): string {
           <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
             <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
-              <input type="text" id="app-url" value="http://localhost:${port}/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
+              <input type="text" id="app-url" value="http://localhost:${config.targetPort}/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
             
             <!-- Three-state Connection Status Button -->
@@ -1055,7 +1058,7 @@ export function getEditorHTML(port: number): string {
             <button class="device-btn" data-width="425" title="Mobile L">425</button>
             <button class="device-btn" data-width="768" title="Tablet">768</button>
             <button class="device-btn" data-width="1024" title="Laptop">1024</button>
-            <button class="device-btn active" data-width="1440" title="Desktop">🖥 1440</button>
+            <button class="device-btn active" data-width="${config.defaultViewport.width}" title="Desktop">🖥 ${config.defaultViewport.width}</button>
             <button class="device-btn" data-width="2560" title="4K">4K</button>
             <input class="device-custom-input" id="custom-width" type="number" placeholder="Custom" title="Custom width (px)">
           </div>
@@ -1086,10 +1089,10 @@ export function getEditorHTML(port: number): string {
             <!-- Custom Width & Height Inputs (Unified Capsule Widget) -->
             <div style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 8px; height: 28px; gap: 4px;">
               <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">W</span>
-              <input type="number" id="viewport-width-input" value="1440" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
+              <input type="number" id="viewport-width-input" value="${config.defaultViewport.width}" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Width">
               <span style="color: var(--text-secondary); font-size: 10px; user-select: none;">×</span>
               <span style="font-size: 9px; color: var(--text-secondary); font-weight: 600; user-select: none;">H</span>
-              <input type="number" id="viewport-height-input" value="1024" placeholder="Auto" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
+              <input type="number" id="viewport-height-input" value="${config.defaultViewport.height}" placeholder="Auto" style="width: 44px; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 11px; text-align: left; outline: none; padding: 0;" title="Viewport Height">
             </div>
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
@@ -1893,7 +1896,7 @@ export function getEditorHTML(port: number): string {
           function connectSocket() {
             updateConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(`${protocol}//${window.location.host}`);
+            socket = new WebSocket(protocol + '//' + window.location.host);
             const dot = document.getElementById('ws-dot');
             const statusEl = document.getElementById('ws-status');
 
@@ -3210,6 +3213,15 @@ export function getEditorHTML(port: number): string {
             const data = event.data;
             if (!data || !data.type) return;
 
+            if (data.type === 'glide:ready') {
+              const parsed = parseSource(data.source);
+              if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+                currentFile = parsed.file;
+                socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+              }
+              return;
+            }
+
             if (data.type === 'glide:alt-state') {
               altPressed = !!data.pressed;
               drawOverlay();
@@ -3301,6 +3313,9 @@ export function getEditorHTML(port: number): string {
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
+                document.querySelectorAll('.layer-item.hovered').forEach(el => el.classList.remove('hovered'));
+                const targetLayer = document.querySelector('.layer-item[data-source="' + data.source + '"]');
+                if (targetLayer) targetLayer.classList.add('hovered');
               } else {
                 const isShift = data.isShift;
                 const source = data.source;
@@ -3372,6 +3387,7 @@ export function getEditorHTML(port: number): string {
             if (data.type === 'glide:element-hover-exit') {
               hoveredElement = null;
               hoveredRect = null;
+              document.querySelectorAll('.layer-item.hovered').forEach(el => el.classList.remove('hovered'));
               drawOverlay();
             }
 
@@ -3722,6 +3738,25 @@ export function getEditorHTML(port: number): string {
                     type: 'glide:select-element-by-id',
                     id: nodeSource,
                     isShift: isShift
+                  }, '*');
+                }
+              });
+
+              // Hover handlers to sync with canvas
+              item.addEventListener('mouseenter', () => {
+                const iframe = document.getElementById('app-iframe');
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:hover-element-by-id',
+                    id: nodeSource
+                  }, '*');
+                }
+              });
+              item.addEventListener('mouseleave', () => {
+                const iframe = document.getElementById('app-iframe');
+                if (iframe && iframe.contentWindow) {
+                  iframe.contentWindow.postMessage({
+                    type: 'glide:hover-element-exit'
                   }, '*');
                 }
               });
