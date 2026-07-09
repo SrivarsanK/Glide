@@ -1374,6 +1374,52 @@ export function glideSourceStamping(): Plugin {
     }
   }
 
+  function stampHTMLTemplate(code: string, filepath: string): string {
+    // Replace script, style and comments with spaces to preserve line/col numbers
+    let cleanCode = code
+      .replace(/<!--[\s\S]*?-->/g, match => ' '.repeat(match.length))
+      .replace(/<script[\s\S]*?<\/script>/gi, match => ' '.repeat(match.length))
+      .replace(/<style[\s\S]*?<\/style>/gi, match => ' '.repeat(match.length));
+
+    const tagRegex = /<([a-zA-Z][a-zA-Z0-9.-]*)/g;
+    let match;
+    let offset = 0;
+    let result = code;
+
+    while ((match = tagRegex.exec(cleanCode)) !== null) {
+      const tagName = match[1];
+      
+      // Ignore template, script, style tags
+      if (['template', 'script', 'style'].includes(tagName.toLowerCase())) {
+        continue;
+      }
+      
+      const index = match.index;
+      
+      // Check if tag already has data-gl-source
+      const restOfTag = cleanCode.substring(index, index + 500);
+      const tagEnd = restOfTag.indexOf('>');
+      const tagContent = tagEnd !== -1 ? restOfTag.substring(0, tagEnd) : restOfTag;
+      if (tagContent.includes('data-gl-source')) {
+        continue;
+      }
+
+      const prefix = code.substring(0, index);
+      const lines = prefix.split('\n');
+      const line = lines.length;
+      const col = lines[lines.length - 1].length + 1;
+      
+      const sourceAttr = ` data-gl-source="${filepath}:${line}:${col}"`;
+      const insertPos = index + 1 + tagName.length;
+      const adjustedPos = insertPos + offset;
+      
+      result = result.substring(0, adjustedPos) + sourceAttr + result.substring(adjustedPos);
+      offset += sourceAttr.length;
+    }
+    
+    return result;
+  }
+
   return {
     name: 'vite-plugin-glide-source-stamping',
     enforce: 'pre',
@@ -1445,29 +1491,38 @@ export function glideSourceStamping(): Plugin {
       // Only stamp in development mode (command === 'serve')
       if (!isDev) return null;
 
-      // Target only source files (.jsx, .tsx) and exclude node_modules or queries
       const cleanId = id.split('?')[0];
-      if (cleanId.includes('node_modules') || !/\.[jt]sx$/.test(cleanId)) {
+      if (cleanId.includes('node_modules')) {
         return null;
       }
 
-      const result = babel.transformSync(code, {
-        filename: cleanId,
-        configFile: false,
-        babelrc: false,
-        parserOpts: {
-          plugins: ['jsx', 'typescript'],
-        },
-        plugins: [
-          glideSourceStampingPlugin
-        ],
-        sourceMaps: true,
-      });
+      const isJSX = /\.[jt]sx$/.test(cleanId);
+      const isHTML = /\.html$/.test(cleanId);
+      const isVue = /\.vue$/.test(cleanId);
+      const isSvelte = /\.svelte$/.test(cleanId);
 
-      if (!result) return null;
+      if (!isJSX && !isHTML && !isVue && !isSvelte) {
+        return null;
+      }
 
-      // Only return the stamped code — bridge is injected via transformIndexHtml
-      const hmrInjection = `
+      if (isJSX) {
+        const result = babel.transformSync(code, {
+          filename: cleanId,
+          configFile: false,
+          babelrc: false,
+          parserOpts: {
+            plugins: ['jsx', 'typescript'],
+          },
+          plugins: [
+            glideSourceStampingPlugin
+          ],
+          sourceMaps: true,
+        });
+
+        if (!result) return null;
+
+        // Only return the stamped code — bridge is injected via transformIndexHtml
+        const hmrInjection = `
 if (import.meta.hot && !window.__glide_hmr_registered__) {
   window.__glide_hmr_registered__ = true;
   import.meta.hot.on('glide:positions-updated', function(data) {
@@ -1514,9 +1569,18 @@ if (import.meta.hot) {
   });
 }
 `;
+        return {
+          code: (result.code ?? code) + hmrInjection,
+          map: result.map,
+        };
+      }
+
+      // For HTML, Vue, and Svelte templates, stamp them using stampHTMLTemplate
+      const relativePath = normalizePath(cleanId, rootDir);
+      const stampedCode = stampHTMLTemplate(code, relativePath);
       return {
-        code: (result.code ?? code) + hmrInjection,
-        map: result.map,
+        code: stampedCode,
+        map: null
       };
     },
   };

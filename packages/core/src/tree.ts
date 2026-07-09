@@ -6,8 +6,11 @@
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 import { computeNodeHash } from './utils.js';
+import parseDOMModule from 'html-dom-parser';
+import { parse as parseVueSFC } from '@vue/compiler-sfc';
 
 const traverse = (_traverse as any).default || _traverse;
+const parseDOM = (parseDOMModule as any).default || parseDOMModule;
 
 export type { ComponentTreeNode } from './types.js';
 
@@ -38,7 +41,79 @@ function getJSXFromFunction(functionPath: any, code: string): any | null {
   return findReturnedJSX(functionPath, code);
 }
 
-export function buildComponentTree(code: string): import('./types.js').ComponentTreeNode[] {
+export function buildComponentTree(code: string, filepath?: string): import('./types.js').ComponentTreeNode[] {
+  const isHTML = filepath?.endsWith('.html');
+  const isVue = filepath?.endsWith('.vue');
+  const isSvelte = filepath?.endsWith('.svelte');
+
+  if (isHTML || isVue || isSvelte) {
+    let templateContent = code;
+    if (isVue) {
+      try {
+        const parsed = parseVueSFC(code);
+        templateContent = parsed.descriptor.template?.content || '';
+      } catch (e) {
+        console.error('[Glide] Vue SFC parse error:', e);
+      }
+    }
+
+    const dom = parseDOM(templateContent);
+
+    function convertNodes(nodes: any[]): import('./types.js').ComponentTreeNode[] {
+      const result: import('./types.js').ComponentTreeNode[] = [];
+      for (const node of nodes) {
+        if (node.type === 'tag') {
+          // Skip script and style tags inside the template (if any)
+          if (['script', 'style', 'template'].includes(node.name.toLowerCase())) {
+            if (node.children) {
+              result.push(...convertNodes(node.children));
+            }
+            continue;
+          }
+
+          let id = node.attribs?.['data-gl-source'] || '';
+          if (!id) {
+            id = `line:${node.startIndex || 0}:col:${node.endIndex || 0}:${Math.random().toString(36).substring(7)}`;
+          }
+
+          const name = node.name;
+          const className = node.attribs?.['class'] || node.attribs?.['className'] || '';
+          
+          let text = '';
+          if (node.children) {
+            for (const child of node.children) {
+              if (child.type === 'text') {
+                const val = child.data.trim();
+                if (val) {
+                  text = val;
+                  break;
+                }
+              }
+            }
+          }
+          if (text && text.length > 25) {
+            text = text.substring(0, 22) + '...';
+          }
+
+          const treeNode: import('./types.js').ComponentTreeNode = {
+            id,
+            name,
+            children: convertNodes(node.children || []),
+            ...(className ? { className } : {}),
+            ...(text ? { text } : {})
+          };
+
+          result.push(treeNode);
+        } else if (node.children) {
+          result.push(...convertNodes(node.children));
+        }
+      }
+      return result;
+    }
+
+    return convertNodes(dom);
+  }
+
   const ast = parse(code, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],

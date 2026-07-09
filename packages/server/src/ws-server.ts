@@ -155,7 +155,7 @@ export class GlideServer {
                   // Track the user's project git root for git commands
                   try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
-                  const tree = buildComponentTree(code);
+                  const tree = buildComponentTree(code, file);
                   const normPath = normalizePathKey(file);
                   ws.send(JSON.stringify({
                     type: 'tree',
@@ -191,7 +191,7 @@ export class GlideServer {
                       ...getHistoryState()
                     }));
                     // Automatically send updated tree back
-                    const tree = buildComponentTree(updated);
+                    const tree = buildComponentTree(updated, file);
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
@@ -268,7 +268,7 @@ export class GlideServer {
                       type: 'HISTORY_UPDATE',
                       ...getHistoryState()
                     }));
-                    const tree = buildComponentTree(updated);
+                    const tree = buildComponentTree(updated, file);
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
@@ -308,7 +308,7 @@ export class GlideServer {
                       type: 'HISTORY_UPDATE',
                       ...getHistoryState()
                     }));
-                    const tree = buildComponentTree(updated);
+                    const tree = buildComponentTree(updated, file);
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
@@ -348,7 +348,7 @@ export class GlideServer {
                       type: 'HISTORY_UPDATE',
                       ...getHistoryState()
                     }));
-                    const tree = buildComponentTree(updated);
+                    const tree = buildComponentTree(updated, file);
                     ws.send(JSON.stringify({
                       type: 'tree',
                       file,
@@ -438,7 +438,7 @@ export class GlideServer {
                       // Only push updated tree for code files
                       if (!diff.file.endsWith('.json')) {
                         const updatedCode = fs.readFileSync(diff.file, 'utf-8');
-                        const tree = buildComponentTree(updatedCode);
+                        const tree = buildComponentTree(updatedCode, diff.file);
                         ws.send(JSON.stringify({
                           type: 'tree',
                           file: diff.file,
@@ -480,7 +480,7 @@ export class GlideServer {
                       // Only push updated tree for code files
                       if (!diff.file.endsWith('.json')) {
                         const updatedCode = fs.readFileSync(diff.file, 'utf-8');
-                        const tree = buildComponentTree(updatedCode);
+                        const tree = buildComponentTree(updatedCode, diff.file);
                         ws.send(JSON.stringify({
                           type: 'tree',
                           file: diff.file,
@@ -520,7 +520,7 @@ export class GlideServer {
                     fs.writeFileSync(w.file, w.content, 'utf-8');
                     // Only push updated tree for code files
                     if (!w.file.endsWith('.json')) {
-                      const tree = buildComponentTree(w.content);
+                      const tree = buildComponentTree(w.content, w.file);
                       ws.send(JSON.stringify({
                         type: 'tree',
                         file: w.file,
