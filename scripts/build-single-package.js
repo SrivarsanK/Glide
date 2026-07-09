@@ -2,8 +2,11 @@ import { build } from 'esbuild';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
-const projectRoot = 'c:\\Users\\Srivarsan\\Desktop\\Glide';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
 const distDir = path.join(projectRoot, 'dist');
 
 // Clean dist directory

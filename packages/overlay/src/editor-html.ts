@@ -1020,7 +1020,7 @@ export function getEditorHTML(port: number): string {
           <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
             <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
-              <input type="text" id="app-url" value="http://localhost:5173/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
+              <input type="text" id="app-url" value="http://localhost:${port}/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
             
             <!-- Three-state Connection Status Button -->
@@ -1892,7 +1892,8 @@ export function getEditorHTML(port: number): string {
           // ═══════════════════════════════════════════════════════════════
           function connectSocket() {
             updateConnectionState('connecting');
-            socket = new WebSocket('ws://localhost:7777');
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}`);
             const dot = document.getElementById('ws-dot');
             const statusEl = document.getElementById('ws-status');
 

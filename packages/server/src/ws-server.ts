@@ -116,8 +116,21 @@ export class GlideServer {
 
 
         // Start file watcher for drift detection
-        const srcPath = path.resolve(process.cwd(), 'src');
-        this.watcher = chokidar.watch(srcPath, { persistent: true });
+        const srcPath = fs.existsSync(path.resolve(process.cwd(), 'src'))
+          ? path.resolve(process.cwd(), 'src')
+          : process.cwd();
+        this.watcher = chokidar.watch(srcPath, {
+          persistent: true,
+          ignored: [
+            '**/node_modules/**',
+            '**/.git/**',
+            '**/dist/**',
+            '**/build/**',
+            '**/.next/**',
+            '**/.svelte-kit/**',
+            '**/.nuxt/**'
+          ]
+        });
         this.watcher.on('change', (filePath: string) => {
           const normPath = normalizePathKey(filePath);
           const lastWrite = this.lastSelfWrites.get(normPath) || 0;
