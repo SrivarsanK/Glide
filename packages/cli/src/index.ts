@@ -11,9 +11,11 @@ import { loadConfigFromDisk } from '@srivarsank/core';
 
 const config = await loadConfigFromDisk(process.cwd());
 
-// Precedence: CLI arg > env var > config file > default
+// Precedence: CLI arg (numeric only) > env var > config file > default (5173)
+// Note: argv[2] is often "dev" (subcommand) — ignore non-numeric values
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : config.port;
-const targetPort = process.argv[2] ? parseInt(process.argv[2], 10) : config.targetPort;
+const _argvPort = process.argv[2] && /^\d+$/.test(process.argv[2]) ? parseInt(process.argv[2], 10) : NaN;
+const targetPort = !isNaN(_argvPort) ? _argvPort : config.targetPort;
 
 // Keep the object and the args in sync so GlideServer and getEditorHTML(config) see the real target
 config.port = port;
