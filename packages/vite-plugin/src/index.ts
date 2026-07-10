@@ -3,6 +3,7 @@ import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
+import { loadConfigFromDisk, DEFAULT_CONFIG, type GlideConfig } from '@srivarsank/core';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
@@ -13,8 +14,18 @@ function normalizePath(filePath: string, rootDir: string): string {
  * Inline bridge script injected into the browser — zero Node.js dependencies.
  * This is a self-contained IIFE that registers hover/click handlers and
  * posts messages to the parent Glide editor window.
+ * @param sourceAttr  data attribute stamped on each element (e.g. 'data-gl-source')
+ * @param hoverAttr   data attribute for hover state
+ * @param selectedAttr data attribute for selected state
+ * @param snapThresholdPx pixel radius for snap-to-object
  */
-const BRIDGE_SCRIPT = `
+function buildBridgeScript(
+  sourceAttr: string,
+  hoverAttr: string,
+  selectedAttr: string,
+  snapThresholdPx: number
+): string {
+  return `
 (function() {
   // ── GUARD: Only activate inside the Glide editor iframe ──────────────
   // When accessed directly in a browser tab (localhost:5173), window === window.top.
@@ -28,13 +39,13 @@ const BRIDGE_SCRIPT = `
   var style = document.createElement('style');
   style.id = '__glide_styles__';
   style.textContent = [
-    '[data-glide-hover]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
-    '[data-glide-selected]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
+    '[${hoverAttr}]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
+    '[${selectedAttr}]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
     'html, body { overflow: auto !important; height: auto !important; -ms-overflow-style: none !important; scrollbar-width: none !important; } html::-webkit-scrollbar, body::-webkit-scrollbar { display: none !important; }',
     
     /* ── Type Classes Standardized Behaviors ── */
     /* Ensure all inline elements with typography type classes flow as inline-block for precise boundaries & dragging */
-    'span[data-gl-source], strong[data-gl-source], em[data-gl-source], a[data-gl-source], label[data-gl-source] { display: inline-block !important; }',
+    'span[${sourceAttr}], strong[${sourceAttr}], em[${sourceAttr}], a[${sourceAttr}], label[${sourceAttr}] { display: inline-block !important; }',
     'span.highlight, span.stat-value, span.stat-label, span.brand-name, span.brand-icon, span.section-label, span.feature-tag, span.member-tag, a.nav-link { display: inline-block !important; }',
     
     /* ── Stacking Context Bug Bypass ── */
@@ -52,9 +63,9 @@ const BRIDGE_SCRIPT = `
 
   function sendReadyState() {
     if (readyStateSent) return;
-    var el = document.querySelector('[data-gl-source]');
+    var el = document.querySelector('[${sourceAttr}]');
     if (el) {
-      var src = el.getAttribute('data-gl-source');
+      var src = el.getAttribute('${sourceAttr}');
       if (src) {
         window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
         readyStateSent = true;
@@ -73,24 +84,24 @@ const BRIDGE_SCRIPT = `
   };
 
   window.__glide_update_selection_node__ = function() {
-    var all = document.querySelectorAll('[data-gl-source]');
+    var all = document.querySelectorAll('[${sourceAttr}]');
     if (selected) {
-      var src = selected.getAttribute('data-gl-source');
+      var src = selected.getAttribute('${sourceAttr}');
       if (src) {
         for (var i = 0; i < all.length; i++) {
-          if (all[i].getAttribute('data-gl-source') === src) {
+          if (all[i].getAttribute('${sourceAttr}') === src) {
             selected = all[i];
-            selected.setAttribute('data-glide-selected', '');
+            selected.setAttribute('${selectedAttr}', '');
             break;
           }
         }
       }
     }
     if (hovered) {
-      var src = hovered.getAttribute('data-gl-source');
+      var src = hovered.getAttribute('${sourceAttr}');
       if (src) {
         for (var i = 0; i < all.length; i++) {
-          if (all[i].getAttribute('data-gl-source') === src) {
+          if (all[i].getAttribute('${sourceAttr}') === src) {
             hovered = all[i];
             break;
           }
@@ -100,7 +111,7 @@ const BRIDGE_SCRIPT = `
   };
 
   function sendMsg(type, el, isShift) {
-    var src = el.getAttribute('data-gl-source') || '';
+    var src = el.getAttribute('${sourceAttr}') || '';
     var r = el.getBoundingClientRect();
     
     // Extract computed styles
@@ -215,7 +226,7 @@ const BRIDGE_SCRIPT = `
 
   // ── Snap state ─────────────────────────────────────────────────────────
   // OUR threshold — not Figma's. Figma does not publish its capture radius.
-  var OUR_SNAP_THRESHOLD_PX = 4;
+  var OUR_SNAP_THRESHOLD_PX = ${snapThresholdPx};
   var snapObjectEnabled = true;   // toggled by editor (postMessage)
   var snapPixelEnabled  = true;   // toggled by editor (postMessage)
   var gridVisible       = false;  // toggled by editor (postMessage)
@@ -618,7 +629,7 @@ const BRIDGE_SCRIPT = `
     if (parent && parent.getBoundingClientRect && parent.tagName.toLowerCase() !== 'body' && parent.tagName.toLowerCase() !== 'html') {
       rects.push(parent.getBoundingClientRect());
     }
-    var children = parent.querySelectorAll('[data-gl-source]');
+    var children = parent.querySelectorAll('[${sourceAttr}]');
     for (var i = 0; i < children.length; i++) {
       if (children[i] === el) continue; // skip the dragged element itself
       // Fresh getBoundingClientRect — never cached.
@@ -632,18 +643,18 @@ const BRIDGE_SCRIPT = `
     var ancestors = [];
     var curr = el;
     while (curr) {
-      if (curr.hasAttribute && curr.hasAttribute('data-gl-source')) {
+      if (curr.hasAttribute && curr.hasAttribute('${sourceAttr}')) {
         ancestors.push(curr);
       }
       curr = curr.parentNode;
     }
     var compAncestors = ancestors.filter(function(node) {
-      var src = node.getAttribute('data-gl-source');
+      var src = node.getAttribute('${sourceAttr}');
       return componentRoots.has(src);
     });
     if (compAncestors.length === 0) return el;
     for (var i = compAncestors.length - 1; i >= 0; i--) {
-      if (compAncestors[i].hasAttribute('data-glide-selected')) {
+      if (compAncestors[i].hasAttribute('${selectedAttr}')) {
         if (i > 0) return compAncestors[i - 1];
         return el;
       }
@@ -689,14 +700,14 @@ const BRIDGE_SCRIPT = `
     }
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
-    var el = target && target.closest && target.closest('[data-gl-source]');
+    var el = target && target.closest && target.closest('[${sourceAttr}]');
     var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
     var isCmdClick = e.metaKey || e.ctrlKey;
 
     if (el) {
       // Clear hover when starting a drag
       if (hovered) {
-        hovered.removeAttribute('data-glide-hover');
+        hovered.removeAttribute('${hoverAttr}');
         hovered = null;
         window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
       }
@@ -710,19 +721,19 @@ const BRIDGE_SCRIPT = `
       currentDy = 0;
 
       if (!isShift) {
-        var old = document.querySelectorAll('[data-glide-selected]');
+        var old = document.querySelectorAll('[${selectedAttr}]');
         for (var i = 0; i < old.length; i++) {
-          old[i].removeAttribute('data-glide-selected');
+          old[i].removeAttribute('${selectedAttr}');
         }
       }
 
-      if (isShift && selectTarget.hasAttribute('data-glide-selected')) {
-        selectTarget.removeAttribute('data-glide-selected');
+      if (isShift && selectTarget.hasAttribute('${selectedAttr}')) {
+        selectTarget.removeAttribute('${selectedAttr}');
         sendMsg('glide:element-deselected', selectTarget, isShift);
-        selected = document.querySelector('[data-glide-selected]');
+        selected = document.querySelector('[${selectedAttr}]');
       } else {
         selected = selectTarget;
-        selectTarget.setAttribute('data-glide-selected', '');
+        selectTarget.setAttribute('${selectedAttr}', '');
         sendMsg('glide:element-selected', selectTarget, isShift);
       }
 
@@ -747,7 +758,7 @@ const BRIDGE_SCRIPT = `
 
       window.parent.postMessage({
         type: 'glide:element-drag-start',
-        source: selectTarget.getAttribute('data-gl-source'),
+        source: selectTarget.getAttribute('${sourceAttr}'),
         initialMarginLeft: initialMarginLeft,
         initialMarginTop: initialMarginTop,
         clientX: e.clientX,
@@ -765,7 +776,7 @@ const BRIDGE_SCRIPT = `
     } else {
       // Clear hover when starting a marquee selection
       if (hovered) {
-        hovered.removeAttribute('data-glide-hover');
+        hovered.removeAttribute('${hoverAttr}');
         hovered = null;
         window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
       }
@@ -793,12 +804,12 @@ const BRIDGE_SCRIPT = `
       currentDy = e.clientY - startY;
 
       if (selected !== dragEl) {
-        var old = document.querySelectorAll('[data-glide-selected]');
+        var old = document.querySelectorAll('[${selectedAttr}]');
         for (var i = 0; i < old.length; i++) {
-          old[i].removeAttribute('data-glide-selected');
+          old[i].removeAttribute('${selectedAttr}');
         }
         selected = dragEl;
-        dragEl.setAttribute('data-glide-selected', '');
+        dragEl.setAttribute('${selectedAttr}', '');
         sendMsg('glide:element-selected', dragEl, false);
       }
 
@@ -817,16 +828,16 @@ const BRIDGE_SCRIPT = `
     } else {
       var target = e.target;
       if (target.nodeType === 3) target = target.parentNode;
-      var el = target && target.closest && target.closest('[data-gl-source]');
+      var el = target && target.closest && target.closest('[${sourceAttr}]');
       if (el) {
         if (hovered !== el) {
-          if (hovered) hovered.removeAttribute('data-glide-hover');
+          if (hovered) hovered.removeAttribute('${hoverAttr}');
           hovered = el;
-          el.setAttribute('data-glide-hover', '');
+          el.setAttribute('${hoverAttr}', '');
           sendMsg('glide:element-hovered', el);
         }
       } else if (hovered) {
-        hovered.removeAttribute('data-glide-hover');
+        hovered.removeAttribute('${hoverAttr}');
         hovered = null;
         window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
       }
@@ -888,7 +899,7 @@ const BRIDGE_SCRIPT = `
 
       window.parent.postMessage({
         type: 'glide:element-drag-end',
-        source: dragEl.getAttribute('data-gl-source'),
+        source: dragEl.getAttribute('${sourceAttr}'),
         dx: finalLeft,
         dy: finalTop,
         rect: {
@@ -924,11 +935,11 @@ const BRIDGE_SCRIPT = `
   document.addEventListener('contextmenu', function(e) {
     var target = e.target;
     while (target && target !== document.documentElement) {
-      if (target.hasAttribute && target.hasAttribute('data-gl-source')) {
+      if (target.hasAttribute && target.hasAttribute('${sourceAttr}')) {
         e.preventDefault();
         window.parent.postMessage({
           type: 'glide:contextmenu',
-          source: target.getAttribute('data-gl-source'),
+          source: target.getAttribute('${sourceAttr}'),
           clientX: e.clientX,
           clientY: e.clientY
         }, '*');
@@ -941,16 +952,16 @@ const BRIDGE_SCRIPT = `
   document.addEventListener('click', function(e) {
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
-    var el = target && target.closest && target.closest('[data-gl-source]');
+    var el = target && target.closest && target.closest('[${sourceAttr}]');
     var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
     if (el) {
       e.preventDefault();
       e.stopPropagation();
     } else if (!e.target.closest('#glide-context-menu')) {
       if (!wasMarqueeing) {
-        var old = document.querySelectorAll('[data-glide-selected]');
+        var old = document.querySelectorAll('[${selectedAttr}]');
         for (var i = 0; i < old.length; i++) {
-          old[i].removeAttribute('data-glide-selected');
+          old[i].removeAttribute('${selectedAttr}');
         }
         selected = null;
         window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
@@ -961,16 +972,16 @@ const BRIDGE_SCRIPT = `
   document.addEventListener('dblclick', function(e) {
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
-    var el = target && target.closest && target.closest('[data-gl-source]');
+    var el = target && target.closest && target.closest('[${sourceAttr}]');
     if (el) {
       e.preventDefault();
       e.stopPropagation();
-      var old = document.querySelectorAll('[data-glide-selected]');
+      var old = document.querySelectorAll('[${selectedAttr}]');
       for (var i = 0; i < old.length; i++) {
-        old[i].removeAttribute('data-glide-selected');
+        old[i].removeAttribute('${selectedAttr}');
       }
       selected = el;
-      el.setAttribute('data-glide-selected', '');
+      el.setAttribute('${selectedAttr}', '');
       sendMsg('glide:element-selected', el, false);
 
       // Check if this element has direct text node children
@@ -1063,13 +1074,13 @@ const BRIDGE_SCRIPT = `
       });
     }
     if (e.data.type === 'glide:optimistic-text') {
-      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
       if (el) {
         el.textContent = e.data.value;
       }
     }
     if (e.data.type === 'glide:optimistic-style') {
-      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
       if (el) {
         var styles = e.data.styles || {};
         for (var prop in styles) {
@@ -1080,14 +1091,14 @@ const BRIDGE_SCRIPT = `
       }
     }
     if (e.data.type === 'glide:resize-start') {
-      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
       if (el) {
         el.style.setProperty('transition', 'none', 'important');
         el.style.setProperty('transition-property', 'none', 'important');
       }
     }
     if (e.data.type === 'glide:resize-end') {
-      var el = document.querySelector('[data-gl-source="' + e.data.source + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
       if (el) {
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
@@ -1121,7 +1132,7 @@ const BRIDGE_SCRIPT = `
       var h = e.data.h;
       var isRightToLeft = e.data.isRightToLeft;
       var isShift = e.data.isShift;
-      var elements = document.querySelectorAll('[data-gl-source]');
+      var elements = document.querySelectorAll('[${sourceAttr}]');
       var newSelections = [];
       for (var i = 0; i < elements.length; i++) {
         var el = elements[i];
@@ -1129,28 +1140,28 @@ const BRIDGE_SCRIPT = `
         if (isRightToLeft) {
           var overlaps = !(elRect.left > x + w || elRect.right < x || elRect.top > y + h || elRect.bottom < y);
           if (overlaps) {
-            newSelections.push(el.getAttribute('data-gl-source'));
+            newSelections.push(el.getAttribute('${sourceAttr}'));
           }
         } else {
           var enclosed = (elRect.left >= x && elRect.right <= x + w && elRect.top >= y && elRect.bottom <= y + h);
           if (enclosed) {
-            newSelections.push(el.getAttribute('data-gl-source'));
+            newSelections.push(el.getAttribute('${sourceAttr}'));
           }
         }
       }
       if (!isShift) {
-        var old = document.querySelectorAll('[data-glide-selected]');
+        var old = document.querySelectorAll('[${selectedAttr}]');
         for (var i = 0; i < old.length; i++) {
-          old[i].removeAttribute('data-glide-selected');
+          old[i].removeAttribute('${selectedAttr}');
         }
       }
       newSelections.forEach(function(src) {
-        var el = document.querySelector('[data-gl-source="' + src + '"]');
+        var el = document.querySelector('[${sourceAttr}="' + src + '"]');
         if (el) {
-          el.setAttribute('data-glide-selected', '');
+          el.setAttribute('${selectedAttr}', '');
         }
       });
-      var allSelected = document.querySelectorAll('[data-glide-selected]');
+      var allSelected = document.querySelectorAll('[${selectedAttr}]');
       if (allSelected.length > 0) {
         window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
         for (var i = 0; i < allSelected.length; i++) {
@@ -1164,18 +1175,18 @@ const BRIDGE_SCRIPT = `
       var sources = e.data.sources || [];
       var isShift = e.data.isShift;
       if (!isShift) {
-        var old = document.querySelectorAll('[data-glide-selected]');
+        var old = document.querySelectorAll('[${selectedAttr}]');
         for (var i = 0; i < old.length; i++) {
-          old[i].removeAttribute('data-glide-selected');
+          old[i].removeAttribute('${selectedAttr}');
         }
       }
       sources.forEach(function(src) {
-        var el = document.querySelector('[data-gl-source="' + src + '"]');
+        var el = document.querySelector('[${sourceAttr}="' + src + '"]');
         if (el) {
-          el.setAttribute('data-glide-selected', '');
+          el.setAttribute('${selectedAttr}', '');
         }
       });
-      var allSelected = document.querySelectorAll('[data-glide-selected]');
+      var allSelected = document.querySelectorAll('[${selectedAttr}]');
       if (allSelected.length > 0) {
         window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
         for (var i = 0; i < allSelected.length; i++) {
@@ -1186,48 +1197,49 @@ const BRIDGE_SCRIPT = `
       }
     }
     if (e.data.type === 'glide:select-element-by-id') {
-      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
       var isShift = e.data.isShift;
       if (el) {
         if (!isShift) {
-          var old = document.querySelectorAll('[data-glide-selected]');
+          var old = document.querySelectorAll('[${selectedAttr}]');
           for (var i = 0; i < old.length; i++) {
-            old[i].removeAttribute('data-glide-selected');
+            old[i].removeAttribute('${selectedAttr}');
           }
         }
-        if (isShift && el.hasAttribute('data-glide-selected')) {
-          el.removeAttribute('data-glide-selected');
+        if (isShift && el.hasAttribute('${selectedAttr}')) {
+          el.removeAttribute('${selectedAttr}');
           sendMsg('glide:element-deselected', el, isShift);
-          selected = document.querySelector('[data-glide-selected]');
+          selected = document.querySelector('[${selectedAttr}]');
         } else {
           selected = el;
-          el.setAttribute('data-glide-selected', '');
+          el.setAttribute('${selectedAttr}', '');
           el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           sendMsg('glide:element-selected', el, isShift);
         }
+      }
     }
     if (e.data.type === 'glide:hover-element-by-id') {
-      var el = document.querySelector('[data-gl-source="' + e.data.id + '"]');
+      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
       if (el) {
         if (hovered && hovered !== el) {
-          hovered.removeAttribute('data-glide-hover');
+          hovered.removeAttribute('${hoverAttr}');
         }
         hovered = el;
-        el.setAttribute('data-glide-hover', '');
+        el.setAttribute('${hoverAttr}', '');
         sendMsg('glide:element-hovered', el, false);
       }
     }
     if (e.data.type === 'glide:hover-element-exit') {
       if (hovered) {
-        hovered.removeAttribute('data-glide-hover');
+        hovered.removeAttribute('${hoverAttr}');
         hovered = null;
       }
       window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
     if (e.data.type === 'glide:clear-selection') {
-      var old = document.querySelectorAll('[data-glide-selected]');
+      var old = document.querySelectorAll('[${selectedAttr}]');
       for (var i = 0; i < old.length; i++) {
-        old[i].removeAttribute('data-glide-selected');
+        old[i].removeAttribute('${selectedAttr}');
       }
       selected = null;
     }
@@ -1251,7 +1263,7 @@ const BRIDGE_SCRIPT = `
 
   document.addEventListener('pointerleave', function(e) {
     if (hovered) {
-      hovered.removeAttribute('data-glide-hover');
+      hovered.removeAttribute('${hoverAttr}');
       hovered = null;
       window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
@@ -1320,20 +1332,20 @@ const BRIDGE_SCRIPT = `
 
       // Re-query selection/hover elements if they got replaced in the DOM by HMR
       if (selected) {
-        var src = selected.getAttribute('data-gl-source');
+        var src = selected.getAttribute('${sourceAttr}');
         if (src) {
-          var newEl = document.querySelector('[data-gl-source="' + src + '"]');
+          var newEl = document.querySelector('[${sourceAttr}="' + src + '"]');
           if (newEl && newEl !== selected) {
             selected = newEl;
-            selected.setAttribute('data-glide-selected', '');
+            selected.setAttribute('${selectedAttr}', '');
           }
         }
         sendMsg('glide:element-selected', selected);
       }
       if (hovered) {
-        var src = hovered.getAttribute('data-gl-source');
+        var src = hovered.getAttribute('${sourceAttr}');
         if (src) {
-          var newEl = document.querySelector('[data-gl-source="' + src + '"]');
+          var newEl = document.querySelector('[${sourceAttr}="' + src + '"]');
           if (newEl && newEl !== hovered) {
             hovered = newEl;
           }
@@ -1383,18 +1395,26 @@ const BRIDGE_SCRIPT = `
   }
 })();
 `;
+}
 
 export function glideSourceStamping(): Plugin {
   let isDev = false;
   let rootDir = process.cwd();
   let mainEntryInjected = false;
   let viteServer: any = null;
+  let glideConfig: GlideConfig = DEFAULT_CONFIG;
+  let bridgeScript: string = buildBridgeScript(
+    DEFAULT_CONFIG.sourceAttribute,
+    DEFAULT_CONFIG.hoverAttribute,
+    DEFAULT_CONFIG.selectedAttribute,
+    DEFAULT_CONFIG.snapThresholdPx
+  );
 
   /**
    * Build CSS rules from glide-positions.json for the current root.
    * Each entry maps a data-gl-source value to position styles.
    */
-  function buildPositionCSS(): string {
+  function buildPositionCSS(sourceAttr = glideConfig.sourceAttribute): string {
     const posFile = path.join(rootDir, 'glide-positions.json');
     if (!fs.existsSync(posFile)) return '';
     try {
@@ -1411,7 +1431,7 @@ export function glideSourceStamping(): Plugin {
               return `${prop}:${v}!important`;
             })
             .join(';');
-          return `[data-gl-source="${escapedId}"]{${styleStr}}`;
+          return `[${sourceAttr}="${escapedId}"]{${styleStr}}`;
         })
         .filter(Boolean)
         .join('\n');
@@ -1446,7 +1466,7 @@ export function glideSourceStamping(): Plugin {
       const restOfTag = cleanCode.substring(index, index + 500);
       const tagEnd = restOfTag.indexOf('>');
       const tagContent = tagEnd !== -1 ? restOfTag.substring(0, tagEnd) : restOfTag;
-      if (tagContent.includes('data-gl-source')) {
+      if (tagContent.includes(glideConfig.sourceAttribute)) {
         continue;
       }
 
@@ -1455,12 +1475,12 @@ export function glideSourceStamping(): Plugin {
       const line = lines.length;
       const col = lines[lines.length - 1].length + 1;
       
-      const sourceAttr = ` data-gl-source="${filepath}:${line}:${col}"`;
+      const sourceAttrVal = ` ${glideConfig.sourceAttribute}="${filepath}:${line}:${col}"`;
       const insertPos = index + 1 + tagName.length;
       const adjustedPos = insertPos + offset;
       
-      result = result.substring(0, adjustedPos) + sourceAttr + result.substring(adjustedPos);
-      offset += sourceAttr.length;
+      result = result.substring(0, adjustedPos) + sourceAttrVal + result.substring(adjustedPos);
+      offset += sourceAttrVal.length;
     }
     
     return result;
@@ -1470,14 +1490,90 @@ export function glideSourceStamping(): Plugin {
     name: 'vite-plugin-glide-source-stamping',
     enforce: 'pre',
 
+    // Remove X-Frame-Options so Glide can embed the app in an iframe.
+    // Different ports = different origins; browsers refuse the iframe if this header is set.
+    config() {
+      return {
+        server: {
+          headers: {
+            'X-Frame-Options': '',          // empty = header not sent
+            'Content-Security-Policy': '',  // Glide doesn't need CSP on dev server
+          },
+          cors: true,                       // allow Glide editor (port 7777) to fetch from dev server
+        },
+      };
+    },
+
     configResolved(config) {
       isDev = config.command === 'serve';
       rootDir = config.root || process.cwd();
       mainEntryInjected = false;
+      // Load glide.config.ts from the user's project root synchronously.
+      // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
+      try {
+        loadConfigFromDisk(rootDir).then(cfg => {
+          glideConfig = cfg;
+          bridgeScript = buildBridgeScript(
+            cfg.sourceAttribute,
+            cfg.hoverAttribute,
+            cfg.selectedAttribute,
+            cfg.snapThresholdPx
+          );
+        }).catch(() => { /* use defaults */ });
+      } catch { /* use defaults */ }
     },
 
     configureServer(server) {
       viteServer = server;
+
+      // ── IFRAME EMBEDDING FIX ─────────────────────────────────────────────
+      // Glide embeds the user's app in an iframe from a different origin
+      // (localhost:7777 vs localhost:5173). Browsers block this by default
+      // when the embedded page sends X-Frame-Options: SAMEORIGIN or a
+      // Content-Security-Policy with a restrictive frame-ancestors directive.
+      // Strip those headers so Glide can embed the app without connection errors.
+      server.middlewares.use((_req, res, next) => {
+        const originalSetHeader = res.setHeader.bind(res);
+        const originalWriteHead = res.writeHead.bind(res);
+
+        // Intercept setHeader to strip framing-related headers
+        res.setHeader = function(name: string, value: any) {
+          const lower = name.toLowerCase();
+          if (lower === 'x-frame-options') return res; // drop
+          if (lower === 'content-security-policy' || lower === 'content-security-policy-report-only') {
+            // Strip frame-ancestors directive only, preserve rest of CSP
+            if (typeof value === 'string') {
+              value = value
+                .split(';')
+                .map((d: string) => d.trim())
+                .filter((d: string) => !d.toLowerCase().startsWith('frame-ancestors'))
+                .join('; ');
+            }
+          }
+          return originalSetHeader(name, value);
+        } as typeof res.setHeader;
+
+        // Also intercept writeHead (some middleware sets headers there)
+        res.writeHead = function(statusCode: number, ...args: any[]) {
+          // Remove x-frame-options from the headers object if provided
+          if (args.length > 0 && typeof args[args.length - 1] === 'object' && args[args.length - 1] !== null) {
+            const headers = args[args.length - 1] as Record<string, any>;
+            delete headers['x-frame-options'];
+            delete headers['X-Frame-Options'];
+            if (headers['content-security-policy']) {
+              headers['content-security-policy'] = String(headers['content-security-policy'])
+                .split(';')
+                .map((d: string) => d.trim())
+                .filter((d: string) => !d.toLowerCase().startsWith('frame-ancestors'))
+                .join('; ');
+            }
+          }
+          return originalWriteHead(statusCode, ...args);
+        } as typeof res.writeHead;
+
+        next();
+      });
+
       // Watch glide-positions.json for changes
       const posFile = path.join(rootDir, 'glide-positions.json');
       // Use chokidar (available from Vite) to watch the file
@@ -1501,6 +1597,7 @@ export function glideSourceStamping(): Plugin {
       server.watcher.on('add', handlePositionsChange);
       server.watcher.on('change', handlePositionsChange);
     },
+
 
     /**
      * Inject the bridge script and position CSS injector as inline script tags into index.html.
@@ -1529,7 +1626,7 @@ export function glideSourceStamping(): Plugin {
 </script>`;
       return html.replace(
         '<head>',
-        `<head>${positionInjector}<script>${BRIDGE_SCRIPT}<\/script>`
+        `<head>${positionInjector}<script>${bridgeScript}<\/script>`
       );
     },
 
@@ -1580,7 +1677,7 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
     var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
     raf(function() {
       raf(function() {
-        var elements = document.querySelectorAll('[data-gl-source]');
+        var elements = document.querySelectorAll('[${glideConfig.sourceAttribute}]');
         for (var i = 0; i < elements.length; i++) {
           var item = elements[i];
           item.style.removeProperty('left');
