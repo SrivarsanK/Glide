@@ -104,16 +104,7 @@ export class GlideServer {
     return new Promise((resolve, reject) => {
       try {
         clearHistory();
-        let limit = 100;
-        const configPath = path.join(process.cwd(), 'glide.config.ts');
-        if (fs.existsSync(configPath)) {
-          const content = fs.readFileSync(configPath, 'utf-8');
-          const match = content.match(/historyLimit\s*:\s*(\d+)/);
-          if (match) {
-            limit = parseInt(match[1], 10);
-          }
-        }
-        setHistoryLimit(limit);
+        setHistoryLimit(this.config.historyLimit);
 
         this.server = createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -140,7 +131,7 @@ export class GlideServer {
         this.watcher.on('change', (filePath: string) => {
           const normPath = normalizePathKey(filePath);
           const lastWrite = this.lastSelfWrites.get(normPath) || 0;
-          if (Date.now() - lastWrite < 3000) {
+          if (Date.now() - lastWrite < this.config.selfWriteDebounceMs) {
             console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
             return;
           }
