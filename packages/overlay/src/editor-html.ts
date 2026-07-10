@@ -3214,6 +3214,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!data || !data.type) return;
 
             if (data.type === 'glide:ready') {
+              // Request fresh DOM tree from bridge — works with CST (no file needed)
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({ type: 'glide:request-dom-tree' }, '*');
+              }
+              // Also try AST path if we have a file source
               const parsed = parseSource(data.source);
               if (parsed && socket && socket.readyState === WebSocket.OPEN) {
                 currentFile = parsed.file;
@@ -3303,6 +3309,31 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   }, '*');
                 }
               }
+            }
+
+            // ── DOM tree from proxy bridge (CST mode, no AST needed) ──
+            if (data.type === 'glide:dom-tree') {
+              if (!data.tree || !Array.isArray(data.tree)) return;
+              // Convert bridge DOM nodes into layerTree format.
+              // node.id already is a CST id (__glide_cst_...) usable as data-source.
+              // currentFile = null in CST mode; convertNodeIdToSource returns id as-is.
+              currentFile = null;
+              layerTree = data.tree;
+              // Auto-expand root + first level
+              if (expandedNodeIds.size === 0 && layerTree.length > 0) {
+                layerTree.forEach(function(n) {
+                  expandedNodeIds.add(n.id);
+                  (n.children || []).forEach(function(c) { expandedNodeIds.add(c.id); });
+                });
+              }
+              renderLayersTree(layerTree);
+              // Sync iframe with current snap settings
+              const ifrDOM = document.getElementById('app-iframe');
+              if (ifrDOM && ifrDOM.contentWindow) {
+                ifrDOM.contentWindow.postMessage({ type: 'glide:set-snap-object', enabled: snapObjectEnabled }, '*');
+                ifrDOM.contentWindow.postMessage({ type: 'glide:set-snap-pixel', enabled: snapPixelEnabled }, '*');
+              }
+              return;
             }
 
             if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
@@ -3473,10 +3504,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           });
 
           function updateLayersPanel(data) {
-            if (!data.source || !socket || socket.readyState !== WebSocket.OPEN) return;
+            if (!data.source) return;
+            // CST source path: just ensure the layer is highlighted (tree already built from dom-tree msg)
+            // AST source path: request get-tree from server
             const parsed = parseSource(data.source);
-            if (!parsed) return;
-            socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+            if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+            }
+            // For CST sources, tree already rendered — click/hover highlighting handled below
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -3969,6 +4004,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             iframe.onload = function() {
               setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
+                // Request fresh DOM tree — fixes layer panel after page refresh
+                iframe.contentWindow.postMessage({ type: 'glide:request-dom-tree' }, '*');
                 iframe.contentWindow.postMessage({
                   type: 'glide:update-component-roots',
                   roots: Array.from(componentRootSources)

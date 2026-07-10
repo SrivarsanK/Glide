@@ -133,8 +133,109 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
 
   var hovered = null, selected = null;
 
-  // Signal ready immediately — we don't need a source attr
-  window.parent.postMessage({ type: 'glide:ready', source: '__glide_cst_body' }, '*');
+  // ── DOM tree serializer ─────────────────────────────────────────────────
+  // Builds a lightweight node tree from live DOM for the Layers panel.
+  // Skips script/style/noscript/template and Glide-injected nodes.
+  var SKIP_TAGS = { SCRIPT:1, STYLE:1, NOSCRIPT:1, TEMPLATE:1, META:1, LINK:1, TITLE:1 };
+  var MAX_DEPTH = 12;
+  function serializeDOMNode(el, depth) {
+    if (!el || el.nodeType !== 1) return null;
+    if (SKIP_TAGS[el.tagName]) return null;
+    if (el.hasAttribute('data-glide-bridge')) return null;
+    if (el.id === '__glide_styles__') return null;
+    var id = getElId(el);
+    var tag = el.tagName.toLowerCase();
+    var cls = (el.className && typeof el.className === 'string') ? el.className.replace(/\s*(__glide\S*)\s*/g,'').trim() : '';
+    // Gather direct text content (leaf only)
+    var text = '';
+    if (!el.children || el.children.length === 0) {
+      el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
+      text = text.trim().slice(0, 40);
+    }
+    var children = [];
+    if (depth < MAX_DEPTH && el.children) {
+      for (var i = 0; i < el.children.length; i++) {
+        var child = serializeDOMNode(el.children[i], depth + 1);
+        if (child) children.push(child);
+      }
+    }
+    return { id: id, name: tag, className: cls, text: text || undefined, children: children };
+  }
+
+  function sendDOMTree() {
+    var body = document.body;
+    if (!body) return;
+    var tree = [];
+    for (var i = 0; i < body.children.length; i++) {
+      var node = serializeDOMNode(body.children[i], 0);
+      if (node) tree.push(node);
+    }
+    window.parent.postMessage({ type: 'glide:dom-tree', tree: tree }, '*');
+  }
+
+  // Send ready + tree once DOM is available
+  function initBridge() {
+    window.parent.postMessage({ type: 'glide:ready', source: '__glide_cst_body' }, '*');
+    sendDOMTree();
+    // Re-send tree on dynamic mutations (throttled)
+    if (window.MutationObserver) {
+      var mutTimer = null;
+      var obs = new MutationObserver(function() {
+        clearTimeout(mutTimer);
+        mutTimer = setTimeout(sendDOMTree, 400);
+      });
+      obs.observe(document.body, { childList: true, subtree: true, attributes: false });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBridge);
+  } else {
+    initBridge();
+  }
+
+  // Parent can also request a fresh tree at any time (e.g. after iframe reload)
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === 'glide:request-dom-tree') { sendDOMTree(); }
+    if (e.data.type === 'glide:select-element-by-id') {
+      var id = e.data.id;
+      var target = null;
+      // Try CSS selector path first
+      var cstPrefix = '__glide_cst_';
+      if (id && id.startsWith(cstPrefix)) {
+        var selector = id.slice(cstPrefix.length);
+        try { target = document.querySelector(selector); } catch(e2) {}
+      } else if (id) {
+        // Try data-gl-source attr match
+        try { target = document.querySelector('[${sourceAttr}="' + id.replace(/"/g,'\\"') + '"]'); } catch(e2) {}
+      }
+      if (target) {
+        var old2 = document.querySelectorAll('[${selectedAttr}]');
+        for (var k = 0; k < old2.length; k++) old2[k].removeAttribute('${selectedAttr}');
+        selected = target;
+        target.setAttribute('${selectedAttr}', '');
+        sendMsgForAny('glide:element-selected', target, !!(e.data.isShift));
+      }
+    }
+    if (e.data.type === 'glide:hover-element-by-id') {
+      var hid = e.data.id;
+      var htarget = null;
+      var cstPfx = '__glide_cst_';
+      if (hid && hid.startsWith(cstPfx)) {
+        try { htarget = document.querySelector(hid.slice(cstPfx.length)); } catch(e3) {}
+      }
+      if (htarget) {
+        if (hovered && hovered !== htarget) hovered.removeAttribute('${hoverAttr}');
+        hovered = htarget;
+        htarget.setAttribute('${hoverAttr}', '');
+        sendMsgForAny('glide:element-hovered', htarget);
+      }
+    }
+    if (e.data.type === 'glide:hover-element-exit') {
+      if (hovered) { hovered.removeAttribute('${hoverAttr}'); hovered = null; }
+    }
+  });
 
   document.addEventListener('pointermove', function(e) {
     var el = resolveElementAtPoint(e.clientX, e.clientY);
