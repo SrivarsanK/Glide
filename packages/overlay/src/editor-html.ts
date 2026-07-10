@@ -3918,37 +3918,121 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           // ═══════════════════════════════════════════════════════════════
           // LOAD APP IFRAME
           // ═══════════════════════════════════════════════════════════════
-          function loadApp(url) {
-            const iframe = document.getElementById('app-iframe');
-            const loading = document.getElementById('canvas-loading');
-            const statusEl = document.getElementById('load-status');
+          // ── PORT PROBE ──────────────────────────────────────────────────
+          // fetch() with no-cors resolves for any live server (even if CORS
+          // blocks the response body) and rejects only on connection refused.
+          function probePort(port, timeoutMs) {
+            timeoutMs = timeoutMs || 800;
+            return new Promise(function(resolve) {
+              var settled = false;
+              var timer = setTimeout(function() {
+                if (!settled) { settled = true; resolve(false); }
+              }, timeoutMs);
+              fetch('http://localhost:' + port + '/', {
+                mode: 'no-cors',
+                cache: 'no-store'
+              }).then(function() {
+                if (!settled) { settled = true; clearTimeout(timer); resolve(true); }
+              }).catch(function() {
+                if (!settled) { settled = true; clearTimeout(timer); resolve(false); }
+              });
+            });
+          }
 
+          // Common ports used by Vite, CRA, Next, Nuxt, SvelteKit, etc.
+          var COMMON_DEV_PORTS = [5173, 5174, 5175, 5176, 3000, 3001, 4173, 4174, 8080, 8000, 4000, 9000];
+
+          function autoDetectPort(preferredPort) {
+            // Try preferred port first, then scan common ports in parallel
+            return probePort(preferredPort, 800).then(function(ok) {
+              if (ok) return preferredPort;
+              // Probe all common ports in parallel, resolve with first winner
+              return new Promise(function(resolve) {
+                var remaining = COMMON_DEV_PORTS.filter(function(p) { return p !== preferredPort; });
+                var settled = false;
+                if (remaining.length === 0) { resolve(null); return; }
+                var done = 0;
+                remaining.forEach(function(port) {
+                  probePort(port, 500).then(function(ok) {
+                    done++;
+                    if (ok && !settled) { settled = true; resolve(port); return; }
+                    if (done === remaining.length && !settled) { settled = true; resolve(null); }
+                  });
+                });
+              });
+            });
+          }
+
+          function _doLoadApp(url, iframe, loading, statusEl) {
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
-
-            iframe.onload = () => {
-              setTimeout(() => { if (loading) loading.style.display = 'none'; }, 300);
-              // Send the component roots and snap settings on load
+            iframe.onload = function() {
+              setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
                 iframe.contentWindow.postMessage({
                   type: 'glide:update-component-roots',
                   roots: Array.from(componentRootSources)
                 }, '*');
-                iframe.contentWindow.postMessage({
-                  type: 'glide:set-snap-object',
-                  enabled: snapObjectEnabled
-                }, '*');
-                iframe.contentWindow.postMessage({
-                  type: 'glide:set-snap-pixel',
-                  enabled: snapPixelEnabled
-                }, '*');
+                iframe.contentWindow.postMessage({ type: 'glide:set-snap-object', enabled: snapObjectEnabled }, '*');
+                iframe.contentWindow.postMessage({ type: 'glide:set-snap-pixel', enabled: snapPixelEnabled }, '*');
               }
             };
-            iframe.onerror = () => {
-              if (statusEl) statusEl.textContent = '❌ Failed to load. Is the app running at ' + url + '?';
+            iframe.onerror = function() {
+              if (statusEl) statusEl.textContent = '\u274c Failed to load. Is the app running at ' + url + '?';
             };
-
             iframe.src = url;
+          }
+
+          function loadApp(url) {
+            var iframe = document.getElementById('app-iframe');
+            var loading = document.getElementById('canvas-loading');
+            var statusEl = document.getElementById('load-status');
+
+            if (loading) loading.style.display = 'flex';
+            if (statusEl) statusEl.textContent = 'Checking connection...';
+
+            // Extract port from the URL (e.g. http://localhost:5173/  ->  5173)
+            var portMatch = url.match(/localhost:([0-9]+)/);
+            var preferredPort = portMatch ? parseInt(portMatch[1], 10) : 5173;
+
+            autoDetectPort(preferredPort).then(function(detectedPort) {
+              if (detectedPort === null) {
+                // Nothing found on any common port
+                if (loading) loading.style.display = 'none';
+                if (statusEl) statusEl.textContent =
+                  '\u274c No dev server found. Start your app (e.g. npm run dev) then click Reconnect.';
+                // Show a retry button inside the canvas area
+                var canvasEl = document.getElementById('canvas-loading');
+                if (canvasEl) {
+                  canvasEl.style.display = 'flex';
+                  var retryBtn = document.getElementById('glide-retry-btn');
+                  if (!retryBtn) {
+                    retryBtn = document.createElement('button');
+                    retryBtn.id = 'glide-retry-btn';
+                    retryBtn.textContent = '\ud83d\udd04 Retry Connection';
+                    retryBtn.style.cssText = 'margin-top:12px;padding:8px 18px;background:#0c8ce9;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;';
+                    retryBtn.onclick = function() { loadApp(url); };
+                    canvasEl.appendChild(retryBtn);
+                  }
+                }
+                return;
+              }
+
+              // Auto-correct URL if a different port was found
+              if (detectedPort !== preferredPort) {
+                var corrected = url.replace(/localhost:[0-9]+/, 'localhost:' + detectedPort);
+                var urlInput = document.getElementById('app-url');
+                if (urlInput) urlInput.value = corrected;
+                url = corrected;
+                if (statusEl) statusEl.textContent = 'Found app on :' + detectedPort + ' (expected :' + preferredPort + ') — auto-corrected!';
+              }
+
+              // Remove stale retry button if present
+              var oldBtn = document.getElementById('glide-retry-btn');
+              if (oldBtn) oldBtn.remove();
+
+              _doLoadApp(url, iframe, loading, statusEl);
+            });
           }
 
           // ═══════════════════════════════════════════════════════════════
