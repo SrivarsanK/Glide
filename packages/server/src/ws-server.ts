@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer, Server } from 'http';
+import { createServer, Server, request as httpRequest } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
@@ -21,6 +21,265 @@ import {
 
 
 const execAsync = promisify(exec);
+
+// ── Glide Bridge Script (injected into proxied HTML) ──────────────────────
+// Self-contained IIFE with full CST detection. Injected into user's app HTML
+// by the proxy route so no Vite plugin install is required.
+function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
+  const sourceAttr = cfg.sourceAttribute || 'data-gl-source';
+  const hoverAttr  = cfg.hoverAttribute  || 'data-glide-hover';
+  const selectedAttr = cfg.selectedAttribute || 'data-glide-selected';
+  const snap = cfg.snapThresholdPx ?? 5;
+  // Inline the bridge via the vite-plugin's buildBridgeScript equivalent,
+  // but using plain string template to avoid any import dependency.
+  return `<script data-glide-bridge="1">
+(function() {
+  if (window === window.top) return;
+  if (window.__glide_initialized__) return;
+  window.__glide_initialized__ = true;
+
+  // Inject highlight styles
+  var style = document.createElement('style');
+  style.id = '__glide_styles__';
+  style.textContent = [
+    '[${hoverAttr}]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
+    '[${selectedAttr}]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
+    'html,body{overflow:auto!important;height:auto!important;}'
+  ].join(' ');
+  document.head.appendChild(style);
+
+  // ── CST: CSS Selector Tree ──────────────────────────────────────────────
+  function getCSSPath(el) {
+    if (!el || el === document.documentElement) return 'html';
+    if (el === document.body) return 'body';
+    if (el.id && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(el.id)) return '#' + el.id;
+    var tag = el.tagName.toLowerCase();
+    var parent = el.parentNode;
+    if (!parent) return tag;
+    var classes = [];
+    for (var i = 0; i < el.classList.length; i++) {
+      var c = el.classList[i];
+      if (c.indexOf('__glide') === 0) continue;
+      try { classes.push('.' + CSS.escape(c)); } catch(e) { classes.push('.' + c); }
+    }
+    var classSel = tag + classes.join('');
+    try {
+      if (classes.length > 0 && parent.querySelectorAll(classSel).length === 1)
+        return getCSSPath(parent) + ' > ' + classSel;
+    } catch(e) {}
+    var siblings = parent.children;
+    var idx = 1;
+    for (var j = 0; j < siblings.length; j++) {
+      if (siblings[j] === el) break;
+      if (siblings[j].tagName === el.tagName) idx++;
+    }
+    return getCSSPath(parent) + ' > ' + tag + ':nth-of-type(' + idx + ')';
+  }
+
+  function getElId(el) {
+    var src = el.getAttribute && el.getAttribute('${sourceAttr}');
+    return src || ('__glide_cst_' + getCSSPath(el));
+  }
+
+  function resolveElementAtPoint(x, y) {
+    var direct = document.elementFromPoint(x, y);
+    if (!direct || direct === document.body || direct === document.documentElement) return null;
+    var src = direct.closest && direct.closest('[${sourceAttr}]');
+    if (src) return src;
+    var cur = direct;
+    while (cur && cur !== document.body) {
+      if (cur.nodeType === 1) { var r = cur.getBoundingClientRect(); if (r.width > 0 && r.height > 0) return cur; }
+      cur = cur.parentNode;
+    }
+    return direct;
+  }
+
+  function sendMsgForAny(type, el, isShift) {
+    if (!el) return;
+    var src = getElId(el);
+    var r = el.getBoundingClientRect();
+    var cs = window.getComputedStyle(el);
+    var styles = {
+      tagName: el.tagName.toLowerCase(), display: cs.display,
+      flexDirection: cs.flexDirection, justifyContent: cs.justifyContent,
+      alignItems: cs.alignItems, flexWrap: cs.flexWrap, gap: cs.gap,
+      marginTop: cs.marginTop, marginBottom: cs.marginBottom,
+      marginLeft: cs.marginLeft, marginRight: cs.marginRight,
+      paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom,
+      paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight,
+      fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing,
+      textAlign: cs.textAlign, color: cs.color,
+      backgroundColor: cs.backgroundColor, background: cs.background,
+      backgroundImage: cs.backgroundImage, opacity: cs.opacity,
+      borderColor: cs.borderColor, borderWidth: cs.borderWidth,
+      borderRadius: cs.borderRadius, boxShadow: cs.boxShadow,
+      transform: cs.transform, width: cs.width, height: cs.height,
+      position: cs.position, top: cs.top, left: cs.left,
+      flex: cs.flex, flexGrow: cs.flexGrow, alignSelf: cs.alignSelf
+    };
+    window.parent.postMessage({ type: type, source: src,
+      tagName: el.tagName.toLowerCase(), classNames: el.className,
+      isShift: !!isShift, rect: { left: r.left, top: r.top, width: r.width, height: r.height } }, '*');
+    window.parent.postMessage({ type: 'glide:overlay', source: src, isShift: !!isShift,
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      isHover: type === 'glide:element-hovered', computedStyles: styles,
+      textContent: (function() {
+        if (el.children && el.children.length > 0) return undefined;
+        var t = ''; el.childNodes.forEach(function(n) { if (n.nodeType === 3) t += n.textContent; }); return t.trim();
+      })()
+    }, '*');
+  }
+
+  var hovered = null, selected = null;
+
+  // Signal ready immediately — we don't need a source attr
+  window.parent.postMessage({ type: 'glide:ready', source: '__glide_cst_body' }, '*');
+
+  document.addEventListener('pointermove', function(e) {
+    var el = resolveElementAtPoint(e.clientX, e.clientY);
+    if (el && (el === document.body || el === document.documentElement)) el = null;
+    if (el) {
+      if (hovered !== el) {
+        if (hovered) hovered.removeAttribute('${hoverAttr}');
+        hovered = el;
+        el.setAttribute('${hoverAttr}', '');
+        sendMsgForAny('glide:element-hovered', el);
+      }
+    } else if (hovered) {
+      hovered.removeAttribute('${hoverAttr}');
+      hovered = null;
+      window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+    }
+  }, true);
+
+  document.addEventListener('pointerdown', function(e) {
+    if (e.target.contentEditable === 'true' || e.target.closest('[contenteditable="true"]')) return;
+    var el = resolveElementAtPoint(e.clientX, e.clientY);
+    if (el && (el === document.body || el === document.documentElement)) el = null;
+    if (!el) return;
+    var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
+    var old = document.querySelectorAll('[${selectedAttr}]');
+    if (!isShift) { for (var i = 0; i < old.length; i++) old[i].removeAttribute('${selectedAttr}'); }
+    selected = el;
+    el.setAttribute('${selectedAttr}', '');
+    sendMsgForAny('glide:element-selected', el, isShift);
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  document.addEventListener('click', function(e) {
+    var el = resolveElementAtPoint(e.clientX, e.clientY);
+    if (el && el !== document.body && el !== document.documentElement) {
+      e.preventDefault(); e.stopPropagation();
+    } else {
+      selected = null;
+      window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+    }
+  }, true);
+
+  document.addEventListener('contextmenu', function(e) {
+    var el = resolveElementAtPoint(e.clientX, e.clientY);
+    if (el && el !== document.body && el !== document.documentElement) {
+      e.preventDefault();
+      window.parent.postMessage({ type: 'glide:contextmenu', source: getElId(el), clientX: e.clientX, clientY: e.clientY }, '*');
+    }
+  }, true);
+
+})();
+<\/script>`
+    .replace(/\$\{hoverAttr\}/g, hoverAttr)
+    .replace(/\$\{selectedAttr\}/g, selectedAttr)
+    .replace(/\$\{sourceAttr\}/g, sourceAttr);
+}
+
+/**
+ * Proxy a request from the Glide editor to the user's dev server.
+ * For HTML responses, inject the Glide bridge script before </head>.
+ * For all other assets, pipe through unchanged.
+ */
+function proxyToDevServer(
+  targetPort: number,
+  proxyPath: string,
+  req: any,
+  res: any,
+  bridgeScript: string
+): void {
+  const options = {
+    hostname: '127.0.0.1',
+    port: targetPort,
+    path: proxyPath,
+    method: req.method || 'GET',
+    headers: {
+      ...req.headers,
+      host: `localhost:${targetPort}`,
+    },
+  };
+  // Remove encoding so we get raw bytes (easier to inject text)
+  delete options.headers['accept-encoding'];
+
+  const proxyReq = httpRequest(options, (proxyRes) => {
+    const contentType = proxyRes.headers['content-type'] || '';
+    const isHTML = contentType.includes('text/html');
+
+    // Strip framing headers so the iframe can load us
+    const outHeaders: Record<string, any> = {};
+    for (const [k, v] of Object.entries(proxyRes.headers)) {
+      const lk = k.toLowerCase();
+      if (lk === 'x-frame-options') continue;
+      if (lk === 'content-security-policy' || lk === 'content-security-policy-report-only') {
+        // strip frame-ancestors directive
+        const filtered = String(v).split(';')
+          .map(d => d.trim())
+          .filter(d => !d.toLowerCase().startsWith('frame-ancestors'))
+          .join('; ');
+        outHeaders[k] = filtered;
+        continue;
+      }
+      if (lk === 'content-length' && isHTML) continue; // we'll change length
+      outHeaders[k] = v;
+    }
+
+    if (isHTML) {
+      // Buffer HTML so we can inject
+      const chunks: Buffer[] = [];
+      proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+      proxyRes.on('end', () => {
+        let html = Buffer.concat(chunks).toString('utf-8');
+        // Fix relative asset paths → prefix with proxy base
+        html = html
+          .replace(/(src|href|action)="(?!\/\/)\//g, '$1="/__glide_proxy__/')
+          .replace(/(src|href|action)='\/(?!\/)/g, "$1='/__glide_proxy__/");
+        // Rewrite Vite HMR WebSocket to point at actual dev server port
+        html = html.replace(
+          /new WebSocket\(['"]ws:\/\/localhost:\d+/g,
+          `new WebSocket('ws://localhost:${targetPort}`
+        );
+        // Inject bridge before </head> (or at top of <body> as fallback)
+        if (html.includes('</head>')) {
+          html = html.replace('</head>', bridgeScript + '</head>');
+        } else if (html.includes('<body')) {
+          html = html.replace(/<body([^>]*)>/, `<body$1>${bridgeScript}`);
+        } else {
+          html = bridgeScript + html;
+        }
+        outHeaders['content-type'] = 'text/html; charset=utf-8';
+        res.writeHead(proxyRes.statusCode || 200, outHeaders);
+        res.end(html, 'utf-8');
+      });
+    } else {
+      res.writeHead(proxyRes.statusCode || 200, outHeaders);
+      proxyRes.pipe(res);
+    }
+  });
+
+  proxyReq.on('error', (err) => {
+    res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('[Glide Proxy] Could not reach dev server: ' + err.message);
+  });
+
+  if (req.readable) req.pipe(proxyReq); else proxyReq.end();
+}
 
 /**
  * Walk up from a file path to find the nearest directory containing a .git folder.
@@ -107,6 +366,18 @@ export class GlideServer {
         setHistoryLimit(this.config.historyLimit);
 
         this.server = createServer((req, res) => {
+          const url = req.url || '/';
+
+          // ── Proxy route: forward to user's dev server + inject bridge ──
+          if (url.startsWith('/__glide_proxy__')) {
+            // Strip the proxy prefix to get the actual path
+            const proxyPath = url.slice('/__glide_proxy__'.length) || '/';
+            const bridgeScript = buildGlideBridgeInlineScript(this.config);
+            proxyToDevServer(this.targetPort, proxyPath, req, res, bridgeScript);
+            return;
+          }
+
+          // ── Editor shell ────────────────────────────────────────────────
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(getEditorHTML(this.config));
         });

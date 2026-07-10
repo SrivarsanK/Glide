@@ -1023,7 +1023,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
             <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
-              <input type="text" id="app-url" value="http://localhost:${config.targetPort}/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
+              <input type="text" id="app-url" value="/__glide_proxy__/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
             
             <!-- Three-state Connection Status Button -->
@@ -3989,50 +3989,31 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             var statusEl = document.getElementById('load-status');
 
             if (loading) loading.style.display = 'flex';
-            if (statusEl) statusEl.textContent = 'Checking connection...';
 
-            // Extract port from the URL (e.g. http://localhost:5173/  ->  5173)
-            var portMatch = url.match(/localhost:([0-9]+)/);
-            var preferredPort = portMatch ? parseInt(portMatch[1], 10) : 5173;
+            // ── Proxy rewrite: always load through Glide's built-in proxy ──
+            // This ensures the bridge script is injected without any user
+            // plugin config. Direct localhost URLs are rewritten to the proxy
+            // path; relative proxy paths are used as-is.
+            var proxyUrl = url;
+            if (/^https?:\/\//.test(url)) {
+              // Extract path from absolute URL and route via proxy
+              try {
+                var parsed = new URL(url);
+                proxyUrl = '/__glide_proxy__' + (parsed.pathname || '/');
+                if (parsed.search) proxyUrl += parsed.search;
+              } catch(e) { proxyUrl = '/__glide_proxy__/'; }
+            } else if (!url.startsWith('/__glide_proxy__')) {
+              // Relative path — prefix with proxy base
+              proxyUrl = '/__glide_proxy__/' + url.replace(/^\//, '');
+            }
 
-            autoDetectPort(preferredPort).then(function(detectedPort) {
-              if (detectedPort === null) {
-                // Nothing found on any common port
-                if (loading) loading.style.display = 'none';
-                if (statusEl) statusEl.textContent =
-                  '\u274c No dev server found. Start your app (e.g. npm run dev) then click Reconnect.';
-                // Show a retry button inside the canvas area
-                var canvasEl = document.getElementById('canvas-loading');
-                if (canvasEl) {
-                  canvasEl.style.display = 'flex';
-                  var retryBtn = document.getElementById('glide-retry-btn');
-                  if (!retryBtn) {
-                    retryBtn = document.createElement('button');
-                    retryBtn.id = 'glide-retry-btn';
-                    retryBtn.textContent = '\ud83d\udd04 Retry Connection';
-                    retryBtn.style.cssText = 'margin-top:12px;padding:8px 18px;background:#0c8ce9;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;';
-                    retryBtn.onclick = function() { loadApp(url); };
-                    canvasEl.appendChild(retryBtn);
-                  }
-                }
-                return;
-              }
+            if (statusEl) statusEl.textContent = 'Connecting via Glide proxy...';
 
-              // Auto-correct URL if a different port was found
-              if (detectedPort !== preferredPort) {
-                var corrected = url.replace(/localhost:[0-9]+/, 'localhost:' + detectedPort);
-                var urlInput = document.getElementById('app-url');
-                if (urlInput) urlInput.value = corrected;
-                url = corrected;
-                if (statusEl) statusEl.textContent = 'Found app on :' + detectedPort + ' (expected :' + preferredPort + ') — auto-corrected!';
-              }
+            // Remove stale retry button if present
+            var oldBtn = document.getElementById('glide-retry-btn');
+            if (oldBtn) oldBtn.remove();
 
-              // Remove stale retry button if present
-              var oldBtn = document.getElementById('glide-retry-btn');
-              if (oldBtn) oldBtn.remove();
-
-              _doLoadApp(url, iframe, loading, statusEl);
-            });
+            _doLoadApp(proxyUrl, iframe, loading, statusEl);
           }
 
           // ═══════════════════════════════════════════════════════════════

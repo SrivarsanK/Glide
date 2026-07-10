@@ -19,7 +19,7 @@ function normalizePath(filePath: string, rootDir: string): string {
  * @param selectedAttr data attribute for selected state
  * @param snapThresholdPx pixel radius for snap-to-object
  */
-function buildBridgeScript(
+export function buildBridgeScript(
   sourceAttr: string,
   hoverAttr: string,
   selectedAttr: string,
