@@ -1,13 +1,14 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.0.11",
+  "version": "1.0.14",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte app visually and write back to source.",
   "workspaces": [
     "packages/*",
     "packages/adapters/*"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "repository": {
     "type": "git",
