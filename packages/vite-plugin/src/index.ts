@@ -61,19 +61,136 @@ function buildBridgeScript(
   var readyStateSent = false;
   var readyInterval = null;
 
+  // ── CST: CSS Selector Tree element detection (100% fallback) ──────────
+  // Generates a unique CSS selector path for ANY DOM element, even those
+  // without the Vite-stamped source attribute. Used as a stable identifier
+  // so the editor can track, highlight, and inspect any clicked element.
+  function getCSSPath(el) {
+    if (!el || el === document.documentElement) return 'html';
+    if (el === document.body) return 'body';
+    // Prefer id — guarantees uniqueness in one step
+    if (el.id && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(el.id)) {
+      return '#' + el.id;
+    }
+    var tag = el.tagName.toLowerCase();
+    var parent = el.parentNode;
+    if (!parent) return tag;
+    // Build a class-based selector and test uniqueness within parent
+    var classes = [];
+    for (var i = 0; i < el.classList.length; i++) {
+      var c = el.classList[i];
+      // skip glide-internal classes
+      if (c.indexOf('__glide') === 0) continue;
+      classes.push('.' + CSS.escape(c));
+    }
+    var classSel = tag + classes.join('');
+    // Only use class selector if it matches exactly one sibling
+    try {
+      if (classes.length > 0 && parent.querySelectorAll(classSel).length === 1) {
+        return getCSSPath(parent) + ' > ' + classSel;
+      }
+    } catch(e) { /* malformed class, fall through */ }
+    // Fall back to nth-child index — always unique
+    var siblings = parent.children;
+    var idx = 1;
+    for (var j = 0; j < siblings.length; j++) {
+      if (siblings[j] === el) break;
+      if (siblings[j].tagName === el.tagName) idx++;
+    }
+    return getCSSPath(parent) + ' > ' + tag + ':nth-of-type(' + idx + ')';
+  }
+
+  // Returns the element's stable identifier: sourceAttr value if present,
+  // otherwise a synthetic __glide_cst_<cssPath> key.
+  function getElId(el) {
+    var src = el.getAttribute && el.getAttribute('${sourceAttr}');
+    if (src) return src;
+    return '__glide_cst_' + getCSSPath(el);
+  }
+
+  // Resolves the deepest meaningful target element at (x, y).
+  // Priority: sourceAttr ancestor → direct elementFromPoint → walk up to first
+  // non-glide element with a non-zero bounding rect.
+  function resolveElementAtPoint(x, y, preferSrc) {
+    var direct = document.elementFromPoint(x, y);
+    if (!direct || direct === document.body || direct === document.documentElement) return null;
+    // Prefer source-attributed ancestor if any
+    if (preferSrc !== false) {
+      var src = direct.closest && direct.closest('[${sourceAttr}]');
+      if (src) return src;
+    }
+    // Walk up until we find an element with a non-trivial bounding rect
+    var cur = direct;
+    while (cur && cur !== document.body) {
+      if (cur.nodeType === 1) {
+        var r = cur.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return cur;
+      }
+      cur = cur.parentNode;
+    }
+    return direct;
+  }
+
+  // Like sendMsg() but works for ANY element — with or without sourceAttr.
+  function sendMsgForAny(type, el, isShift) {
+    var src = getElId(el);
+    var r = el.getBoundingClientRect();
+    var cs = window.getComputedStyle(el);
+    var computedStyles = {
+      tagName: el.tagName.toLowerCase(),
+      display: cs.display, flexDirection: cs.flexDirection,
+      justifyContent: cs.justifyContent, alignItems: cs.alignItems,
+      flexWrap: cs.flexWrap, gap: cs.gap, rowGap: cs.rowGap, columnGap: cs.columnGap,
+      marginTop: cs.marginTop, marginBottom: cs.marginBottom,
+      marginLeft: cs.marginLeft, marginRight: cs.marginRight,
+      paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom,
+      paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight,
+      fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing,
+      textAlign: cs.textAlign, textDecoration: cs.textDecoration,
+      color: cs.color, backgroundColor: cs.backgroundColor,
+      background: cs.background, backgroundImage: cs.backgroundImage,
+      opacity: cs.opacity, borderColor: cs.borderColor, borderWidth: cs.borderWidth,
+      borderRadius: cs.borderRadius, boxShadow: cs.boxShadow, transform: cs.transform,
+      width: cs.width, height: cs.height, position: cs.position,
+      top: cs.top, left: cs.left, flex: cs.flex, flexGrow: cs.flexGrow,
+      alignSelf: cs.alignSelf
+    };
+    window.parent.postMessage({
+      type: type,
+      source: src,
+      tagName: el.tagName.toLowerCase(),
+      classNames: el.className,
+      isShift: !!isShift,
+      rect: { left: r.left, top: r.top, width: r.width, height: r.height }
+    }, '*');
+    window.parent.postMessage({
+      type: 'glide:overlay',
+      source: src,
+      isShift: !!isShift,
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+      isHover: type === 'glide:element-hovered',
+      computedStyles: computedStyles,
+      textContent: (function() {
+        if (el.children && el.children.length > 0) return undefined;
+        var directText = '';
+        el.childNodes.forEach(function(n) {
+          if (n.nodeType === 3) directText += n.textContent;
+        });
+        return directText.trim();
+      })()
+    }, '*');
+  }
+
   function sendReadyState() {
     if (readyStateSent) return;
-    var el = document.querySelector('[${sourceAttr}]');
+    // Try sourceAttr element first; fall back to any visible element in body
+    var el = document.querySelector('[${sourceAttr}]') || document.body.firstElementChild;
     if (el) {
-      var src = el.getAttribute('${sourceAttr}');
-      if (src) {
-        window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
-        readyStateSent = true;
-        if (readyInterval) {
-          clearInterval(readyInterval);
-          readyInterval = null;
-        }
-      }
+      var src = el.getAttribute && el.getAttribute('${sourceAttr}') || getElId(el);
+      window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
+      readyStateSent = true;
+      if (readyInterval) { clearInterval(readyInterval); readyInterval = null; }
     }
   }
 
@@ -700,7 +817,13 @@ function buildBridgeScript(
     }
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
+    // ── CST DETECTION: prefer sourceAttr ancestor, fall back to point-at ──
     var el = target && target.closest && target.closest('[${sourceAttr}]');
+    if (!el) {
+      // No stamp → resolve via elementFromPoint (CST mode)
+      el = resolveElementAtPoint(e.clientX, e.clientY, false);
+      if (el && (el === document.body || el === document.documentElement)) el = null;
+    }
     var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
     var isCmdClick = e.metaKey || e.ctrlKey;
 
@@ -712,7 +835,8 @@ function buildBridgeScript(
         window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
       }
 
-      var selectTarget = resolveSelectTarget(el, isCmdClick);
+      // Use resolveSelectTarget only for source-attributed elements
+      var selectTarget = el.hasAttribute('${sourceAttr}') ? resolveSelectTarget(el, isCmdClick) : el;
       isDragging = true;
       dragEl = selectTarget;
       startX = e.clientX;
@@ -729,12 +853,12 @@ function buildBridgeScript(
 
       if (isShift && selectTarget.hasAttribute('${selectedAttr}')) {
         selectTarget.removeAttribute('${selectedAttr}');
-        sendMsg('glide:element-deselected', selectTarget, isShift);
+        sendMsgForAny('glide:element-deselected', selectTarget, isShift);
         selected = document.querySelector('[${selectedAttr}]');
       } else {
         selected = selectTarget;
         selectTarget.setAttribute('${selectedAttr}', '');
-        sendMsg('glide:element-selected', selectTarget, isShift);
+        sendMsgForAny('glide:element-selected', selectTarget, isShift);
       }
 
       var cs = window.getComputedStyle(selectTarget);
@@ -828,13 +952,18 @@ function buildBridgeScript(
     } else {
       var target = e.target;
       if (target.nodeType === 3) target = target.parentNode;
+      // ── CST HOVER DETECTION ───────────────────────────────────────────
       var el = target && target.closest && target.closest('[${sourceAttr}]');
+      if (!el) {
+        el = resolveElementAtPoint(e.clientX, e.clientY, false);
+        if (el && (el === document.body || el === document.documentElement)) el = null;
+      }
       if (el) {
         if (hovered !== el) {
           if (hovered) hovered.removeAttribute('${hoverAttr}');
           hovered = el;
           el.setAttribute('${hoverAttr}', '');
-          sendMsg('glide:element-hovered', el);
+          sendMsgForAny('glide:element-hovered', el);
         }
       } else if (hovered) {
         hovered.removeAttribute('${hoverAttr}');
@@ -933,19 +1062,24 @@ function buildBridgeScript(
   }, true);
 
   document.addEventListener('contextmenu', function(e) {
+    // ── CST CONTEXTMENU DETECTION ─────────────────────────────────────
     var target = e.target;
-    while (target && target !== document.documentElement) {
-      if (target.hasAttribute && target.hasAttribute('${sourceAttr}')) {
-        e.preventDefault();
-        window.parent.postMessage({
-          type: 'glide:contextmenu',
-          source: target.getAttribute('${sourceAttr}'),
-          clientX: e.clientX,
-          clientY: e.clientY
-        }, '*');
-        return;
-      }
-      target = target.parentNode || target.parentElement;
+    if (target.nodeType === 3) target = target.parentNode;
+    // Try sourceAttr walk-up first
+    var srcEl = target && target.closest && target.closest('[${sourceAttr}]');
+    if (!srcEl) {
+      // CST fallback
+      srcEl = resolveElementAtPoint(e.clientX, e.clientY, false);
+      if (srcEl && (srcEl === document.body || srcEl === document.documentElement)) srcEl = null;
+    }
+    if (srcEl) {
+      e.preventDefault();
+      window.parent.postMessage({
+        type: 'glide:contextmenu',
+        source: getElId(srcEl),
+        clientX: e.clientX,
+        clientY: e.clientY
+      }, '*');
     }
   }, true);
 
