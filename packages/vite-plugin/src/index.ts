@@ -185,7 +185,7 @@ export function buildBridgeScript(
   function sendReadyState() {
     if (readyStateSent) return;
     // Try sourceAttr element first; fall back to any visible element in body
-    var el = document.querySelector('[${sourceAttr}]') || document.body.firstElementChild;
+    var el = document.querySelector('[${sourceAttr}]') || (document.body && document.body.firstElementChild);
     if (el) {
       var src = el.getAttribute && el.getAttribute('${sourceAttr}') || getElId(el);
       window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
@@ -1748,6 +1748,7 @@ export function glideSourceStamping(): Plugin {
   document.head.appendChild(styleEl);
 
   // Listen for position updates from the Vite HMR websocket
+  if (typeof import.meta !== 'undefined' && import.meta.hot) {
     import.meta.hot.on('glide:positions-updated', function(data) {
       var el = document.getElementById('__glide_positions__');
       if (el) el.textContent = data.css;
@@ -1756,6 +1757,7 @@ export function glideSourceStamping(): Plugin {
       }
       window.parent.postMessage({ type: 'glide:positions-applied' }, '*');
     });
+  }
 })();
 </script>`;
       return html.replace(

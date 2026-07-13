@@ -4032,7 +4032,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             // plugin config. Direct localhost URLs are rewritten to the proxy
             // path; relative proxy paths are used as-is.
             var proxyUrl = url;
-            if (/^https?:\/\//.test(url)) {
+            if (url.startsWith('http://') || url.startsWith('https://')) {
               // Extract path from absolute URL and route via proxy
               try {
                 var parsed = new URL(url);
@@ -4041,7 +4041,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               } catch(e) { proxyUrl = '/__glide_proxy__/'; }
             } else if (!url.startsWith('/__glide_proxy__')) {
               // Relative path — prefix with proxy base
-              proxyUrl = '/__glide_proxy__/' + url.replace(/^\//, '');
+              proxyUrl = '/__glide_proxy__/' + (url.startsWith('/') ? url.slice(1) : url);
             }
 
             if (statusEl) statusEl.textContent = 'Connecting via Glide proxy...';

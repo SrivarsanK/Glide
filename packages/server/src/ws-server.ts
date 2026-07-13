@@ -307,7 +307,7 @@ function proxyToDevServer(
   bridgeScript: string
 ): void {
   const options = {
-    hostname: '127.0.0.1',
+    hostname: 'localhost',
     port: targetPort,
     path: proxyPath,
     method: req.method || 'GET',
@@ -510,10 +510,16 @@ export class GlideServer {
           this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
           console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
         });
+        this.watcher.on('error', (err: any) => {
+          console.error('[Glide Watcher] Watcher error:', err);
+        });
 
         this.wss = new WebSocketServer({ server: this.server });
 
         this.wss.on('connection', (ws: WebSocket) => {
+          ws.on('error', (err) => {
+            console.error('[Glide WS] Client connection error:', err);
+          });
           ws.on('message', async (data: string) => {
             try {
               const message = JSON.parse(data);
@@ -1012,6 +1018,10 @@ export class GlideServer {
 
         this.wss.on('error', (err) => {
           reject(err);
+        });
+
+        this.server.on('error', (err) => {
+          console.error('[Glide HTTP] Server error:', err);
         });
 
         this.server.listen(this.port, () => {
