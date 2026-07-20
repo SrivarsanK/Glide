@@ -7,7 +7,7 @@ import { updateSvelteClass } from '@srivarsank/adapter-svelte';
 import { updateHTMLClass, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadConfigFromDisk } from '@srivarsank/core';
+import { loadConfigFromDisk, buildRegistry, watchRegistry } from '@srivarsank/core';
 
 const config = await loadConfigFromDisk(process.cwd());
 
@@ -22,6 +22,35 @@ config.port = port;
 config.targetPort = targetPort;
 
 const server = new GlideServer(port, targetPort, config);
+
+// ── Component Registry ────────────────────────────────────────────────────────
+
+const registryFile = path.join(process.cwd(), 'glide-components.json');
+
+function writeRegistryToDisk(): void {
+  try {
+    const registry = buildRegistry({ projectRoot: process.cwd() });
+    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2), 'utf-8');
+    console.log(`[Glide] Component registry → ${path.basename(registryFile)} (${registry.buckets.length} buckets)`);
+  } catch (e) {
+    console.warn('[Glide] Registry build failed:', e);
+  }
+}
+
+// Initial write on startup
+writeRegistryToDisk();
+
+// Watch for source file changes and rebuild incrementally
+watchRegistry(process.cwd(), (registry) => {
+  try {
+    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2), 'utf-8');
+    console.log(`[Glide] Registry updated → ${registry.buckets.length} buckets`);
+  } catch (e) {
+    console.warn('[Glide] Registry write failed:', e);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Find the glide-positions.json file for a given source file.
