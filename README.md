@@ -15,11 +15,16 @@ No cloud. No proprietary formats. No lock-in. Just your code, edited visually.
 ## How It Works
 
 ```mermaid
-flowchart TD
-    App["Your App (port 5173)"] <--> Server["Glide Server (port 7777)"]
-    Server <--> Files["Your Source Files"]
-    Iframe["Browser iframe"] --> App
-    UI["Visual Editor UI"] --> Server
+flowchart LR
+    App["Your App\n(npm run dev · port 5173)"]
+    Server["Glide Server\n(port 7777)"]
+    Canvas["Visual Editor Canvas\n(browser · localhost:7777)"]
+    Files["Your Source Files\n(JSX · Vue · Svelte · HTML)"]
+
+    App -->|"proxied into"| Canvas
+    Canvas -->|"click / drag / edit"| Server
+    Server -->|"AST write-back"| Files
+    Files -->|"Vite HMR"| App
 ```
 
 1. Your app runs normally (e.g., `npm run dev` on port 5173)
