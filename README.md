@@ -166,6 +166,72 @@ Glide/
 
 ---
 
+## AI Agent Skills
+
+Glide ships an **AI agent skill** (`glide-component-segregator`) with every install. It teaches AI coding assistants — like Antigravity IDE — how to read `glide-components.json` to find, locate, and edit components by name instead of guessing raw file paths.
+
+### What the skill does
+
+When Glide starts, it scans your project and writes a `glide-components.json` registry to your project root. Every component in your app — including layout wrappers, backgrounds, and sub-elements — gets its own entry:
+
+```json
+{
+  "buckets": [
+    {
+      "name": "Card",
+      "file": "/src/components/Card.tsx",
+      "line": 12,
+      "exportType": "named",
+      "elements": [
+        { "id": "src/Card.tsx:13:4", "tagName": "div", "isRoot": true, "classNames": ["card"] },
+        { "id": "src/Card.tsx:14:6", "tagName": "h2", "isRoot": false }
+      ],
+      "cssFiles": ["/src/components/Card.module.css"]
+    }
+  ]
+}
+```
+
+The registry auto-updates within 300 ms whenever you add, edit, or delete a source file — no manual rescan needed.
+
+### Installation
+
+#### Antigravity IDE (automatic)
+
+The skill is bundled at `skills/glide-component-segregator/SKILL.md` inside the package. Antigravity IDE picks it up automatically when you install Glide.
+
+#### Other AI tools (manual)
+
+Copy the skill file into your agent's skills directory:
+
+```bash
+# From your project root (after installing @srivarsank/glide)
+cp node_modules/@srivarsank/glide/skills/glide-component-segregator/SKILL.md \
+   .agents/skills/glide-component-segregator/SKILL.md
+```
+
+> [!NOTE]
+> Add `glide-components.json` to your `.gitignore` — it is a generated artefact, not source:
+> ```gitignore
+> glide-components.json
+> glide-positions.json
+> ```
+
+### Agent workflow
+
+Once the skill is active, the agent follows this pattern for every edit:
+
+```
+1. Read glide-components.json
+2. Find bucket by component name (e.g. "Card", "Header")
+3. Inspect elements → pick target by isRoot / tagName / classNames
+4. Use element.id as the data-gl-source target for style edits
+5. For CSS changes → use bucket.cssFiles
+6. After adding a new component file → wait 300 ms → re-read registry
+```
+
+---
+
 ## Known Issues
 
 | Issue | Status |
