@@ -54,6 +54,9 @@ const __dirname = __dirnameFunc(__filename);
 `;
 
 async function runBuild() {
+  console.log('Building packages/core with tsc...');
+  execSync('npx tsc', { cwd: path.join(projectRoot, 'packages/core'), stdio: 'inherit' });
+
   console.log('Bundling ESM Javascript files with esbuild...');
 
   // 1. Library entry point
