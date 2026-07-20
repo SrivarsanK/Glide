@@ -12,3 +12,5 @@ export type { ScanResult, ScannedElement, ResolvedValue, StateStyles, ScanOption
 export { DEFAULT_CONFIG, resolveConfig } from './config.js';
 export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from './config.js';
 export { loadConfigFromDisk } from './config-loader.js';
+export { buildRegistry, watchRegistry, collectSourceFiles } from './component-registry.js';
+export type { ComponentRegistry, ComponentBucket, RegistryElement, RegistryOptions } from './component-registry.js';
