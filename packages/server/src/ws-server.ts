@@ -478,6 +478,38 @@ export class GlideServer {
             return;
           }
 
+          // ── Vite asset pass-through ──────────────────────────────────────
+          // Vite module imports use absolute paths (/src/..., /@vite/..., etc.)
+          // that the browser resolves directly against localhost:7777, bypassing
+          // the /__glide_proxy__ prefix. Forward these straight to the dev server
+          // without bridge injection — they are JS/CSS assets, not HTML pages.
+          const isViteAsset =
+            url.startsWith('/src/') ||
+            url.startsWith('/node_modules/') ||
+            url.startsWith('/@vite/') ||
+            url.startsWith('/@react-refresh') ||
+            url.startsWith('/@fs/') ||
+            url.startsWith('/__vite') ||
+            url.startsWith('/assets/') ||
+            url.startsWith('/__uno') ||
+            (url.startsWith('/') && (
+              url.includes('.tsx') ||
+              url.includes('.ts') ||
+              url.includes('.jsx') ||
+              url.includes('.js') ||
+              url.includes('.css') ||
+              url.includes('.svg') ||
+              url.includes('.png') ||
+              url.includes('.jpg') ||
+              url.includes('.woff') ||
+              url.includes('.woff2')
+            ));
+
+          if (isViteAsset) {
+            proxyToDevServer(this.targetPort, url, req, res, '');
+            return;
+          }
+
           // ── Editor shell ────────────────────────────────────────────────
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(getEditorHTML(this.config));
