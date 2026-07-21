@@ -53,9 +53,33 @@ const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __dirnameFunc(__filename);
 `;
 
+// ── Pre-build all internal packages (dependency order) ───────────────────────
+// esbuild resolves @srivarsank/* via node_modules symlinks pointing to packages/*/dist/
+// Those dist/ dirs must exist before esbuild runs, so compile all packages with tsc first.
+
+const internalPackages = [
+  'core',
+  'ast-writer',
+  'adapters/vue',
+  'adapters/svelte',
+  'adapters/html',
+  'adapters/react',
+  'server',
+  'overlay',
+  'vite-plugin',
+  'babel-plugin',
+];
+
 async function runBuild() {
-  console.log('Building packages/core with tsc...');
-  execSync('npx tsc', { cwd: path.join(projectRoot, 'packages/core'), stdio: 'inherit' });
+  for (const pkg of internalPackages) {
+    const pkgDir = path.join(projectRoot, 'packages', pkg);
+    if (!fs.existsSync(path.join(pkgDir, 'tsconfig.json'))) {
+      console.log(`Skipping ${pkg} (no tsconfig.json)`);
+      continue;
+    }
+    console.log(`Building packages/${pkg} with tsc...`);
+    execSync('npx tsc', { cwd: pkgDir, stdio: 'inherit' });
+  }
 
   console.log('Bundling ESM Javascript files with esbuild...');
 
