@@ -17,12 +17,12 @@ const tsxParser = {
 
 const traverse = (traverseModule as any).default || traverseModule;
 
-function matchesSourceId(path: any, targetId: string): boolean {
+function matchesSourceId(path: any, targetId: string, sourceAttr = 'data-gl-source'): boolean {
   if (!targetId) return false;
   const openingEl = path.node.openingElement;
   let currentId = '';
   openingEl.attributes.forEach((attr: any) => {
-    if (attr.type === 'JSXAttribute' && attr.name.name === 'data-gl-source') {
+    if (attr.type === 'JSXAttribute' && (attr.name.name === sourceAttr || attr.name.name.endsWith('-source'))) {
       if (attr.value && attr.value.type === 'StringLiteral') {
         currentId = attr.value.value;
       }
