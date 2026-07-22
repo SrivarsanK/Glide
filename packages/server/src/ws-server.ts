@@ -437,7 +437,6 @@ export class GlideServer {
   private editCallbacks: EditCallback[] = [];
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
-  private history = new HistoryManager();
   private lastSelfWrites = new Map<string, number>();
 
   public recordSelfWrite(filePath: string) {
@@ -1078,6 +1077,14 @@ export class GlideServer {
   }
 
   public stop(): Promise<void> {
+    if (this.watcher) {
+      try {
+        this.watcher.close();
+      } catch (err) {
+        console.error('[Glide Watcher] Error closing watcher:', err);
+      }
+      this.watcher = null;
+    }
     return new Promise((resolve, reject) => {
       if (this.wss) {
         this.wss.close((err) => {
