@@ -6,21 +6,17 @@ import { buildComponentTree, GlideConfig, DEFAULT_CONFIG } from '@srivarsank/cor
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@srivarsank/ast-writer';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { HistoryManager } from './undo-manager.js';
-import {
-  pushHistory,
-  undo,
-  redo,
-  jumpTo,
-  getHistoryState,
-  clearHistory,
-  setHistoryLimit
-} from './history-manager.js';
 
+const execFileAsync = promisify(execFile);
 
-const execAsync = promisify(exec);
+function isSafeFilePath(targetPath: string, rootDir: string = process.cwd()): boolean {
+  if (!targetPath || typeof targetPath !== 'string') return false;
+  const resolved = path.resolve(targetPath);
+  const rootResolved = path.resolve(rootDir);
+  return resolved.startsWith(rootResolved);
+}
 
 // ── Glide Bridge Script (injected into proxied HTML) ──────────────────────
 // Self-contained IIFE with full CST detection. Injected into user's app HTML
@@ -558,7 +554,7 @@ export class GlideServer {
 
               if (message.type === 'get-tree') {
                 const { file } = message;
-                if (fs.existsSync(file)) {
+                if (file && isSafeFilePath(file) && fs.existsSync(file)) {
                   // Track the user's project git root for git commands
                   try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
@@ -574,7 +570,7 @@ export class GlideServer {
                   ws.send(JSON.stringify({
                     type: 'status',
                     success: false,
-                    error: `File not found: ${file}`
+                    error: `Invalid or unaccessible file: ${file}`
                   }));
                 }
                 return;
@@ -782,13 +778,21 @@ export class GlideServer {
 
               if (message.type === 'git-branch-create') {
                 const { branchName, projectDir } = message;
-                // Use projectDir sent from client, or fall back to the tracked git root
-                const cwd = projectDir
+                if (!branchName || typeof branchName !== 'string' || !/^[a-zA-Z0-9_/-]+$/.test(branchName)) {
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: false,
+                    error: 'Invalid branch name format',
+                    action: 'create'
+                  }));
+                  return;
+                }
+                const cwd = (projectDir && isSafeFilePath(projectDir))
                   ? findGitRoot(projectDir)
                   : activeProjectGitRoot;
                 console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                 try {
-                  await execAsync(`git checkout -b ${branchName}`, { cwd });
+                  await execFileAsync('git', ['checkout', '-b', branchName], { cwd });
                   ws.send(JSON.stringify({
                     type: 'git-status',
                     success: true,
@@ -809,14 +813,22 @@ export class GlideServer {
 
               if (message.type === 'git-branch-finalize') {
                 const { commitMessage, projectDir } = message;
-                const cwd = projectDir
+                if (!commitMessage || typeof commitMessage !== 'string') {
+                  ws.send(JSON.stringify({
+                    type: 'git-status',
+                    success: false,
+                    error: 'Invalid commit message',
+                    action: 'finalize'
+                  }));
+                  return;
+                }
+                const cwd = (projectDir && isSafeFilePath(projectDir))
                   ? findGitRoot(projectDir)
                   : activeProjectGitRoot;
                 console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
                 try {
-                  // Run git add and git commit as separate commands to avoid && issues on Windows
-                  await execAsync(`git add -A`, { cwd });
-                  await execAsync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd });
+                  await execFileAsync('git', ['add', '-A'], { cwd });
+                  await execFileAsync('git', ['commit', '-m', commitMessage], { cwd });
                   ws.send(JSON.stringify({
                     type: 'git-status',
                     success: true,
@@ -965,12 +977,12 @@ export class GlideServer {
                 console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
 
                 // Validate parameters
-                if (!file || typeof line !== 'number' || typeof column !== 'number' || !change) {
+                if (!file || !isSafeFilePath(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
                   ws.send(
                     JSON.stringify({
                       type: 'status',
                       success: false,
-                      error: 'Invalid edit payload',
+                      error: 'Invalid edit payload or unsafe file path',
                     })
                   );
                   return;
