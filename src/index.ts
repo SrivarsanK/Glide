@@ -20,7 +20,7 @@ export {
 export { updateVueSFCClass } from '@srivarsank/adapter-vue';
 export { updateSvelteClass } from '@srivarsank/adapter-svelte';
 export { updateHTMLClass, updateHTMLText, parseHTMLToReact, getElementClass } from '@srivarsank/adapter-html';
-export { GlideServer, HistoryManager, saveUploadedAsset } from '@srivarsank/server';
+export { GlideServer, HistoryStore, saveUploadedAsset } from '@srivarsank/server';
 export { getEditorHTML, GlideBridge, GlideOverlay, snapToGrid, measureTextLayout, resolveActiveBreakpoint } from '@srivarsank/overlay';
 export { glideSourceStamping } from '@srivarsank/vite-plugin';
 

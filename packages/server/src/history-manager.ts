@@ -1,143 +1,125 @@
 import * as crypto from 'crypto';
 import { HistoryEntry, FileDiff } from '@srivarsank/core';
 
-// --- State (module-level, in-memory only) ---
+export class HistoryStore {
+  private maxHistory = 100;
+  private stack: HistoryEntry[] = [];
+  private currentIndex = -1;
 
-let MAX_HISTORY = 100;   // configurable via glide.config.ts historyLimit
+  public setLimit(limit: number): void {
+    this.maxHistory = Math.min(Math.max(limit, 1), 1000);
+  }
 
-let stack: HistoryEntry[] = [];
-let currentIndex: number = -1;   // points to the currently applied entry
-                                 // -1 means no history yet (initial state)
+  public push(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void {
+    this.stack = this.stack.slice(0, this.currentIndex + 1);
+    const now = Date.now();
 
-// --- Public API ---
+    if (entry.squashKey && this.stack.length > 0) {
+      const last = this.stack[this.stack.length - 1];
+      const windowMs = entry.squashWindowMs ?? 2000;
+      if (last.squashKey === entry.squashKey && now - last.timestamp < windowMs) {
+        last.description = entry.description;
+        last.timestamp = now;
+        for (const newDiff of entry.diffs) {
+          const existing = last.diffs.find(d => d.file === newDiff.file);
+          if (existing) {
+            existing.after = newDiff.after;
+          } else {
+            last.diffs.push(newDiff);
+          }
+        }
+        this.currentIndex = this.stack.length - 1;
+        return;
+      }
+    }
 
-export function setHistoryLimit(limit: number): void {
-  MAX_HISTORY = Math.min(Math.max(limit, 1), 1000);
-}
+    const full: HistoryEntry = {
+      id: crypto.randomUUID(),
+      timestamp: now,
+      ...entry
+    };
 
-/**
- * Call this AFTER a successful fs.writeFileSync in the AST writer.
- * Records what changed and updates the stack.
- */
-export function pushHistory(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void {
-  // Discard everything after currentIndex (new action kills future states)
-  stack = stack.slice(0, currentIndex + 1);
+    this.stack.push(full);
+    this.currentIndex = this.stack.length - 1;
 
-  const now = Date.now();
+    if (this.stack.length > this.maxHistory) {
+      this.stack.shift();
+      this.currentIndex = this.stack.length - 1;
+    }
+  }
 
-  // Squash: if last entry has same squashKey and is within squashWindowMs, merge
-  if (entry.squashKey && stack.length > 0) {
-    const last = stack[stack.length - 1];
-    const windowMs = entry.squashWindowMs ?? 2000;
-    if (
-      last.squashKey === entry.squashKey &&
-      now - last.timestamp < windowMs
-    ) {
-      // Update the 'after' content and description, keep original 'before'
-      last.description = entry.description;
-      last.timestamp = now;
-      for (const newDiff of entry.diffs) {
-        const existing = last.diffs.find(d => d.file === newDiff.file);
-        if (existing) {
-          existing.after = newDiff.after;
-        } else {
-          last.diffs.push(newDiff);
+  public undo(): FileDiff[] | null {
+    if (this.currentIndex < 0) return null;
+    const entry = this.stack[this.currentIndex];
+    this.currentIndex -= 1;
+    return entry.diffs;
+  }
+
+  public redo(): FileDiff[] | null {
+    if (this.currentIndex >= this.stack.length - 1) return null;
+    this.currentIndex += 1;
+    const entry = this.stack[this.currentIndex];
+    return entry.diffs;
+  }
+
+  public jumpTo(targetIndex: number): { file: string; content: string }[] {
+    if (targetIndex < -1 || targetIndex >= this.stack.length) return [];
+    const writes: { file: string; content: string }[] = [];
+
+    if (targetIndex > this.currentIndex) {
+      for (let i = this.currentIndex + 1; i <= targetIndex; i++) {
+        for (const diff of this.stack[i].diffs) {
+          writes.push({ file: diff.file, content: diff.after });
         }
       }
-      currentIndex = stack.length - 1;
-      return;
+    } else if (targetIndex < this.currentIndex) {
+      for (let i = this.currentIndex; i > targetIndex; i--) {
+        for (const diff of this.stack[i].diffs) {
+          writes.push({ file: diff.file, content: diff.before });
+        }
+      }
     }
+
+    this.currentIndex = targetIndex;
+    return writes;
   }
 
-  // Build full entry
-  const full: HistoryEntry = {
-    id: crypto.randomUUID(),
-    timestamp: now,
-    ...entry
-  };
+  public getState(): { stack: HistoryEntry[]; currentIndex: number } {
+    return { stack: [...this.stack], currentIndex: this.currentIndex };
+  }
 
-  stack.push(full);
-  currentIndex = stack.length - 1;
-
-  // Enforce cap — drop oldest entry when over limit
-  if (stack.length > MAX_HISTORY) {
-    stack.shift();
-    currentIndex = stack.length - 1;
+  public clear(): void {
+    this.stack = [];
+    this.currentIndex = -1;
   }
 }
 
-/**
- * Undo: move currentIndex backward by 1.
- * Applies the `before` content of the current entry.
- * Returns the list of files written so the WebSocket handler can ACK.
- */
+const defaultStore = new HistoryStore();
+
+export function setHistoryLimit(limit: number): void {
+  defaultStore.setLimit(limit);
+}
+
+export function pushHistory(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void {
+  defaultStore.push(entry);
+}
+
 export function undo(): FileDiff[] | null {
-  if (currentIndex < 0) return null;   // nothing to undo
-
-  const entry = stack[currentIndex];
-  currentIndex -= 1;
-  return entry.diffs;   // caller writes entry.diffs[i].before to disk
+  return defaultStore.undo();
 }
 
-/**
- * Redo: move currentIndex forward by 1.
- * Applies the `after` content of the next entry.
- * Returns the list of files written so the WebSocket handler can ACK.
- */
 export function redo(): FileDiff[] | null {
-  if (currentIndex >= stack.length - 1) return null;   // nothing to redo
-
-  currentIndex += 1;
-  const entry = stack[currentIndex];
-  return entry.diffs;   // caller writes entry.diffs[i].after to disk
+  return defaultStore.redo();
 }
 
-/**
- * Jump to any arbitrary index in the stack.
- * Used by the history panel when the developer clicks a past state.
- * Applies `after` for all entries up to targetIndex,
- * applies `before` for all entries after targetIndex.
- *
- * Returns: { file, content }[] — all files to write in this jump.
- */
 export function jumpTo(targetIndex: number): { file: string; content: string }[] {
-  if (targetIndex < -1 || targetIndex >= stack.length) return [];
-
-  const writes: { file: string; content: string }[] = [];
-
-  if (targetIndex > currentIndex) {
-    // Moving forward — apply `after` for each entry between current+1 and target
-    for (let i = currentIndex + 1; i <= targetIndex; i++) {
-      for (const diff of stack[i].diffs) {
-        writes.push({ file: diff.file, content: diff.after });
-      }
-    }
-  } else if (targetIndex < currentIndex) {
-    // Moving backward — apply `before` for each entry between current and target+1
-    for (let i = currentIndex; i > targetIndex; i--) {
-      for (const diff of stack[i].diffs) {
-        writes.push({ file: diff.file, content: diff.before });
-      }
-    }
-  }
-
-  currentIndex = targetIndex;
-  return writes;
+  return defaultStore.jumpTo(targetIndex);
 }
 
-/**
- * Returns the full stack and current index for the overlay UI.
- * Called when the overlay connects or requests a refresh.
- */
 export function getHistoryState(): { stack: HistoryEntry[]; currentIndex: number } {
-  return { stack: [...stack], currentIndex };
+  return defaultStore.getState();
 }
 
-/**
- * Clears all history. Called on server restart only.
- * The overlay should never call this.
- */
 export function clearHistory(): void {
-  stack = [];
-  currentIndex = -1;
+  defaultStore.clear();
 }
