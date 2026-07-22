@@ -478,27 +478,25 @@ export class GlideServer {
           // that the browser resolves directly against localhost:7777, bypassing
           // the /__glide_proxy__ prefix. Forward these straight to the dev server
           // without bridge injection — they are JS/CSS assets, not HTML pages.
+          const pathname = new URL(url, 'http://localhost').pathname;
+          const ext = path.extname(pathname).toLowerCase();
+          const ASSET_EXTENSIONS = new Set([
+            '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+            '.css', '.scss', '.sass', '.less',
+            '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
+            '.woff', '.woff2', '.ttf', '.eot', '.otf', '.json'
+          ]);
+
           const isViteAsset =
-            url.startsWith('/src/') ||
-            url.startsWith('/node_modules/') ||
-            url.startsWith('/@vite/') ||
-            url.startsWith('/@react-refresh') ||
-            url.startsWith('/@fs/') ||
-            url.startsWith('/__vite') ||
-            url.startsWith('/assets/') ||
-            url.startsWith('/__uno') ||
-            (url.startsWith('/') && (
-              url.includes('.tsx') ||
-              url.includes('.ts') ||
-              url.includes('.jsx') ||
-              url.includes('.js') ||
-              url.includes('.css') ||
-              url.includes('.svg') ||
-              url.includes('.png') ||
-              url.includes('.jpg') ||
-              url.includes('.woff') ||
-              url.includes('.woff2')
-            ));
+            pathname.startsWith('/src/') ||
+            pathname.startsWith('/node_modules/') ||
+            pathname.startsWith('/@vite/') ||
+            pathname.startsWith('/@react-refresh') ||
+            pathname.startsWith('/@fs/') ||
+            pathname.startsWith('/__vite') ||
+            pathname.startsWith('/assets/') ||
+            pathname.startsWith('/__uno') ||
+            ASSET_EXTENSIONS.has(ext);
 
           if (isViteAsset) {
             proxyToDevServer(this.targetPort, url, req, res, '');
