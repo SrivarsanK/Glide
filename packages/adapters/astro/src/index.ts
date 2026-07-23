@@ -1,7 +1,4 @@
-/**
- * @srivarsank/adapter-astro — AST/Regex editing for Astro SFCs.
- * Preserves frontmatter boundary (--- ... ---) and updates template element classes/text.
- */
+import { mergeInlineStyle } from '@srivarsank/core';
 
 export function updateAstroClass(
   astroCode: string,
@@ -43,6 +40,49 @@ export function updateAstroClass(
   return frontmatter + updatedTemplate;
 }
 
+export function updateAstroStyle(
+  astroCode: string,
+  targetId: string,
+  styles: Record<string, string>
+): string {
+  let frontmatter = '';
+  let template = astroCode;
+
+  const parts = astroCode.split('---');
+  if (parts.length >= 3) {
+    frontmatter = parts.slice(0, 2).join('---') + '---';
+    template = parts.slice(2).join('---');
+  }
+
+  const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
+  const match = template.match(tagRegex);
+  if (!match) return astroCode;
+
+  const fullTag = match[0];
+  const tagName = match[1];
+  const attributes = match[2];
+
+  const styleRegex = /style=(['"])(.*?)\1/;
+  const styleMatch = attributes.match(styleRegex);
+  let newFullTag: string;
+
+  if (styleMatch) {
+    const quote = styleMatch[1];
+    const existing = styleMatch[2];
+    const merged = mergeInlineStyle(existing, styles);
+    const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
+    newFullTag = `<${tagName} ${newAttributes}>`;
+  } else {
+    const merged = mergeInlineStyle('', styles);
+    const newAttributes = `${attributes} style="${merged}"`;
+    newFullTag = `<${tagName} ${newAttributes}>`;
+  }
+
+  const updatedTemplate = template.replace(fullTag, newFullTag);
+  return frontmatter + updatedTemplate;
+}
+
 export function updateAstroText(
   astroCode: string,
   targetId: string,
@@ -73,3 +113,4 @@ export function updateAstroText(
   const updatedTemplate = template.replace(elementRegex, updatedElement);
   return frontmatter + updatedTemplate;
 }
+
