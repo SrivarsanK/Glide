@@ -1,7 +1,7 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.0.20",
-  "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte app visually and write back to source.",
+  "version": "1.0.21",
+  "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
   "workspaces": [
     "packages/*",
     "packages/adapters/*"
