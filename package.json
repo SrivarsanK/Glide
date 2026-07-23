@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.0.32",
+  "version": "1.0.33",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
   "workspaces": [
     "packages/*",
