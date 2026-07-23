@@ -2,10 +2,10 @@
 import { GlideServer, pushHistory } from '@srivarsank/server';
 import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@srivarsank/ast-writer';
 import { groupJSXElements, ungroupJSXElement } from '@srivarsank/ast-writer';
-import { updateVueSFCClass } from '@srivarsank/adapter-vue';
-import { updateSvelteClass } from '@srivarsank/adapter-svelte';
-import { updateAstroClass, updateAstroText } from '@srivarsank/adapter-astro';
-import { updateHTMLClass, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
+import { updateVueSFCClass, updateVueSFCStyle, updateVueSFCText } from '@srivarsank/adapter-vue';
+import { updateSvelteClass, updateSvelteStyle, updateSvelteText } from '@srivarsank/adapter-svelte';
+import { updateAstroClass, updateAstroStyle, updateAstroText } from '@srivarsank/adapter-astro';
+import { updateHTMLClass, updateHTMLStyle, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfigFromDisk, buildRegistry, watchRegistry } from '@srivarsank/core';
@@ -174,10 +174,20 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     });
     console.log(`[Glide] Updated multi style class in ${file}:${line}:${column}`);
   } else if (change.type === 'style') {
-    // Write inline style prop directly to JSX — works with any CSS setup
-    const updated = updateJSXStyleProp(code, line, column, change.value as Record<string, string>, hash);
+    let updated = '';
+    const styles = change.value as Record<string, string>;
+    if (file.endsWith('.vue')) {
+      updated = updateVueSFCStyle(code, targetId, styles);
+    } else if (file.endsWith('.svelte')) {
+      updated = updateSvelteStyle(code, targetId, styles);
+    } else if (file.endsWith('.astro')) {
+      updated = updateAstroStyle(code, targetId, styles);
+    } else if (file.endsWith('.html')) {
+      updated = updateHTMLStyle(code, targetId, styles);
+    } else {
+      updated = updateJSXStyleProp(code, line, column, styles, hash);
+    }
     fs.writeFileSync(file, updated, 'utf-8');
-    // Squash consecutive style edits on same element within 2s into one history entry
     pushHistory({
       description: buildDescription(change, file, line),
       diffs: [{ file: path.resolve(file), before: code, after: updated }],
@@ -214,7 +224,13 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
   } else if (change.type === 'text') {
     let updated = '';
-    if (file.endsWith('.html')) {
+    if (file.endsWith('.vue')) {
+      updated = updateVueSFCText(code, targetId, change.value);
+    } else if (file.endsWith('.svelte')) {
+      updated = updateSvelteText(code, targetId, change.value);
+    } else if (file.endsWith('.astro')) {
+      updated = updateAstroText(code, targetId, change.value);
+    } else if (file.endsWith('.html')) {
       updated = updateHTMLText(code, targetId, change.value);
     } else {
       updated = updateJSXText(code, line, column, change.value, hash);
