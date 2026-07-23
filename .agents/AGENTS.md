@@ -114,6 +114,7 @@ Never output all changes in one block and leave sequencing to the user.
 
 Whenever requested to publish or release a new version:
 1. **Auto-Bump Version**: Automatically increment the patch version in `package.json` (or minor/major if specified).
-2. **Build**: Execute `npm run build` to generate compiled ESM and TypeScript declaration bundles.
-3. **Commit & Push**: Commit the version bump with message `chore: bump version to X.Y.Z` and push `main` to GitHub.
-4. **Publish**: Run `npm publish` to deploy the package to npm.
+2. **Update README Badge**: Update version badge in `README.md` to match `vX.Y.Z`.
+3. **Build**: Execute `npm run build` to generate compiled ESM and TypeScript declaration bundles.
+4. **Commit, Tag & Push**: Commit version bump with `chore: bump version to X.Y.Z`, create git tag (`git tag vX.Y.Z`), and push `main` & tags to GitHub (`git push origin main --tags`).
+5. **Publish**: Run `npm publish` to deploy the package to npm.
