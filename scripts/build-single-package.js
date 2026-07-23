@@ -62,6 +62,7 @@ const internalPackages = [
   'ast-writer',
   'adapters/vue',
   'adapters/svelte',
+  'adapters/astro',
   'adapters/html',
   'adapters/react',
   'server',

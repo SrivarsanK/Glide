@@ -1,0 +1,20 @@
+{
+  "name": "@srivarsank/adapter-astro",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SrivarsanK/Glide.git",
+    "directory": "packages/adapters/astro"
+  },
+  "private": true
+}
