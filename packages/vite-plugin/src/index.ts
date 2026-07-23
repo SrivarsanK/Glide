@@ -1775,6 +1775,12 @@ export function glideSourceStamping(): Plugin {
       if (!isDev) return null;
 
       const cleanId = id.split('?')[0];
+      // Skip Astro virtual script/style modules — these contain extracted
+      // TypeScript/CSS, not HTML templates. Stamping them would corrupt
+      // TS generics like Omit<T> or NodeListOf<E>.
+      if (id.includes('?astro&type=script') || id.includes('?astro&type=style')) {
+        return null;
+      }
       if (cleanId.includes('node_modules')) {
         return null;
       }
