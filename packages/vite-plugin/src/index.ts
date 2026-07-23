@@ -1779,8 +1779,9 @@ export function glideSourceStamping(): Plugin {
       const isHTML = /\.html$/.test(cleanId);
       const isVue = /\.vue$/.test(cleanId);
       const isSvelte = /\.svelte$/.test(cleanId);
+      const isAstro = /\.astro$/.test(cleanId);
 
-      if (!isJSX && !isHTML && !isVue && !isSvelte) {
+      if (!isJSX && !isHTML && !isVue && !isSvelte && !isAstro) {
         return null;
       }
 
