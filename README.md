@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.20-blue" alt="version"></a>
+  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.22-blue" alt="version"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
   <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
