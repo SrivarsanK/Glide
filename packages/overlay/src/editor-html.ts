@@ -1023,7 +1023,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           <div class="toolbar" style="display: flex; align-items: center; gap: 8px;">
             <div class="toolbar-input-group" style="display: flex; align-items: center; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; height: 30px;">
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
-              <input type="text" id="app-url" value="/__glide_proxy__/" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
+              <input type="text" id="app-url" value="${config.targetPort ? `http://localhost:${config.targetPort}` : 'http://localhost:4321'}" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
             
             <!-- Three-state Connection Status Button -->
@@ -3230,6 +3230,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!data || !data.type) return;
 
             if (data.type === 'glide:ready') {
+              const loadingEl = document.getElementById('canvas-loading');
+              if (loadingEl) loadingEl.style.display = 'none';
+
               // Request fresh DOM tree from bridge — works with CST (no file needed)
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
@@ -3329,6 +3332,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             // ── DOM tree from proxy bridge (CST mode, no AST needed) ──
             if (data.type === 'glide:dom-tree') {
+              const loadingEl = document.getElementById('canvas-loading');
+              if (loadingEl) loadingEl.style.display = 'none';
+
               if (!data.tree || !Array.isArray(data.tree)) return;
               // Convert bridge DOM nodes into layerTree format.
               // node.id already is a CST id (__glide_cst_...) usable as data-source.
@@ -4047,6 +4053,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             // This ensures the bridge script is injected without any user
             // plugin config. Direct localhost URLs are rewritten to the proxy
             // path; relative proxy paths are used as-is.
+            // If user enters pure numeric port e.g. "4321", expand to http://localhost:4321
+            if (/^\d+$/.test(url)) {
+              url = 'http://localhost:' + url;
+            }
+
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
               // Extract path from absolute URL and route via proxy
@@ -4058,6 +4069,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             } else if (!url.startsWith('/__glide_proxy__')) {
               // Relative path — prefix with proxy base
               proxyUrl = '/__glide_proxy__/' + (url.startsWith('/') ? url.slice(1) : url);
+            }
+
+            // Sync text input to normalized URL if user typed pure port or full URL
+            var urlInput = document.getElementById('app-url');
+            if (urlInput && url.startsWith('http')) {
+              urlInput.value = url;
             }
 
             if (statusEl) statusEl.textContent = 'Connecting via Glide proxy...';
@@ -5285,6 +5302,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           document.getElementById('btn-load').addEventListener('click', () => {
             const url = document.getElementById('app-url').value.trim();
             if (url) loadApp(url);
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+              connectSocket();
+            }
           });
 
           document.getElementById('app-url').addEventListener('keydown', (e) => {

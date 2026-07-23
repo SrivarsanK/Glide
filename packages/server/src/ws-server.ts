@@ -312,13 +312,13 @@ function proxyToDevServer(
   bridgeScript: string
 ): void {
   const options = {
-    hostname: 'localhost',
+    hostname: '127.0.0.1',
     port: targetPort,
     path: proxyPath,
     method: req.method || 'GET',
     headers: {
       ...req.headers,
-      host: `localhost:${targetPort}`,
+      host: `127.0.0.1:${targetPort}`,
     },
   };
   // Remove encoding so we get raw bytes (easier to inject text)
@@ -352,14 +352,18 @@ function proxyToDevServer(
       proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
       proxyRes.on('end', () => {
         let html = Buffer.concat(chunks).toString('utf-8');
+        // Replace absolute target server URLs with proxy base
+        const absTargetPattern = new RegExp(`http://(?:localhost|127\\.0\\.0\\.1):${targetPort}/`, 'g');
+        html = html.replace(absTargetPattern, '/__glide_proxy__/');
+
         // Fix relative asset paths → prefix with proxy base
         html = html
           .replace(/(src|href|action)="(?!\/\/)\//g, '$1="/__glide_proxy__/')
           .replace(/(src|href|action)='\/(?!\/)/g, "$1='/__glide_proxy__/");
-        // Rewrite Vite HMR WebSocket to point at actual dev server port
+        // Rewrite Vite/Astro HMR WebSocket to point at actual dev server port
         html = html.replace(
-          /new WebSocket\(['"]ws:\/\/localhost:\d+/g,
-          `new WebSocket('ws://localhost:${targetPort}`
+          /new WebSocket\(['"]ws:\/\/(?:localhost|127\.0\.0\.1):\d+/g,
+          `new WebSocket('ws://127.0.0.1:${targetPort}`
         );
         // Inject bridge before </head> (or at top of <body> as fallback)
         if (html.includes('</head>')) {
