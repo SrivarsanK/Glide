@@ -472,50 +472,27 @@ export class GlideServer {
 
         this.server = createServer((req, res) => {
           const url = req.url || '/';
+          const pathname = new URL(url, 'http://localhost').pathname;
 
-          // ── Proxy route: forward to user's dev server + inject bridge ──
+          // ── Editor shell: only served at root '/' or '/index.html' ──
+          if (pathname === '/' || pathname === '/index.html') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(getEditorHTML(this.config));
+            return;
+          }
+
+          // ── Proxy route: forward to user's dev server + inject bridge for HTML ──
           if (url.startsWith('/__glide_proxy__')) {
-            // Strip the proxy prefix to get the actual path
             const proxyPath = url.slice('/__glide_proxy__'.length) || '/';
             const bridgeScript = buildGlideBridgeInlineScript(this.config);
             proxyToDevServer(this.targetPort, proxyPath, req, res, bridgeScript);
             return;
           }
 
-          // ── Vite asset pass-through ──────────────────────────────────────
-          // Vite module imports use absolute paths (/src/..., /@vite/..., etc.)
-          // that the browser resolves directly against localhost:7777, bypassing
-          // the /__glide_proxy__ prefix. Forward these straight to the dev server
-          // without bridge injection — they are JS/CSS assets, not HTML pages.
-          const pathname = new URL(url, 'http://localhost').pathname;
-          const ext = path.extname(pathname).toLowerCase();
-          const ASSET_EXTENSIONS = new Set([
-            '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-            '.astro', '.vue', '.svelte',
-            '.css', '.scss', '.sass', '.less',
-            '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
-            '.woff', '.woff2', '.ttf', '.eot', '.otf', '.json'
-          ]);
-
-          const isViteAsset =
-            pathname.startsWith('/src/') ||
-            pathname.startsWith('/node_modules/') ||
-            pathname.startsWith('/@vite/') ||
-            pathname.startsWith('/@react-refresh') ||
-            pathname.startsWith('/@fs/') ||
-            pathname.startsWith('/__vite') ||
-            pathname.startsWith('/assets/') ||
-            pathname.startsWith('/__uno') ||
-            ASSET_EXTENSIONS.has(ext);
-
-          if (isViteAsset) {
-            proxyToDevServer(this.targetPort, url, req, res, '');
-            return;
-          }
-
-          // ── Editor shell ────────────────────────────────────────────────
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(getEditorHTML(this.config));
+          // ── Universal pass-through for all other assets/modules/APIs ─────
+          // Any other URL requested by the browser/iframe (e.g. /_astro/..., /@id/..., /src/..., /api/...)
+          // is forwarded directly to the dev server without bridge injection.
+          proxyToDevServer(this.targetPort, url, req, res, '');
         });
 
 

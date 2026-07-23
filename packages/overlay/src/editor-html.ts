@@ -5901,10 +5901,58 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
           applyTransform();
 
-          // Initialize Lucide icons on page load
-          if (typeof lucide !== 'undefined') {
-            lucide.createIcons();
-          }
+          // Initialize Lucide icons on page load with zero-dependency SVG fallback
+          (function initIcons() {
+            if (typeof lucide !== 'undefined' && lucide && typeof lucide.createIcons === 'function') {
+              try { lucide.createIcons(); return; } catch(e) {}
+            }
+            const icons = {
+              'panel-left': '<path d="M4 4h16v16H4zM9 4v16"/>',
+              'panel-right': '<path d="M4 4h16v16H4zM15 4v16"/>',
+              'clock': '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+              'magnet': '<path d="m6 15-3-3 3-3"/><path d="M21 12H3"/>',
+              'hash': '<path d="M4 9h16M4 15h16M10 3v18M14 3v18"/>',
+              'grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+              'eye': '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+              'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+              'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+              'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+              'plus': '<path d="M5 12h14M12 5v14"/>',
+              'file': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+              'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+              'mouse-pointer-2': '<path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/>',
+              'hand': '<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v9"/><path d="M18 8a2 2 0 0 1 4 0v7a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+              'frame': '<line x1="22" x2="2" y1="6" y2="6"/><line x1="22" x2="2" y1="18" y2="18"/><line x1="6" x2="6" y1="2" y2="22"/><line x1="18" x2="18" y1="2" y2="22"/>',
+              'square': '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+              'type': '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/>',
+              'circle': '<circle cx="12" cy="12" r="10"/>',
+              'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+              'pipette': '<path d="m2 22 1-1h3l9-9"/><path d="M19 11l-4-4"/><path d="m15 3 6 6-2 2-6-6z"/>',
+              'zap': '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+              'flip-horizontal': '<path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 20v2"/><path d="M12 14v2"/><path d="M12 8v2"/><path d="M12 2v2"/>',
+              'flip-vertical': '<path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"/><path d="M4 12H2"/><path d="M10 12H8"/><path d="M16 12h-2"/><path d="M22 12h-2"/>',
+              'link': '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+            };
+            document.querySelectorAll('i[data-lucide]').forEach(function(el) {
+              const name = el.getAttribute('data-lucide');
+              const pathStr = icons[name];
+              if (pathStr) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('stroke', 'currentColor');
+                svg.setAttribute('stroke-width', '1.75');
+                svg.setAttribute('stroke-linecap', 'round');
+                svg.setAttribute('stroke-linejoin', 'round');
+                svg.setAttribute('class', 'lucide lucide-' + name);
+                const w = el.style.width || '14px';
+                const h = el.style.height || '14px';
+                svg.style.width = w; svg.style.height = h;
+                svg.innerHTML = pathStr;
+                if (el.parentNode) el.parentNode.replaceChild(svg, el);
+              }
+            });
+          })();
         </script>
       </body>
     </html>

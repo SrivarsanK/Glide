@@ -1578,8 +1578,9 @@ export function glideSourceStamping(): Plugin {
   }
 
   function stampHTMLTemplate(code: string, filepath: string): string {
-    // Replace script, style and comments with spaces to preserve line/col numbers
+    // Replace Astro frontmatter (---...---), script, style and comments with spaces to preserve line/col numbers
     let cleanCode = code
+      .replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length))
       .replace(/<!--[\s\S]*?-->/g, match => ' '.repeat(match.length))
       .replace(/<script[\s\S]*?<\/script>/gi, match => ' '.repeat(match.length))
       .replace(/<style[\s\S]*?<\/style>/gi, match => ' '.repeat(match.length));
