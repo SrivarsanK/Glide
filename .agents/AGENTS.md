@@ -108,3 +108,12 @@ Never output all changes in one block and leave sequencing to the user.
 - **Anti-references**: SaaS cliches (heavy shadows, gradient card borders, low-contrast gray text on tinted white surfaces).
 - **Accessibility & Inclusion**: WCAG AA contrast (>= 4.5:1) for controls, distinct focus states, and support for reduced motion.
 
+---
+
+## Release Workflow Automation
+
+Whenever requested to publish or release a new version:
+1. **Auto-Bump Version**: Automatically increment the patch version in `package.json` (or minor/major if specified).
+2. **Build**: Execute `npm run build` to generate compiled ESM and TypeScript declaration bundles.
+3. **Commit & Push**: Commit the version bump with message `chore: bump version to X.Y.Z` and push `main` to GitHub.
+4. **Publish**: Run `npm publish` to deploy the package to npm.
