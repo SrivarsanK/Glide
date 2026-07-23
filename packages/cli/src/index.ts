@@ -4,6 +4,7 @@ import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp }
 import { groupJSXElements, ungroupJSXElement } from '@srivarsank/ast-writer';
 import { updateVueSFCClass } from '@srivarsank/adapter-vue';
 import { updateSvelteClass } from '@srivarsank/adapter-svelte';
+import { updateAstroClass, updateAstroText } from '@srivarsank/adapter-astro';
 import { updateHTMLClass, updateHTMLText, getElementClass } from '@srivarsank/adapter-html';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -153,6 +154,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
         updated = updateSvelteClass(updated, targetId, newClasses);
+      } else if (file.endsWith('.astro')) {
+        const existing = getElementClass(updated, targetId);
+        const newClasses = updateClassString(existing, property, value);
+        updated = updateAstroClass(updated, targetId, newClasses);
       } else if (file.endsWith('.html')) {
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
@@ -190,6 +195,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       const existing = getElementClass(code, targetId);
       const newClasses = updateClassString(existing, change.property!, change.value);
       updated = updateSvelteClass(code, targetId, newClasses);
+    } else if (file.endsWith('.astro')) {
+      const existing = getElementClass(code, targetId);
+      const newClasses = updateClassString(existing, change.property!, change.value);
+      updated = updateAstroClass(code, targetId, newClasses);
     } else if (file.endsWith('.html')) {
       const existing = getElementClass(code, targetId);
       const newClasses = updateClassString(existing, change.property!, change.value);
