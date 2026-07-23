@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.22-blue" alt="version"></a>
+  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.23-blue" alt="version"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
   <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
@@ -29,10 +29,10 @@ No cloud. No proprietary formats. No lock-in. Just your code, edited visually.
 
 ```mermaid
 flowchart LR
-    App["Your App\n(npm run dev · port 5173)"]
+    App["Your App\n(npm run dev · port 5173 / 4321)"]
     Server["Glide Server\n(port 7777)"]
     Canvas["Visual Editor Canvas\n(browser · localhost:7777)"]
-    Files["Your Source Files\n(JSX · Vue · Svelte · HTML)"]
+    Files["Your Source Files\n(JSX · Vue · Svelte · Astro · HTML)"]
 
     App -->|"proxied into"| Canvas
     Canvas -->|"click / drag / edit"| Server
@@ -120,7 +120,7 @@ Open **http://localhost:7777** to start editing.
 |---|---|
 | 🎨 **Visual Canvas** | Figma-like workspace — select, drag, resize, zoom, and pan elements |
 | 📐 **Smart Snapping** | Snaps to sibling edges, centers, and pixel grid with live guide lines |
-| ✍️ **Live Code Write-back** | Every change saved directly to your JSX/TSX/Vue/Svelte source files |
+| ✍️ **Live Code Write-back** | Every change saved directly to your JSX/TSX/Vue/Svelte/Astro/HTML source files |
 | ⚡ **Zero-Flicker Drag** | Positions written to `glide-positions.json` — no HMR reload on drag |
 | 🗂️ **Layers Panel** | Hierarchical tree view of all elements with Figma-style hover controls |
 | 🎛️ **Properties Panel** | Edit geometry (X, Y, W, H), spacing, border, radius, shadows, fills, and typography |
@@ -171,6 +171,7 @@ Glide/
 │   ├── server/         # WebSocket + HTTP server that connects to your app
 │   ├── core/           # Shared types, AST scanner, component registry
 │   ├── ast-writer/     # Writes style changes back to source files
+│   ├── adapters/       # Framework adapters (vue, svelte, astro, html, react)
 │   └── vite-plugin/    # Stamps elements with source locations (data-gl-source)
 ├── skills/             # AI agent skills shipped with the package
 │   └── glide-component-segregator/
@@ -211,12 +212,13 @@ The registry **auto-updates within 300 ms** whenever you add, rename, or delete 
 
 ### Supported frameworks
 
-| Framework | Export types detected |
-|---|---|
-| React / TSX | Named, default, arrow function, anonymous JSX |
-| Vue SFC | `.vue` files — `<template>` block scanned |
-| Svelte | `.svelte` files — `<script>` / `<style>` stripped |
-| HTML | `<head>`, `<script>`, `<style>` excluded |
+| Framework | Export types detected | Single File Component (SFC) Support |
+|---|---|---|
+| React / TSX | Named, default, arrow function, anonymous JSX | JSX AST parsing |
+| Vue SFC | `.vue` files — `<template>` block scanned | Full template class write-back |
+| Svelte | `.svelte` files — `<script>` / `<style>` stripped | Full template class write-back |
+| Astro | `.astro` files — Frontmatter (`---`) preserved | Full template class & text write-back |
+| HTML | `<head>`, `<script>`, `<style>` excluded | DOM attribute write-back |
 
 ### Installation
 
@@ -258,7 +260,7 @@ Once active, the agent follows this 6-step pattern for every component edit:
 |---|---|
 | 🐛 **Eyedropper tool** — may not close or apply the picked color correctly | Bugged — avoid for now |
 | 🐛 **Element resizing** — canvas resize handles don't consistently apply changes | Bugged |
-| ⚠️ **Vue / Svelte editing** — only className string replacements supported, not full style objects | Partial support |
+| ⚠️ **Vue / Svelte / Astro editing** — className and text updates supported natively in templates | Supported |
 | ⚠️ **Stamping required** — snapping and editing only work on elements tagged with `data-gl-source` by the Vite plugin | By design |
 | ⚠️ **Absolute drag positions** — dragged positions stored in `glide-positions.json`, not written to source layout | By design |
 
