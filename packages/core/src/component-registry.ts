@@ -97,7 +97,7 @@ function trimText(raw: string): string | undefined {
 
 // ── Source file discovery ─────────────────────────────────────────────────────
 
-const SOURCE_EXTS = new Set(['.jsx', '.tsx', '.vue', '.svelte', '.html', '.js', '.ts']);
+const SOURCE_EXTS = new Set(['.jsx', '.tsx', '.vue', '.svelte', '.astro', '.html', '.js', '.ts']);
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage', '__tests__', 'test', 'tests']);
 
 export function collectSourceFiles(dir: string): string[] {
@@ -399,6 +399,41 @@ function scanSvelteFile(filePath: string): ComponentBucket[] {
   return [{ name: path.basename(filePath, '.svelte'), file: filePath, exportType: 'sfc', line: 1, column: 0, elements, cssFiles: findColocatedCss(filePath) }];
 }
 
+// ── Astro file scanner ─────────────────────────────────────────────────────────
+
+function scanAstroFile(filePath: string): ComponentBucket[] {
+  let code: string;
+  try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
+  
+  let templateCode = code;
+  const parts = code.split('---');
+  if (parts.length >= 3) {
+    templateCode = parts.slice(2).join('---');
+  }
+
+  const dom = parseDOM(templateCode);
+  const elements: RegistryElement[] = [];
+  let rootFound = false;
+
+  function walk(nodes: any[], depth = 0) {
+    for (const node of nodes) {
+      if (node.type !== 'tag') { if (node.children) walk(node.children, depth); continue; }
+      if (['script', 'style', 'head'].includes(node.name?.toLowerCase() ?? '')) continue;
+      const id = node.attribs?.['data-gl-source'] ?? `${filePath}:${node.startIndex ?? 0}:0`;
+      const className = (node.attribs?.['class'] ?? '').split(/\s+/).filter(Boolean);
+      let rawText = '';
+      for (const c of node.children ?? []) { if (c.type === 'text') { rawText = c.data; break; } }
+      const isRoot = !rootFound && depth === 0;
+      if (isRoot) rootFound = true;
+      elements.push({ id, tagName: node.name, line: 0, column: 0, isRoot, classNames: className, text: trimText(rawText) });
+      if (node.children) walk(node.children, depth + 1);
+    }
+  }
+  walk(dom);
+  if (elements.length === 0) return [];
+  return [{ name: path.basename(filePath, '.astro'), file: filePath, exportType: 'sfc', line: 1, column: 0, elements, cssFiles: findColocatedCss(filePath) }];
+}
+
 // ── HTML file scanner ─────────────────────────────────────────────────────────
 
 function scanHtmlFile(filePath: string): ComponentBucket[] {
@@ -434,6 +469,7 @@ function scanSourceFile(filePath: string): ComponentBucket[] {
   try {
     if (ext === '.vue') return scanVueFile(filePath);
     if (ext === '.svelte') return scanSvelteFile(filePath);
+    if (ext === '.astro') return scanAstroFile(filePath);
     if (ext === '.html') return scanHtmlFile(filePath);
     if (['.jsx', '.tsx', '.js', '.ts'].includes(ext)) return scanJsxFile(filePath);
   } catch (e) {
@@ -474,7 +510,7 @@ export function watchRegistry(
   // chokidar is a CJS package — use same require pattern as scanner.ts
   const chokidar = require('chokidar');
   const meta = detectProjectMeta(projectRoot);
-  const WATCH_EXTS = /\.(jsx|tsx|js|ts|vue|svelte|html)$/i;
+  const WATCH_EXTS = /\.(jsx|tsx|js|ts|vue|svelte|astro|html)$/i;
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleRebuild() {
