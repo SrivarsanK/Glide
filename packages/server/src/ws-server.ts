@@ -1035,10 +1035,13 @@ export class GlideServer {
                   this.recordSelfWrite(file);
                 }
 
+                const normPath = normalizePathKey(file);
+                const newGen = this.fileGenerations.get(normPath) || 0;
                 ws.send(
                   JSON.stringify({
                     type: 'status',
                     success: true,
+                    generation: newGen,
                   })
                 );
 

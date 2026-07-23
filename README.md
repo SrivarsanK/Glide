@@ -255,15 +255,15 @@ Once active, the agent follows this 6-step pattern for every component edit:
 
 ---
 
-## Known Issues
+## Known Issues & Limitations
 
-| Issue | Status |
+| Feature / Issue | Status |
 |---|---|
-| 🐛 **Eyedropper tool** — may not close or apply the picked color correctly | Bugged — avoid for now |
-| 🐛 **Element resizing** — canvas resize handles don't consistently apply changes | Bugged |
-| ⚠️ **Vue / Svelte / Astro editing** — className and text updates supported natively in templates | Supported |
-| ⚠️ **Stamping required** — snapping and editing only work on elements tagged with `data-gl-source` by the Vite plugin | By design |
-| ⚠️ **Absolute drag positions** — dragged positions stored in `glide-positions.json`, not written to source layout | By design |
+| 🎨 **Eyedropper tool** | ✅ Fixed (state restoration fixed; Chromium 150 freeze bug guarded) |
+| 📐 **Element resizing** | ✅ Fixed (generation sync + instant state resync) |
+| ⚡ **Vue / Svelte / Astro editing** | ✅ Fully Supported (class, style, and text writeback across all 5 frameworks) |
+| 🏷️ **Source Stamping** | By design (`data-gl-source` tagged automatically by Vite plugin) |
+| 📍 **Drag Positions** | By design (stored in `glide-positions.json` for zero-flicker live drag) |
 
 ---
 

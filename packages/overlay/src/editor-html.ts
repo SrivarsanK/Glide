@@ -1972,6 +1972,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
                   if (message.success) {
+                    if (typeof message.generation === 'number') {
+                      currentGeneration = message.generation;
+                    }
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
                     }
@@ -1980,7 +1983,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                     }
                   } else {
                     console.error('[Glide] Server error:', message.error);
-                    showToast('error', message.error || 'Server error');
+                    if (message.error && message.error.includes('STALE_GENERATION')) {
+                      if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
+                      }
+                    } else {
+                      showToast('error', message.error || 'Server error');
+                    }
                   }
                 } else if (message.type === 'git-status') {
                   if (message.success) {
@@ -2728,8 +2737,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   });
                 }
 
-                // Commit size to source via style prop
-                if (socket && socket.readyState === WebSocket.OPEN) {
+                // Commit size to source via style prop (only if changed)
+                const sizeChanged = Math.abs(resizeFinalW - startRect.width) > 1 || Math.abs(resizeFinalH - startRect.height) > 1;
+                if (sizeChanged && socket && socket.readyState === WebSocket.OPEN) {
                   const resizeParsed = parseSource(selectedElement.source);
                   if (resizeParsed) {
                     socket.send(JSON.stringify({
@@ -4762,15 +4772,28 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!('EyeDropper' in window)) {
               dropBtn.style.display = 'none';
             } else {
+              // Detect Chromium < 151 bug
+              const ua = navigator.userAgent;
+              const chromeMatch = ua.match(/Chrome\/(\d+)/);
+              const chromeVer = chromeMatch ? parseInt(chromeMatch[1], 10) : 151;
+              if (chromeVer === 150) {
+                dropBtn.title = 'EyeDropper has a known Chromium 150 freeze bug — update browser to Chrome 151+';
+              }
               dropBtn.addEventListener('click', async () => {
                 const savedTarget = _cpTarget;
+                const savedSelected = selectedElement;
                 closeColorPopup(); // dismiss popup first so dropper can see full screen
                 try {
                   const result = await new window.EyeDropper().open();
                   _cpTarget = savedTarget; // restore target after async
+                  if (!selectedElement && savedSelected) {
+                    selectedElement = savedSelected;
+                  }
                   _applyColorToTarget(result.sRGBHex);
                   _cpTarget = null;
-                } catch(e) { _cpTarget = null; }
+                } catch(e) {
+                  _cpTarget = null;
+                }
               });
             }
 
