@@ -156,9 +156,11 @@ export function buildBridgeScript(
       top: cs.top, left: cs.left, flex: cs.flex, flexGrow: cs.flexGrow,
       alignSelf: cs.alignSelf
     };
+    var isUnstamped = !el.hasAttribute('${sourceAttr}');
     window.parent.postMessage({
       type: type,
       source: src,
+      isUnstamped: isUnstamped,
       tagName: el.tagName.toLowerCase(),
       classNames: el.className,
       isShift: !!isShift,
@@ -167,6 +169,7 @@ export function buildBridgeScript(
     window.parent.postMessage({
       type: 'glide:overlay',
       source: src,
+      isUnstamped: isUnstamped,
       isShift: !!isShift,
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
       isHover: type === 'glide:element-hovered',

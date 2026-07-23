@@ -2073,7 +2073,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               _editTimer = null;
               if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
               const parsed = parseSource(selectedElement.source);
-              if (!parsed) return;
+              if (!parsed) {
+                showToast('warning', 'Dynamically generated element — edit in source code');
+                return;
+              }
               socket.send(JSON.stringify({
                 type: 'edit',
                 file: parsed.file,
