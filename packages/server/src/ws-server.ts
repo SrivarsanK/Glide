@@ -8,6 +8,15 @@ import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import {
+  pushHistory,
+  undo,
+  redo,
+  jumpTo,
+  getHistoryState,
+  clearHistory,
+  setHistoryLimit
+} from './history-manager.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -482,6 +491,7 @@ export class GlideServer {
           const ext = path.extname(pathname).toLowerCase();
           const ASSET_EXTENSIONS = new Set([
             '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+            '.astro', '.vue', '.svelte',
             '.css', '.scss', '.sass', '.less',
             '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
             '.woff', '.woff2', '.ttf', '.eot', '.otf', '.json'
