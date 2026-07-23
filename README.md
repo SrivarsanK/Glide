@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Local visual design tool for React, Vue &amp; Svelte.</strong><br>
+  <strong>Local visual design tool for React, Vue, Svelte &amp; Astro.</strong><br>
   Click any element on a live canvas, edit styles and layout visually,<br>
   and Glide writes the changes directly back to your source code — no cloud, no proprietary formats.
 </p>
@@ -12,14 +12,14 @@
   <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.20-blue" alt="version"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
-  <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte-purple" alt="frameworks">
+  <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
 </p>
 
 ---
 
 ## What is Glide?
 
-**Glide** is a local visual design tool that sits on top of your existing frontend app. You open it in your browser, click on any element on screen, and edit its styles, layout, and position — just like Figma. The difference? **Every edit is written directly back to your source code** (JSX, TSX, Vue SFC, Svelte, or HTML) as real code.
+**Glide** is a local visual design tool that sits on top of your existing frontend app. You open it in your browser, click on any element on screen, and edit its styles, layout, and position — just like Figma. The difference? **Every edit is written directly back to your source code** (JSX, TSX, Vue SFC, Svelte, Astro, or HTML) as real code.
 
 No cloud. No proprietary formats. No lock-in. Just your code, edited visually.
 
