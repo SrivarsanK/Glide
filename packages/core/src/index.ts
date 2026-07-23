@@ -14,3 +14,4 @@ export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from '
 export { loadConfigFromDisk } from './config-loader.js';
 export { buildRegistry, watchRegistry, collectSourceFiles } from './component-registry.js';
 export type { ComponentRegistry, ComponentBucket, RegistryElement, RegistryOptions } from './component-registry.js';
+export { camelToKebab, kebabToCamel, parseInlineStyle, mergeInlineStyle } from './style-utils.js';
