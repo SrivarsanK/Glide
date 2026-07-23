@@ -260,7 +260,7 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }, true);
 
   document.addEventListener('pointerdown', function(e) {
-    if (e.target.contentEditable === 'true' || e.target.closest('[contenteditable="true"]')) return;
+    if (e.target.isContentEditable || (e.target.closest && e.target.closest('[contenteditable="true"]'))) return;
     var el = resolveElementAtPoint(e.clientX, e.clientY);
     if (el && (el === document.body || el === document.documentElement)) el = null;
     if (!el) return;
@@ -274,7 +274,31 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     e.stopPropagation();
   }, true);
 
+  document.addEventListener('dblclick', function(e) {
+    var el = resolveElementAtPoint(e.clientX, e.clientY);
+    if (!el || el === document.body || el === document.documentElement) return;
+    // Enable inline text editing for canvas elements
+    el.contentEditable = 'true';
+    el.focus();
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    } catch(err) {}
+
+    function onBlur() {
+      el.contentEditable = 'false';
+      var text = el.textContent ? el.textContent.trim() : '';
+      var src = getElId(el);
+      window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
+      el.removeEventListener('blur', onBlur);
+    }
+    el.addEventListener('blur', onBlur);
+  }, true);
+
   document.addEventListener('click', function(e) {
+    if (e.target.isContentEditable || (e.target.closest && e.target.closest('[contenteditable="true"]'))) return;
     var el = resolveElementAtPoint(e.clientX, e.clientY);
     if (el && el !== document.body && el !== document.documentElement) {
       e.preventDefault(); e.stopPropagation();

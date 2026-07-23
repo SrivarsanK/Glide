@@ -2931,7 +2931,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   e.stopPropagation();
                   e.preventDefault();
                   isResizing = true;
-                  resizeDir = pos.dir;
+                  const handleDir = pos.dir;
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
@@ -2947,7 +2947,56 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   const blocker = document.getElementById('iframe-blocker');
                   if (blocker) blocker.style.display = 'block';
 
-                  h.setPointerCapture(e.pointerId);
+                  try { h.setPointerCapture(e.pointerId); } catch(err) {}
+
+                  function onHandleMove(moveEv) {
+                    if (!isResizing || !startRect || !selectedElement) return;
+                    const scale = typeof zoomLevel !== 'undefined' && zoomLevel ? zoomLevel : 1;
+                    const dx = (moveEv.clientX - startPointerX) / scale;
+                    const dy = (moveEv.clientY - startPointerY) / scale;
+
+                    let newW = startRect.width;
+                    let newH = startRect.height;
+
+                    if (handleDir.includes('r') || handleDir === 'mr') newW = Math.max(10, startRect.width + dx);
+                    if (handleDir.includes('l') || handleDir === 'ml') newW = Math.max(10, startRect.width - dx);
+                    if (handleDir.includes('b') || handleDir === 'bc') newH = Math.max(10, startRect.height + dy);
+                    if (handleDir.includes('t') || handleDir === 'tc') newH = Math.max(10, startRect.height - dy);
+
+                    newW = Math.round(newW);
+                    newH = Math.round(newH);
+                    resizeFinalW = newW;
+                    resizeFinalH = newH;
+
+                    applyOptimisticStyle(selectedElement.source, {
+                      width: newW + 'px',
+                      height: newH + 'px'
+                    });
+
+                    const wInp = document.getElementById('prop-w');
+                    if (wInp) wInp.value = newW;
+                    const hInp = document.getElementById('prop-h');
+                    if (hInp) hInp.value = newH;
+                  }
+
+                  function onHandleUp() {
+                    if (!isResizing) return;
+                    isResizing = false;
+                    try { h.releasePointerCapture(e.pointerId); } catch(err) {}
+                    window.removeEventListener('pointermove', onHandleMove);
+                    window.removeEventListener('pointerup', onHandleUp);
+
+                    const blockerEl = document.getElementById('iframe-blocker');
+                    if (blockerEl) blockerEl.style.display = 'none';
+
+                    if (selectedElement && resizeFinalW && resizeFinalH) {
+                      sendEdit({ type: 'class', property: 'width', value: resizeFinalW + 'px' });
+                      sendEdit({ type: 'class', property: 'height', value: resizeFinalH + 'px' });
+                    }
+                  }
+
+                  window.addEventListener('pointermove', onHandleMove);
+                  window.addEventListener('pointerup', onHandleUp);
 
                   const rIframe = document.getElementById('app-iframe');
                   if (rIframe && rIframe.contentWindow && selectedElement) {
@@ -3448,6 +3497,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               hoveredRect = null;
               document.querySelectorAll('.layer-item.hovered').forEach(el => el.classList.remove('hovered'));
               drawOverlay();
+            }
+            if (data.type === 'glide:inline-text-edit') {
+              if (data.source && data.value !== undefined) {
+                selectedElement = { source: data.source };
+                sendEdit({ type: 'text', value: data.value });
+              }
             }
 
             if (data.type === 'glide:element-drag-start') {
