@@ -117,4 +117,5 @@ Whenever requested to publish or release a new version:
 2. **Update README Badge**: Update version badge in `README.md` to match `vX.Y.Z`.
 3. **Build**: Execute `npm run build` to generate compiled ESM and TypeScript declaration bundles.
 4. **Commit, Tag & Push**: Commit version bump with `chore: bump version to X.Y.Z`, create git tag (`git tag vX.Y.Z`), and push `main` & tags to GitHub (`git push origin main --tags`).
-5. **Publish**: Run `npm publish` to deploy the package to npm.
+5. **Create GitHub Release**: Create release via `gh release create vX.Y.Z` (bypass invalid `GITHUB_TOKEN` env var using `$env:GITHUB_TOKEN=""` so keyring auth is used).
+6. **Publish**: Run `npm publish` to deploy the package to npm.
