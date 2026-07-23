@@ -120,6 +120,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   const code = fs.readFileSync(file, 'utf-8');
 
   if (change.type === 'group') {
+    if (file.endsWith('.vue') || file.endsWith('.svelte') || file.endsWith('.astro') || file.endsWith('.html')) {
+      console.warn(`[Glide] Grouping is currently supported for JSX files only (${path.basename(file)})`);
+      return;
+    }
     const updated = groupJSXElements(code, change.sources!);
     fs.writeFileSync(file, updated, 'utf-8');
     pushHistory({
@@ -131,6 +135,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   }
 
   if (change.type === 'ungroup') {
+    if (file.endsWith('.vue') || file.endsWith('.svelte') || file.endsWith('.astro') || file.endsWith('.html')) {
+      console.warn(`[Glide] Ungrouping is currently supported for JSX files only (${path.basename(file)})`);
+      return;
+    }
     const updated = ungroupJSXElement(code, change.source!);
     fs.writeFileSync(file, updated, 'utf-8');
     pushHistory({
