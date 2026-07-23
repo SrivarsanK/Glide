@@ -1051,7 +1051,7 @@ export class GlideServer {
                 JSON.stringify({
                   type: 'status',
                   success: false,
-                  error: err.message || 'Server error',
+                  error: `Malformed JSON: ${err.message}`,
                 })
               );
             }

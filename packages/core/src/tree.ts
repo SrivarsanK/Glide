@@ -5,7 +5,7 @@
 
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
-import { computeNodeHash } from './utils.js';
+import { computeNodeHash, stampHTMLTemplate } from './utils.js';
 import parseDOMModule from 'html-dom-parser';
 import { parse as parseVueSFC } from '@vue/compiler-sfc';
 
@@ -49,16 +49,19 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
 
   if (isHTML || isVue || isSvelte || isAstro) {
     let templateContent = code;
+    if (filepath) {
+      templateContent = stampHTMLTemplate(code, filepath);
+    }
     if (isVue) {
       try {
-        const parsed = parseVueSFC(code);
+        const parsed = parseVueSFC(templateContent);
         templateContent = parsed.descriptor.template?.content || '';
       } catch (e) {
         console.error('[Glide] Vue SFC parse error:', e);
       }
     } else if (isAstro) {
       // Mask frontmatter block (--- ... ---) so HTML DOM parser receives clean markup
-      templateContent = code.replace(/^\s*---[\s\S]*?\n---/m, '');
+      templateContent = templateContent.replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length));
     }
 
     const dom = parseDOM(templateContent);

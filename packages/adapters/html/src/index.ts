@@ -1,7 +1,7 @@
 import parseDOMModule from 'html-dom-parser';
 import parseReactModule from 'html-react-parser';
 import * as React from 'react';
-import { mergeInlineStyle } from '@srivarsank/core';
+import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
 
 const parseDOM = (parseDOMModule as any).default || parseDOMModule;
 const parseReact = (parseReactModule as any).default || parseReactModule;
@@ -44,11 +44,13 @@ export function updateHTMLClass(
   updatedClasses: string
 ): string {
   const dom = parseDOM(htmlCode);
+  let found = false;
 
   function traverse(nodes: any[]): boolean {
     for (const node of nodes) {
       if (node.type === 'tag' && node.attribs && node.attribs['data-gl-source'] === targetId) {
         node.attribs['class'] = updatedClasses;
+        found = true;
         return true;
       }
       if (node.children && traverse(node.children)) {
@@ -59,7 +61,30 @@ export function updateHTMLClass(
   }
 
   traverse(dom);
-  return serializeDOM(dom);
+  if (found) return serializeDOM(dom);
+
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(htmlCode, line, col);
+    if (tagLoc) {
+      const { tagName, attributes, startIndex, endIndex } = tagLoc;
+      const classRegex = /class=(['"])(.*?)\1/;
+      const classMatch = attributes.match(classRegex);
+      let newFullTag: string;
+      if (classMatch) {
+        const quote = classMatch[1];
+        const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
+        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+      } else {
+        const newAttributes = attributes ? `${attributes} class="${updatedClasses}"` : `class="${updatedClasses}"`;
+        newFullTag = `<${tagName} ${newAttributes}>`;
+      }
+      return htmlCode.substring(0, startIndex) + newFullTag + htmlCode.substring(endIndex);
+    }
+  }
+
+  return htmlCode;
 }
 
 /**
@@ -71,12 +96,14 @@ export function updateHTMLStyle(
   styles: Record<string, string>
 ): string {
   const dom = parseDOM(htmlCode);
+  let found = false;
 
   function traverse(nodes: any[]): boolean {
     for (const node of nodes) {
       if (node.type === 'tag' && node.attribs && node.attribs['data-gl-source'] === targetId) {
         const existing = node.attribs['style'] || '';
         node.attribs['style'] = mergeInlineStyle(existing, styles);
+        found = true;
         return true;
       }
       if (node.children && traverse(node.children)) {
@@ -87,7 +114,33 @@ export function updateHTMLStyle(
   }
 
   traverse(dom);
-  return serializeDOM(dom);
+  if (found) return serializeDOM(dom);
+
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(htmlCode, line, col);
+    if (tagLoc) {
+      const { tagName, attributes, startIndex, endIndex } = tagLoc;
+      const styleRegex = /style=(['"])(.*?)\1/;
+      const styleMatch = attributes.match(styleRegex);
+      let newFullTag: string;
+      if (styleMatch) {
+        const quote = styleMatch[1];
+        const existing = styleMatch[2];
+        const merged = mergeInlineStyle(existing, styles);
+        const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
+        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+      } else {
+        const merged = mergeInlineStyle('', styles);
+        const newAttributes = attributes ? `${attributes} style="${merged}"` : `style="${merged}"`;
+        newFullTag = `<${tagName} ${newAttributes}>`;
+      }
+      return htmlCode.substring(0, startIndex) + newFullTag + htmlCode.substring(endIndex);
+    }
+  }
+
+  return htmlCode;
 }
 
 
@@ -100,11 +153,13 @@ export function updateHTMLText(
   newText: string
 ): string {
   const dom = parseDOM(htmlCode);
+  let found = false;
 
   function traverse(nodes: any[]): boolean {
     for (const node of nodes) {
       if (node.type === 'tag' && node.attribs && node.attribs['data-gl-source'] === targetId) {
         node.children = [{ type: 'text', data: newText }];
+        found = true;
         return true;
       }
       if (node.children && traverse(node.children)) {
@@ -115,7 +170,25 @@ export function updateHTMLText(
   }
 
   traverse(dom);
-  return serializeDOM(dom);
+  if (found) return serializeDOM(dom);
+
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(htmlCode, line, col);
+    if (tagLoc) {
+      const { tagName, endIndex } = tagLoc;
+      const closeTagStr = `</${tagName}>`;
+      const restOfCode = htmlCode.substring(endIndex);
+      const closeIndex = restOfCode.toLowerCase().indexOf(closeTagStr.toLowerCase());
+      if (closeIndex !== -1) {
+        const absoluteCloseIndex = endIndex + closeIndex;
+        return htmlCode.substring(0, endIndex) + newText + htmlCode.substring(absoluteCloseIndex);
+      }
+    }
+  }
+
+  return htmlCode;
 }
 
 /**

@@ -1,43 +1,56 @@
-import { mergeInlineStyle } from '@srivarsank/core';
+import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
 
 export function updateAstroClass(
   astroCode: string,
   targetId: string,
   updatedClasses: string
 ): string {
-  let frontmatter = '';
-  let template = astroCode;
-
-  const parts = astroCode.split('---');
-  if (parts.length >= 3) {
-    frontmatter = parts.slice(0, 2).join('---') + '---';
-    template = parts.slice(2).join('---');
-  }
-
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
-  const match = template.match(tagRegex);
-  if (!match) return astroCode;
+  const match = astroCode.match(tagRegex);
 
-  const fullTag = match[0];
-  const tagName = match[1];
-  const attributes = match[2];
+  if (match) {
+    const fullTag = match[0];
+    const tagName = match[1];
+    const attributes = match[2];
 
-  const classRegex = /class=(['"])(.*?)\1/;
-  const classMatch = attributes.match(classRegex);
-  let newFullTag = fullTag;
+    const classRegex = /class=(['"])(.*?)\1/;
+    const classMatch = attributes.match(classRegex);
+    let newFullTag: string;
 
-  if (classMatch) {
-    const quote = classMatch[1];
-    const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
-    newFullTag = `<${tagName} ${newAttributes}>`;
-  } else {
-    const newAttributes = `${attributes} class="${updatedClasses}"`;
-    newFullTag = `<${tagName} ${newAttributes}>`;
+    if (classMatch) {
+      const quote = classMatch[1];
+      const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
+      newFullTag = `<${tagName} ${newAttributes}>`;
+    } else {
+      const newAttributes = `${attributes} class="${updatedClasses}"`;
+      newFullTag = `<${tagName} ${newAttributes}>`;
+    }
+    return astroCode.replace(fullTag, newFullTag);
   }
 
-  const updatedTemplate = template.replace(fullTag, newFullTag);
-  return frontmatter + updatedTemplate;
+  // Fallback: match by line:col in targetId (e.g. "src/pages/index.astro:8:3")
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(astroCode, line, col);
+    if (tagLoc) {
+      const { tagName, attributes, startIndex, endIndex } = tagLoc;
+      const classRegex = /class=(['"])(.*?)\1/;
+      const classMatch = attributes.match(classRegex);
+      let newFullTag: string;
+      if (classMatch) {
+        const quote = classMatch[1];
+        const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
+        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+      } else {
+        const newAttributes = attributes ? `${attributes} class="${updatedClasses}"` : `class="${updatedClasses}"`;
+        newFullTag = `<${tagName} ${newAttributes}>`;
+      }
+      return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
+    }
+  }
+
+  return astroCode;
 }
 
 export function updateAstroStyle(
@@ -45,42 +58,58 @@ export function updateAstroStyle(
   targetId: string,
   styles: Record<string, string>
 ): string {
-  let frontmatter = '';
-  let template = astroCode;
-
-  const parts = astroCode.split('---');
-  if (parts.length >= 3) {
-    frontmatter = parts.slice(0, 2).join('---') + '---';
-    template = parts.slice(2).join('---');
-  }
-
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
-  const match = template.match(tagRegex);
-  if (!match) return astroCode;
+  const match = astroCode.match(tagRegex);
 
-  const fullTag = match[0];
-  const tagName = match[1];
-  const attributes = match[2];
+  if (match) {
+    const fullTag = match[0];
+    const tagName = match[1];
+    const attributes = match[2];
 
-  const styleRegex = /style=(['"])(.*?)\1/;
-  const styleMatch = attributes.match(styleRegex);
-  let newFullTag: string;
+    const styleRegex = /style=(['"])(.*?)\1/;
+    const styleMatch = attributes.match(styleRegex);
+    let newFullTag: string;
 
-  if (styleMatch) {
-    const quote = styleMatch[1];
-    const existing = styleMatch[2];
-    const merged = mergeInlineStyle(existing, styles);
-    const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
-    newFullTag = `<${tagName} ${newAttributes}>`;
-  } else {
-    const merged = mergeInlineStyle('', styles);
-    const newAttributes = `${attributes} style="${merged}"`;
-    newFullTag = `<${tagName} ${newAttributes}>`;
+    if (styleMatch) {
+      const quote = styleMatch[1];
+      const existing = styleMatch[2];
+      const merged = mergeInlineStyle(existing, styles);
+      const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
+      newFullTag = `<${tagName} ${newAttributes}>`;
+    } else {
+      const merged = mergeInlineStyle('', styles);
+      const newAttributes = `${attributes} style="${merged}"`;
+      newFullTag = `<${tagName} ${newAttributes}>`;
+    }
+    return astroCode.replace(fullTag, newFullTag);
   }
 
-  const updatedTemplate = template.replace(fullTag, newFullTag);
-  return frontmatter + updatedTemplate;
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(astroCode, line, col);
+    if (tagLoc) {
+      const { tagName, attributes, startIndex, endIndex } = tagLoc;
+      const styleRegex = /style=(['"])(.*?)\1/;
+      const styleMatch = attributes.match(styleRegex);
+      let newFullTag: string;
+      if (styleMatch) {
+        const quote = styleMatch[1];
+        const existing = styleMatch[2];
+        const merged = mergeInlineStyle(existing, styles);
+        const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
+        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+      } else {
+        const merged = mergeInlineStyle('', styles);
+        const newAttributes = attributes ? `${attributes} style="${merged}"` : `style="${merged}"`;
+        newFullTag = `<${tagName} ${newAttributes}>`;
+      }
+      return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
+    }
+  }
+
+  return astroCode;
 }
 
 export function updateAstroText(
@@ -88,29 +117,34 @@ export function updateAstroText(
   targetId: string,
   newText: string
 ): string {
-  let frontmatter = '';
-  let template = astroCode;
-
-  const parts = astroCode.split('---');
-  if (parts.length >= 3) {
-    frontmatter = parts.slice(0, 2).join('---') + '---';
-    template = parts.slice(2).join('---');
-  }
-
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   const elementRegex = new RegExp(
     `(<([\\w-]+)\\s+[^>]*data-gl-source="${escapedId}"[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
     'i'
   );
 
-  const match = template.match(elementRegex);
-  if (!match) return astroCode;
+  const match = astroCode.match(elementRegex);
+  if (match) {
+    const openTag = match[1];
+    const closeTag = match[4];
+    return astroCode.replace(elementRegex, `${openTag}${newText}${closeTag}`);
+  }
 
-  const openTag = match[1];
-  const closeTag = match[4];
-  const updatedElement = `${openTag}${newText}${closeTag}`;
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(astroCode, line, col);
+    if (tagLoc) {
+      const { tagName, endIndex } = tagLoc;
+      const closeTagStr = `</${tagName}>`;
+      const restOfCode = astroCode.substring(endIndex);
+      const closeIndex = restOfCode.toLowerCase().indexOf(closeTagStr.toLowerCase());
+      if (closeIndex !== -1) {
+        const absoluteCloseIndex = endIndex + closeIndex;
+        return astroCode.substring(0, endIndex) + newText + astroCode.substring(absoluteCloseIndex);
+      }
+    }
+  }
 
-  const updatedTemplate = template.replace(elementRegex, updatedElement);
-  return frontmatter + updatedTemplate;
+  return astroCode;
 }
-

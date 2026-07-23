@@ -1937,14 +1937,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   const headerFileName = document.getElementById('header-file-name');
                   if (headerFileName) headerFileName.textContent = baseName;
                   
-                  // Pre-expand roots and depth-0 children on first load
+                  // Pre-expand all nodes recursively on first load so full tree displays immediately
                   if (expandedNodeIds.size === 0 && layerTree) {
-                    layerTree.forEach(node => {
-                      expandedNodeIds.add(node.id);
-                      if (node.children) {
-                        node.children.forEach(c => expandedNodeIds.add(c.id));
-                      }
-                    });
+                    function expandAll(nodes) {
+                      if (!nodes || !Array.isArray(nodes)) return;
+                      nodes.forEach(n => {
+                        expandedNodeIds.add(n.id);
+                        if (n.children && n.children.length > 0) expandAll(n.children);
+                      });
+                    }
+                    expandAll(layerTree);
                   }
 
                   // Auto-expand ancestors of currently selected element(s)
@@ -3341,12 +3343,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               // currentFile = null in CST mode; convertNodeIdToSource returns id as-is.
               currentFile = null;
               layerTree = data.tree;
-              // Auto-expand root + first level
+              // Auto-expand all nodes recursively
               if (expandedNodeIds.size === 0 && layerTree.length > 0) {
-                layerTree.forEach(function(n) {
-                  expandedNodeIds.add(n.id);
-                  (n.children || []).forEach(function(c) { expandedNodeIds.add(c.id); });
-                });
+                function expandAllCST(nodes) {
+                  if (!nodes || !Array.isArray(nodes)) return;
+                  nodes.forEach(function(n) {
+                    expandedNodeIds.add(n.id);
+                    if (n.children && n.children.length > 0) expandAllCST(n.children);
+                  });
+                }
+                expandAllCST(layerTree);
               }
               renderLayersTree(layerTree);
               // Sync iframe with current snap settings
