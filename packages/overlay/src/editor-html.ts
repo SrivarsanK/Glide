@@ -1364,7 +1364,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   <i data-lucide="settings" style="width: 12px; height: 12px; cursor: pointer; color: #b3b3b3;"></i>
                 </div>
 
-                <div class="props-subheader">Position</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                  <div class="props-subheader" style="margin-bottom: 0;">Position</div>
+                  <button id="btn-bake-position" title="Graduate drag position from glide-positions.json to source code inline style" style="background: rgba(13,153,255,0.15); border: 1px solid rgba(13,153,255,0.4); color: #0d99ff; font-size: 10px; border-radius: 3px; padding: 2px 6px; cursor: pointer;">⚡ Bake to Source</button>
+                </div>
                 <div class="props-grid" style="margin-bottom: 6px;">
                   <div class="props-field">
                     <span class="props-label">X</span>
@@ -5185,6 +5188,25 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               change: { type: 'position', value: styles }
             }));
           }
+
+          function bakePosition() {
+            if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(selectedElement.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              hash: parsed.hash,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'bake-position' }
+            }));
+            showToast('info', 'Baking position to source code...');
+          }
+
+          document.getElementById('btn-bake-position')?.addEventListener('click', bakePosition);
 
           function triggerGroup() {
             if (selectedSources.length < 2) {

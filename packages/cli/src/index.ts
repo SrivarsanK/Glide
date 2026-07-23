@@ -117,6 +117,49 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     return;
   }
 
+  if (change.type === 'bake-position') {
+    const positionsFile = getPositionsFile(file);
+    if (fs.existsSync(positionsFile)) {
+      const posContent = fs.readFileSync(positionsFile, 'utf-8');
+      try {
+        const positions = JSON.parse(posContent);
+        const posStyle = positions[targetId];
+        if (posStyle) {
+          const code = fs.readFileSync(file, 'utf-8');
+          let updated = '';
+          if (file.endsWith('.vue')) {
+            updated = updateVueSFCStyle(code, targetId, posStyle);
+          } else if (file.endsWith('.svelte')) {
+            updated = updateSvelteStyle(code, targetId, posStyle);
+          } else if (file.endsWith('.astro')) {
+            updated = updateAstroStyle(code, targetId, posStyle);
+          } else if (file.endsWith('.html')) {
+            updated = updateHTMLStyle(code, targetId, posStyle);
+          } else {
+            updated = updateJSXStyleProp(code, line, column, posStyle, hash);
+          }
+          fs.writeFileSync(file, updated, 'utf-8');
+
+          delete positions[targetId];
+          const newPosContent = JSON.stringify(positions, null, 2);
+          fs.writeFileSync(positionsFile, newPosContent, 'utf-8');
+
+          pushHistory({
+            description: `Baked position into source in ${path.basename(file)}`,
+            diffs: [
+              { file: path.resolve(file), before: code, after: updated },
+              { file: positionsFile, before: posContent, after: newPosContent }
+            ]
+          });
+          console.log(`[Glide] Baked position for ${targetId} into ${file}`);
+        }
+      } catch (e) {
+        console.error(`[Glide] Failed to bake position:`, e);
+      }
+    }
+    return;
+  }
+
   const code = fs.readFileSync(file, 'utf-8');
 
   if (change.type === 'group') {
