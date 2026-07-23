@@ -309,16 +309,18 @@ function proxyToDevServer(
   proxyPath: string,
   req: any,
   res: any,
-  bridgeScript: string
+  bridgeScript: string,
+  useFallback = false
 ): void {
+  const hostname = useFallback ? '127.0.0.1' : 'localhost';
   const options = {
-    hostname: '127.0.0.1',
+    hostname,
     port: targetPort,
     path: proxyPath,
     method: req.method || 'GET',
     headers: {
       ...req.headers,
-      host: `127.0.0.1:${targetPort}`,
+      host: `${hostname}:${targetPort}`,
     },
   };
   // Remove encoding so we get raw bytes (easier to inject text)
@@ -363,7 +365,7 @@ function proxyToDevServer(
         // Rewrite Vite/Astro HMR WebSocket to point at actual dev server port
         html = html.replace(
           /new WebSocket\(['"]ws:\/\/(?:localhost|127\.0\.0\.1):\d+/g,
-          `new WebSocket('ws://127.0.0.1:${targetPort}`
+          `new WebSocket('ws://localhost:${targetPort}`
         );
         // Inject bridge before </head> (or at top of <body> as fallback)
         if (html.includes('</head>')) {
@@ -383,7 +385,11 @@ function proxyToDevServer(
     }
   });
 
-  proxyReq.on('error', (err) => {
+  proxyReq.on('error', (err: any) => {
+    if (!useFallback && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) {
+      console.log(`[Glide Proxy] Retrying connection to dev server via 127.0.0.1:${targetPort}...`);
+      return proxyToDevServer(targetPort, proxyPath, req, res, bridgeScript, true);
+    }
     res.writeHead(502, { 'Content-Type': 'text/plain' });
     res.end('[Glide Proxy] Could not reach dev server: ' + err.message);
   });
@@ -1040,11 +1046,12 @@ export class GlideServer {
                 );
               }
             } catch (err: any) {
+              console.error('[Glide] WebSocket handler error:', err);
               ws.send(
                 JSON.stringify({
                   type: 'status',
                   success: false,
-                  error: `Malformed JSON: ${err.message}`,
+                  error: err.message || 'Server error',
                 })
               );
             }

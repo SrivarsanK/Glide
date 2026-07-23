@@ -127,3 +127,4 @@ npx glide 3000
 | Elements not selectable | Ensure `glideSourceStamping()` is in your Vite plugins |
 | Port conflict on 7777 | Set `PORT=8888 npx glide` or use `glide.config.json` |
 | Edits not writing back | Check target port matches your dev server: `npx glide 3000` |
+| 502 Bad Gateway / Infinite Loading | Handled automatically in v1.0.30 via dual-stack (`localhost` / `127.0.0.1`) proxy fallback |

@@ -4797,7 +4797,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             } else {
               // Detect Chromium < 151 bug
               const ua = navigator.userAgent;
-              const chromeMatch = ua.match(/Chrome\/(\d+)/);
+              const chromeMatch = new RegExp('Chrome/(\\\\d+)').exec(ua);
               const chromeVer = chromeMatch ? parseInt(chromeMatch[1], 10) : 151;
               if (chromeVer === 150) {
                 dropBtn.title = 'EyeDropper has a known Chromium 150 freeze bug — update browser to Chrome 151+';

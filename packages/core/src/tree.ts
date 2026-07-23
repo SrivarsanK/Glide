@@ -45,8 +45,9 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
   const isHTML = filepath?.endsWith('.html');
   const isVue = filepath?.endsWith('.vue');
   const isSvelte = filepath?.endsWith('.svelte');
+  const isAstro = filepath?.endsWith('.astro');
 
-  if (isHTML || isVue || isSvelte) {
+  if (isHTML || isVue || isSvelte || isAstro) {
     let templateContent = code;
     if (isVue) {
       try {
@@ -55,6 +56,9 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
       } catch (e) {
         console.error('[Glide] Vue SFC parse error:', e);
       }
+    } else if (isAstro) {
+      // Mask frontmatter block (--- ... ---) so HTML DOM parser receives clean markup
+      templateContent = code.replace(/^\s*---[\s\S]*?\n---/m, '');
     }
 
     const dom = parseDOM(templateContent);
@@ -114,10 +118,16 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
     return convertNodes(dom);
   }
 
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
+  let ast: any;
+  try {
+    ast = parse(code, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch (e) {
+    console.warn(`[Glide] AST parse warning for ${filepath || 'file'}:`, (e as any).message);
+    return [];
+  }
   const roots: import('./types.js').ComponentTreeNode[] = [];
   const nodeMap = new Map<any, import('./types.js').ComponentTreeNode>();
 
