@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.23-blue" alt="version"></a>
+  <a href="https://github.com/SrivarsanK/Glide/releases"><img src="https://img.shields.io/badge/version-v1.0.24-blue" alt="version"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
   <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
@@ -120,7 +120,8 @@ Open **http://localhost:7777** to start editing.
 |---|---|
 | 🎨 **Visual Canvas** | Figma-like workspace — select, drag, resize, zoom, and pan elements |
 | 📐 **Smart Snapping** | Snaps to sibling edges, centers, and pixel grid with live guide lines |
-| ✍️ **Live Code Write-back** | Every change saved directly to your JSX/TSX/Vue/Svelte/Astro/HTML source files |
+| ✍️ **Universal Live Code Write-back** | Real-time direct source editing across React (JSX/TSX), Vue (SFC), Svelte, Astro, and HTML — for Tailwind classes, inline styles, and text content |
+| 🚀 **Astro Framework Support** | Native support for `.astro` SFCs with server frontmatter preservation |
 | ⚡ **Zero-Flicker Drag** | Positions written to `glide-positions.json` — no HMR reload on drag |
 | 🗂️ **Layers Panel** | Hierarchical tree view of all elements with Figma-style hover controls |
 | 🎛️ **Properties Panel** | Edit geometry (X, Y, W, H), spacing, border, radius, shadows, fills, and typography |
