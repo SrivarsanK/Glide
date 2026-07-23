@@ -5,113 +5,180 @@ description: >
   visual editor on any React, Vue, Svelte, Astro, or HTML Vite project in one prompt.
 ---
 
-# Glide Setup Skill (One-Prompt Installation Guide)
+# Glide Setup — Agent Installation Skill
 
-This skill instructs AI agents how to seamlessly install and configure **Glide** (`@srivarsank/glide`) — a local code-native visual design editor for React, Vue, Svelte, Astro, and HTML Vite projects.
+> **CRITICAL**: The Vite plugin export is `glideSourceStamping`, NOT `glide`.
+> Import path: `@srivarsank/glide/vite-plugin`
+> Import statement: `import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';`
 
 ---
 
-## 1-Prompt Autonomous Setup Instructions for Agents
+## Prerequisites (Check Before Install)
 
-When requested to add, install, or integrate Glide in a project, perform these exact steps in order:
+1. **Node.js ≥ 18** — run `node -v` to confirm
+2. **Vite-based project** — Glide requires Vite. Check for `vite` in `devDependencies` of `package.json`. If missing: `npm install -D vite`
+3. **Package manager** — detect from lockfile:
+   - `package-lock.json` → use `npm`
+   - `pnpm-lock.yaml` → use `pnpm`
+   - `yarn.lock` → use `yarn`
 
-### Step 1: Install Package
+---
 
-Run terminal command:
+## Step-by-Step Setup (Execute In Order)
+
+### Step 1 — Install
+
 ```bash
 npm install -D @srivarsank/glide
 ```
-*(or `pnpm add -D @srivarsank/glide` / `yarn add -D @srivarsank/glide` depending on package manager present)*
 
----
+### Step 2 — Add Vite Plugin
 
-### Step 2: Configure `vite.config.ts` (or `vite.config.js`)
+Open `vite.config.ts` (or `.js`). Add `glideSourceStamping()` to `plugins`:
 
-Inspect `vite.config.ts` or `vite.config.js`. Import `glide` from `@srivarsank/glide/vite-plugin` and add it to the `plugins` array:
-
-#### React / TSX Example
+**React**:
 ```ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { glide } from '@srivarsank/glide/vite-plugin';
+import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
-  plugins: [
-    react(),
-    glide(), // ← Add Glide plugin
-  ],
+  plugins: [react(), glideSourceStamping()],
 });
 ```
 
-#### Vue Example
+**Vue**:
 ```ts
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { glide } from '@srivarsank/glide/vite-plugin';
+import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
-  plugins: [
-    vue(),
-    glide(),
-  ],
+  plugins: [vue(), glideSourceStamping()],
 });
 ```
 
-#### Svelte / SvelteKit Example
+**Svelte**:
 ```ts
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { glide } from '@srivarsank/glide/vite-plugin';
+import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
-  plugins: [
-    svelte(),
-    glide(),
-  ],
+  plugins: [svelte(), glideSourceStamping()],
 });
 ```
 
-#### Astro Example
+**Astro** (`astro.config.mjs`):
 ```ts
-// astro.config.mjs
 import { defineConfig } from 'astro/config';
-import { glide } from '@srivarsank/glide/vite-plugin';
+import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
   vite: {
-    plugins: [glide()],
+    plugins: [glideSourceStamping()],
   },
 });
 ```
 
----
+**Plain HTML** (vanilla Vite project — no framework plugin needed):
+```ts
+import { defineConfig } from 'vite';
+import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
-### Step 3: Add NPM Script in `package.json`
+export default defineConfig({
+  plugins: [glideSourceStamping()],
+});
+```
 
-Add `"glide"` to `"scripts"` in `package.json`:
+### Step 3 — Add `.gitignore` Entries (Optional)
+
+Glide creates two auto-generated files. Add these if you don't want them in version control:
+
+```gitignore
+glide-positions.json
+glide-components.json
+```
+
+If drag positions should persist across team members, **do commit `glide-positions.json`**.
+
+### Step 4 — Optional Config File
+
+Create `glide.config.json` (or `.ts`/`.js`/`.mjs`) in project root to override defaults:
 
 ```json
-"scripts": {
-  "dev": "vite",
-  "build": "tsc && vite build",
-  "glide": "glide"
+{
+  "port": 7777,
+  "targetPort": 5173,
+  "historyLimit": 100,
+  "snapThresholdPx": 4
 }
 ```
 
+Full config shape:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `port` | number | `7777` | Glide editor server port |
+| `targetPort` | number | `5173` | Your Vite dev server port |
+| `historyLimit` | number | `100` | Max undo/redo history entries |
+| `snapThresholdPx` | number | `4` | Snap-to-element pixel threshold |
+| `sourceAttribute` | string | `data-gl-source` | HTML attribute for source mapping |
+
+### Step 5 — Launch
+
+```bash
+# Terminal 1: Start your Vite dev server
+npm run dev
+
+# Terminal 2: Start Glide visual editor
+npx glide
+```
+
+If your dev server runs on a non-default port (e.g. 3000):
+```bash
+npx glide 3000
+```
+
+Open **http://localhost:7777** in browser.
+
+### Step 6 — Verify Working
+
+Check for these signs that Glide is active:
+1. Browser shows Glide editor chrome (sidebar, canvas, toolbar) at `:7777`
+2. Your app renders inside the canvas iframe from `:5173`
+3. Hovering elements shows blue outline
+4. Clicking an element selects it and populates the Design Panel
+5. Terminal shows `[Glide] Server started on port 7777, proxying to 5173`
+
 ---
 
-### Step 4: Verification & Usage
+## Troubleshooting
 
-1. Start your dev server: `npm run dev` (runs on `localhost:5173`)
-2. Start Glide visual editor: `npx glide` (runs on `localhost:7777`)
-3. Open `http://localhost:7777` in browser to visually edit your UI and write back to source code in real time!
+| Symptom | Cause | Fix |
+|---|---|---|
+| `glideSourceStamping is not a function` | Wrong import path | Use `@srivarsank/glide/vite-plugin`, NOT `@srivarsank/glide` |
+| `{ glide } is not exported` | Wrong export name | The export is `glideSourceStamping`, not `glide` |
+| Blank canvas / no app visible | Dev server not running | Start `npm run dev` first, then `npx glide` |
+| Elements not selectable | Stamping failed | Check Vite config has `glideSourceStamping()` in plugins |
+| Port conflict | Another process on 7777 | Use `PORT=8888 npx glide` or set in `glide.config.json` |
+| Edits don't persist | Wrong target port | Pass your dev server port: `npx glide 3000` |
 
 ---
 
-## Technical Specifications & Defaults
+## Auto-Generated Files
 
-- **Glide Port**: `7777` (default)
-- **Target Vite Port**: `5173` (default)
-- **Custom Ports Command**: `npx glide --port 7777 --target-port 3000`
-- **Positions File**: `glide-positions.json` (created automatically for zero-flicker live dragging; click `⚡ Bake to Source` in overlay to graduate drag positions to source inline styles)
-- **Component Registry**: `glide-components.json` (auto-generated & watched for component segregation)
+| File | Purpose | Git? |
+|---|---|---|
+| `glide-positions.json` | Zero-flicker drag position storage (CSS injected via HMR) | Optional |
+| `glide-components.json` | Component registry for layer panel resolution | Usually ignore |
+
+---
+
+## Package Exports Reference
+
+```
+@srivarsank/glide              → Main API (GlideServer, adapters, AST writer)
+@srivarsank/glide/vite-plugin  → glideSourceStamping() Vite plugin
+@srivarsank/glide/babel-plugin → Babel AST plugin for JSX stamping
+```
