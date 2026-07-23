@@ -1,6 +1,7 @@
 import parseDOMModule from 'html-dom-parser';
 import parseReactModule from 'html-react-parser';
 import * as React from 'react';
+import { mergeInlineStyle } from '@srivarsank/core';
 
 const parseDOM = (parseDOMModule as any).default || parseDOMModule;
 const parseReact = (parseReactModule as any).default || parseReactModule;
@@ -60,6 +61,35 @@ export function updateHTMLClass(
   traverse(dom);
   return serializeDOM(dom);
 }
+
+/**
+ * Parses HTML and updates inline style attribute on a target element matching data-gl-source targetId.
+ */
+export function updateHTMLStyle(
+  htmlCode: string,
+  targetId: string,
+  styles: Record<string, string>
+): string {
+  const dom = parseDOM(htmlCode);
+
+  function traverse(nodes: any[]): boolean {
+    for (const node of nodes) {
+      if (node.type === 'tag' && node.attribs && node.attribs['data-gl-source'] === targetId) {
+        const existing = node.attribs['style'] || '';
+        node.attribs['style'] = mergeInlineStyle(existing, styles);
+        return true;
+      }
+      if (node.children && traverse(node.children)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  traverse(dom);
+  return serializeDOM(dom);
+}
+
 
 /**
  * Parses HTML and updates the inner text of a target element matching data-gl-source targetId.
