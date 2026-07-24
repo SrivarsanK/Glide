@@ -1865,13 +1865,16 @@ if (import.meta.hot) {
         };
       }
 
-      // For HTML, Vue, and Svelte templates, stamp them using stampHTMLTemplate
-      const relativePath = normalizePath(cleanId, rootDir);
-      const stampedCode = stampHTMLTemplate(code, relativePath);
-      return {
-        code: stampedCode,
-        map: null
-      };
+      // For HTML, Vue, Svelte, and Astro templates, stamp them using stampHTMLTemplate
+      if (isHTML || isVue || isSvelte || isAstro) {
+        const relativePath = normalizePath(cleanId, rootDir);
+        const stampedCode = stampHTMLTemplate(code, relativePath);
+        return {
+          code: stampedCode,
+          map: null
+        };
+      }
+      return null;
     },
   };
 }
