@@ -219,6 +219,18 @@ export function getElementClass(template: string, targetId: string): string {
   }
 
   traverse(dom);
-  return classVal;
+  if (classVal) return classVal;
+
+  // Fallback: match by line:col
+  const { line, col } = parseTargetId(targetId);
+  if (line && col) {
+    const tagLoc = findTagAtLineCol(template, line, col);
+    if (tagLoc) {
+      const classMatch = tagLoc.attributes.match(/class=(['"])(.*?)\1/);
+      if (classMatch) return classMatch[2];
+    }
+  }
+
+  return '';
 }
 

@@ -248,24 +248,48 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
   } else if (change.type === 'class') {
     let updated = '';
-    if (file.endsWith('.vue')) {
-      const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property!, change.value);
-      updated = updateVueSFCClass(code, targetId, newClasses);
-    } else if (file.endsWith('.svelte')) {
-      const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property!, change.value);
-      updated = updateSvelteClass(code, targetId, newClasses);
-    } else if (file.endsWith('.astro')) {
-      const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property!, change.value);
-      updated = updateAstroClass(code, targetId, newClasses);
-    } else if (file.endsWith('.html')) {
-      const existing = getElementClass(code, targetId);
-      const newClasses = updateClassString(existing, change.property!, change.value);
-      updated = updateHTMLClass(code, targetId, newClasses);
+    const styleProps = [
+      'width', 'height', 'fontSize', 'color', 'backgroundColor', 'backgroundImage',
+      'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
+      'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
+      'display', 'flexDirection', 'justifyContent', 'alignItems', 'gap', 'rowGap',
+      'opacity', 'borderWidth', 'borderStyle', 'borderRadius',
+      'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius',
+      'transform', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'lineHeight', 'letterSpacing', 'fontFamily', 'fontWeight'
+    ];
+    if (change.property && styleProps.includes(change.property)) {
+      const styles = { [change.property]: change.value };
+      if (file.endsWith('.vue')) {
+        updated = updateVueSFCStyle(code, targetId, styles);
+      } else if (file.endsWith('.svelte')) {
+        updated = updateSvelteStyle(code, targetId, styles);
+      } else if (file.endsWith('.astro')) {
+        updated = updateAstroStyle(code, targetId, styles);
+      } else if (file.endsWith('.html')) {
+        updated = updateHTMLStyle(code, targetId, styles);
+      } else {
+        updated = updateJSXStyleProp(code, line, column, styles, hash);
+      }
     } else {
-      updated = updateClassName(code, line, column, change.property!, change.value, undefined, hash);
+      if (file.endsWith('.vue')) {
+        const existing = getElementClass(code, targetId);
+        const newClasses = updateClassString(existing, change.property!, change.value);
+        updated = updateVueSFCClass(code, targetId, newClasses);
+      } else if (file.endsWith('.svelte')) {
+        const existing = getElementClass(code, targetId);
+        const newClasses = updateClassString(existing, change.property!, change.value);
+        updated = updateSvelteClass(code, targetId, newClasses);
+      } else if (file.endsWith('.astro')) {
+        const existing = getElementClass(code, targetId);
+        const newClasses = updateClassString(existing, change.property!, change.value);
+        updated = updateAstroClass(code, targetId, newClasses);
+      } else if (file.endsWith('.html')) {
+        const existing = getElementClass(code, targetId);
+        const newClasses = updateClassString(existing, change.property!, change.value);
+        updated = updateHTMLClass(code, targetId, newClasses);
+      } else {
+        updated = updateClassName(code, line, column, change.property!, change.value, undefined, hash);
+      }
     }
     fs.writeFileSync(file, updated, 'utf-8');
     pushHistory({

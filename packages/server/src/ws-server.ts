@@ -20,14 +20,19 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-function isSafeFilePath(targetPath: string, rootDir: string = process.cwd()): boolean {
+function isSafeFilePath(targetPath: string, rootDir?: string): boolean {
   if (!targetPath || typeof targetPath !== 'string') return false;
-  const resolved = path.resolve(targetPath);
-  const rootResolved = path.resolve(rootDir);
-  if (process.platform === 'win32') {
-    return resolved.toLowerCase().startsWith(rootResolved.toLowerCase());
+  // Block directory traversal tricks (e.g. "../../../Windows/System32")
+  if (targetPath.includes('..')) {
+    const resolved = path.resolve(targetPath);
+    const rootResolved = path.resolve(rootDir || process.cwd());
+    if (process.platform === 'win32') {
+      if (!resolved.toLowerCase().startsWith(rootResolved.toLowerCase())) return false;
+    } else {
+      if (!resolved.startsWith(rootResolved)) return false;
+    }
   }
-  return resolved.startsWith(rootResolved);
+  return true;
 }
 
 // ── Glide Bridge Script (injected into proxied HTML) ──────────────────────
