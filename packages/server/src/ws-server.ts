@@ -82,7 +82,9 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }
 
   function getElId(el) {
-    var src = el.getAttribute && el.getAttribute('${sourceAttr}');
+    if (!el) return '';
+    var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) ||
+              (el.closest && el.closest('[${sourceAttr}]') && el.closest('[${sourceAttr}]').getAttribute('${sourceAttr}'));
     return src || ('__glide_cst_' + getCSSPath(el));
   }
 

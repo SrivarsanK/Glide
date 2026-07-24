@@ -2051,6 +2051,26 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
           }
 
+          function sendPositionChange(source, positionStyles) {
+            if (!source || !socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(source);
+            if (!parsed) return;
+
+            Object.entries(positionStyles).forEach(([prop, val]) => {
+              socket.send(JSON.stringify({
+                type: 'edit',
+                file: parsed.file,
+                line: parsed.line,
+                column: parsed.column,
+                hash: parsed.hash,
+                selector: parsed.cstSelector || null,
+                generation: currentGeneration,
+                viewportWidth: iframeWidth.current,
+                change: { type: 'class', property: prop, value: val }
+              }));
+            });
+          }
+
           let _editTimer = null;
           function sendEdit(change) {
             if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;

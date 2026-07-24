@@ -169,7 +169,7 @@ export class GlideBridge {
   };
 
   private sendTelemetry(type: string, el: HTMLElement): void {
-    const source = el.getAttribute(this.sourceAttribute) || '';
+    const source = el.getAttribute(this.sourceAttribute) || el.closest(`[${this.sourceAttribute}]`)?.getAttribute(this.sourceAttribute) || '';
     const rect = el.getBoundingClientRect();
     const getCS = (this.targetWindow as any).getComputedStyle;
     const cs = typeof getCS === 'function' ? getCS(el) : {} as CSSStyleDeclaration;

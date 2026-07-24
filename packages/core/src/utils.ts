@@ -56,16 +56,29 @@ export function findTagAtLineCol(code: string, line: number, col: number): TagLo
   const windowEnd = Math.min(code.length, charIndex + 120);
   const searchSubstring = code.substring(windowStart, windowEnd);
 
-  const tagStartMatch = searchSubstring.match(/<([a-zA-Z][a-zA-Z0-9.-]*)/);
-  if (!tagStartMatch) return null;
+  const tagStartRegex = /<([a-zA-Z][a-zA-Z0-9.-]*)/g;
+  let bestMatch: RegExpExecArray | null = null;
+  let bestDistance = Infinity;
+  const targetOffset = charIndex - windowStart;
 
-  const actualTagOffset = windowStart + tagStartMatch.index!;
+  let m: RegExpExecArray | null;
+  while ((m = tagStartRegex.exec(searchSubstring)) !== null) {
+    const dist = Math.abs(m.index - targetOffset);
+    if (dist < bestDistance) {
+      bestDistance = dist;
+      bestMatch = m;
+    }
+  }
+
+  if (!bestMatch) return null;
+
+  const actualTagOffset = windowStart + bestMatch.index;
   const restOfCode = code.substring(actualTagOffset);
   const tagEndIndex = restOfCode.indexOf('>');
   if (tagEndIndex === -1) return null;
 
   const fullTag = restOfCode.substring(0, tagEndIndex + 1);
-  const tagName = tagStartMatch[1];
+  const tagName = bestMatch[1];
   const attributes = fullTag.substring(1 + tagName.length, fullTag.length - 1).trim();
 
   return {
