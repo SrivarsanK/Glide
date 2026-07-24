@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.0.37",
+  "version": "1.0.38",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
   "workspaces": [
     "packages/*",
@@ -63,6 +63,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@mendable/firecrawl-js": "^4.30.1",
     "@types/babel__core": "^7.20.5",
     "@types/node": "^20.11.28",
     "@types/react": "^19.2.17",
