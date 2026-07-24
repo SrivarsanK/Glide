@@ -2118,26 +2118,36 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           // ═══════════════════════════════════════════════════════════════
           function parseSource(source) {
             if (!source) return null;
-            const match = source.match(/^(.*):(\d+):(\d+)(?::([a-fA-F0-9]+))?$/);
-            if (match) {
+            const fileLineColMatch = source.match(/^(.*):(\d+):(\d+)(?::([a-fA-F0-9]+))?$/);
+            if (fileLineColMatch) {
               return {
-                file: match[1],
-                line: parseInt(match[2], 10),
-                column: parseInt(match[3], 10),
-                hash: match[4] || null
+                file: fileLineColMatch[1],
+                line: parseInt(fileLineColMatch[2], 10),
+                column: parseInt(fileLineColMatch[3], 10),
+                hash: fileLineColMatch[4] || null
               };
             }
-            if (typeof source === 'string' && source.startsWith('__glide_cst_')) {
+            const lineColMatch = source.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+            if (lineColMatch) {
               const targetFile = currentFile || 'src/pages/index.astro';
               return {
                 file: targetFile,
-                line: 1,
-                column: 1,
-                hash: null,
-                cstSelector: source.slice('__glide_cst_'.length)
+                line: parseInt(lineColMatch[1], 10),
+                column: parseInt(lineColMatch[2], 10),
+                hash: lineColMatch[3] || null
               };
             }
-            return null;
+            const targetFile = currentFile || 'src/pages/index.astro';
+            const selectorStr = typeof source === 'string' && source.startsWith('__glide_cst_')
+              ? source.slice('__glide_cst_'.length)
+              : source;
+            return {
+              file: targetFile,
+              line: 1,
+              column: 1,
+              hash: null,
+              cstSelector: selectorStr
+            };
           }
 
           function convertNodeIdToSource(nodeId, file) {
