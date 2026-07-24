@@ -1045,8 +1045,10 @@ export class GlideServer {
                   }
                 }
 
-                // Record self-write timestamp so Chokidar watcher ignores this change
-                this.recordSelfWrite(file);
+                // Record self-write timestamp for drift protection
+                if (change.type === 'position') {
+                  this.recordSelfWrite(file);
+                }
 
                 // Call registered edit callbacks
                 for (const callback of this.editCallbacks) {
@@ -1065,8 +1067,7 @@ export class GlideServer {
                   }
                 }
 
-                // Only bump generation for edits that modify the source file.
-                // Position edits write to glide-positions.json, NOT the source file.
+                // Bump generation for edits that modify source file
                 if (change.type !== 'position') {
                   this.recordSelfWrite(file);
                 }

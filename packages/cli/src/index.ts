@@ -241,6 +241,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         currentHash = undefined;
       }
     }
+    if (updated === code) {
+      console.warn(`[Glide] No-op edit: adapter returned unchanged code for ${realFile}:${line}:${column}`);
+      throw new Error(`NO_CHANGE: Could not locate target element at ${path.basename(realFile)}:${line}:${column}`);
+    }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
     pushHistory({
@@ -261,6 +265,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       updated = updateHTMLStyle(code, targetId, styles);
     } else {
       updated = updateJSXStyleProp(code, line, column, styles, hash);
+    }
+    if (updated === code) {
+      console.warn(`[Glide] No-op edit: adapter returned unchanged code for ${realFile}:${line}:${column}`);
+      throw new Error(`NO_CHANGE: Could not locate target element at ${path.basename(realFile)}:${line}:${column}`);
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
@@ -316,6 +324,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         updated = updateClassName(code, line, column, change.property!, change.value, undefined, hash);
       }
     }
+    if (updated === code) {
+      console.warn(`[Glide] No-op edit: adapter returned unchanged code for ${realFile}:${line}:${column}`);
+      throw new Error(`NO_CHANGE: Could not locate target element at ${path.basename(realFile)}:${line}:${column}`);
+    }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
     pushHistory({
@@ -335,6 +347,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
       updated = updateHTMLText(code, targetId, change.value);
     } else {
       updated = updateJSXText(code, line, column, change.value, hash);
+    }
+    if (updated === code) {
+      console.warn(`[Glide] No-op edit: adapter returned unchanged code for ${realFile}:${line}:${column}`);
+      throw new Error(`NO_CHANGE: Could not locate target element at ${path.basename(realFile)}:${line}:${column}`);
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
