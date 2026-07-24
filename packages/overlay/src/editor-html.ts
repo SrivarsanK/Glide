@@ -2085,6 +2085,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 line: parsed.line,
                 column: parsed.column,
                 hash: parsed.hash,
+                selector: parsed.cstSelector || null,
                 generation: currentGeneration,
                 viewportWidth: iframeWidth.current,
                 change
@@ -2098,13 +2099,25 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function parseSource(source) {
             if (!source) return null;
             const match = source.match(/^(.*):(\\d+):(\\d+)(?::([a-fA-F0-9]+))?$/);
-            if (!match) return null;
-            return {
-              file: match[1],
-              line: parseInt(match[2], 10),
-              column: parseInt(match[3], 10),
-              hash: match[4] || null
-            };
+            if (match) {
+              return {
+                file: match[1],
+                line: parseInt(match[2], 10),
+                column: parseInt(match[3], 10),
+                hash: match[4] || null
+              };
+            }
+            if (typeof source === 'string' && source.startsWith('__glide_cst_')) {
+              const targetFile = currentFile || 'src/pages/index.astro';
+              return {
+                file: targetFile,
+                line: 1,
+                column: 1,
+                hash: null,
+                cstSelector: source.slice('__glide_cst_'.length)
+              };
+            }
+            return null;
           }
 
           function convertNodeIdToSource(nodeId, file) {

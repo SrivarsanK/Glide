@@ -32,6 +32,8 @@ export class GlideBridge {
     this.targetWindow.document.addEventListener('mousemove', this.handleMouseMove);
     this.targetWindow.document.addEventListener('click', this.handleClick, true);
     if (typeof this.targetWindow.addEventListener === 'function') {
+      this.targetWindow.addEventListener('scroll', this.handleScrollOrResize, { passive: true, capture: true });
+      this.targetWindow.addEventListener('resize', this.handleScrollOrResize, { passive: true });
       this.targetWindow.addEventListener('message', this.handleMessage);
     }
   }
@@ -43,9 +45,20 @@ export class GlideBridge {
     this.targetWindow.document.removeEventListener('mousemove', this.handleMouseMove);
     this.targetWindow.document.removeEventListener('click', this.handleClick, true);
     if (typeof this.targetWindow.removeEventListener === 'function') {
+      this.targetWindow.removeEventListener('scroll', this.handleScrollOrResize, true);
+      this.targetWindow.removeEventListener('resize', this.handleScrollOrResize);
       this.targetWindow.removeEventListener('message', this.handleMessage);
     }
   }
+
+  private handleScrollOrResize = (): void => {
+    if (this.selectedElement) {
+      this.sendTelemetry('glide:element-selected', this.selectedElement);
+    }
+    if (this.activeHoverElement) {
+      this.sendTelemetry('glide:element-hovered', this.activeHoverElement);
+    }
+  };
 
   private injectStyles(): void {
     const doc = this.targetWindow.document;

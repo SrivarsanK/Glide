@@ -240,7 +240,18 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     if (e.data.type === 'glide:hover-element-exit') {
       if (hovered) { hovered.removeAttribute('${hoverAttr}'); hovered = null; }
     }
+    if (e.data.type === 'glide:refresh-rects' || e.data.type === 'glide:refresh-selection') {
+      if (selected) sendMsgForAny('glide:element-selected', selected);
+      if (hovered) sendMsgForAny('glide:element-hovered', hovered);
+    }
   });
+
+  function updateRectsOnScrollOrResize() {
+    if (selected) sendMsgForAny('glide:element-selected', selected);
+    if (hovered) sendMsgForAny('glide:element-hovered', hovered);
+  }
+  window.addEventListener('scroll', updateRectsOnScrollOrResize, { passive: true, capture: true });
+  window.addEventListener('resize', updateRectsOnScrollOrResize, { passive: true });
 
   document.addEventListener('pointermove', function(e) {
     var el = resolveElementAtPoint(e.clientX, e.clientY);
