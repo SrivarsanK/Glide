@@ -99,6 +99,64 @@ export function findTagAtLineCol(code: string, line: number, col: number): TagLo
   };
 }
 
+export function getLineFromPos(code: string, pos: number): number {
+  if (pos <= 0) return 1;
+  const slice = code.substring(0, pos);
+  return slice.split('\n').length;
+}
+
+export function getColFromPos(code: string, pos: number): number {
+  if (pos <= 0) return 1;
+  const slice = code.substring(0, pos);
+  const lastNewline = slice.lastIndexOf('\n');
+  return lastNewline === -1 ? pos + 1 : pos - lastNewline;
+}
+
+export function findTagBySelectorOrText(
+  code: string,
+  cstSelector?: string | null,
+  textSnippet?: string | null
+): TagLocation | null {
+  if (!code) return null;
+
+  // 1. If textSnippet is provided, search for tag containing textSnippet
+  if (textSnippet && textSnippet.trim().length > 2) {
+    const cleanSnippet = textSnippet.trim();
+    const textPos = code.indexOf(cleanSnippet);
+    if (textPos !== -1) {
+      const prefix = code.substring(0, textPos);
+      const lastTagStart = prefix.lastIndexOf('<');
+      if (lastTagStart !== -1) {
+        const line = getLineFromPos(code, lastTagStart + 1);
+        const col = getColFromPos(code, lastTagStart + 1);
+        const tagLoc = findTagAtLineCol(code, line, col);
+        if (tagLoc) return tagLoc;
+      }
+    }
+  }
+
+  // 2. If cstSelector is provided, extract class names (e.g. ".hero-subtitle")
+  if (cstSelector) {
+    const classMatches = cstSelector.match(/\.([a-zA-Z0-9_-]+)/g);
+    if (classMatches && classMatches.length > 0) {
+      for (let i = classMatches.length - 1; i >= 0; i--) {
+        const clsName = classMatches[i].slice(1);
+        if (clsName.startsWith('__glide')) continue;
+        const classAttrRegex = new RegExp(`<([a-zA-Z][a-zA-Z0-9.-]*)\\s+[^>]*class=(['"])[^'"]*\\b${clsName}\\b[^'"]*\\2[^>]*>`, 'i');
+        const match = code.match(classAttrRegex);
+        if (match && match.index !== undefined) {
+          const line = getLineFromPos(code, match.index + 1);
+          const col = getColFromPos(code, match.index + 1);
+          const tagLoc = findTagAtLineCol(code, line, col);
+          if (tagLoc) return tagLoc;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 export function stampHTMLTemplate(code: string, filepath: string, sourceAttribute: string = 'data-gl-source'): string {
   let cleanCode = code
     .replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length))

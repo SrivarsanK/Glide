@@ -1,4 +1,4 @@
-import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
+import { mergeInlineStyle, parseTargetId, findTagAtLineCol, findTagBySelectorOrText } from '@srivarsank/core';
 
 export function updateAstroClass(
   astroCode: string,
@@ -33,24 +33,27 @@ export function updateAstroClass(
     return astroCode.replace(fullTag, newFullTag);
   }
 
-  // Fallback: match by line:col in targetId (e.g. "src/pages/index.astro:8:3")
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(astroCode, line, col);
-    if (tagLoc) {
-      const { tagName, attributes, startIndex, endIndex } = tagLoc;
-      const classRegex = /class=(['"])(.*?)\1/;
-      const classMatch = attributes.match(classRegex);
-      let newFullTag: string;
-      if (classMatch) {
-        const quote = classMatch[1];
-        const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
-        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
-      } else {
-        const newAttributes = attributes ? `${attributes} class="${updatedClasses}"` : `class="${updatedClasses}"`;
-        newFullTag = `<${tagName} ${newAttributes}>`;
-      }
-      return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
+  // Fallback 1: match by line:col
+  let tagLoc = line && col ? findTagAtLineCol(astroCode, line, col) : null;
+  // Fallback 2: match by selector
+  if (!tagLoc) {
+    tagLoc = findTagBySelectorOrText(astroCode, targetId);
+  }
+
+  if (tagLoc) {
+    const { tagName, attributes, startIndex, endIndex } = tagLoc;
+    const classRegex = /class=(['"])(.*?)\1/;
+    const classMatch = attributes.match(classRegex);
+    let newFullTag: string;
+    if (classMatch) {
+      const quote = classMatch[1];
+      const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
+      newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+    } else {
+      const newAttributes = attributes ? `${attributes} class="${updatedClasses}"` : `class="${updatedClasses}"`;
+      newFullTag = `<${tagName} ${newAttributes}>`;
     }
+    return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
   }
 
   return astroCode;
@@ -92,27 +95,30 @@ export function updateAstroStyle(
     return astroCode.replace(fullTag, newFullTag);
   }
 
-  // Fallback: match by line:col
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(astroCode, line, col);
-    if (tagLoc) {
-      const { tagName, attributes, startIndex, endIndex } = tagLoc;
-      const styleRegex = /style=(['"])(.*?)\1/;
-      const styleMatch = attributes.match(styleRegex);
-      let newFullTag: string;
-      if (styleMatch) {
-        const quote = styleMatch[1];
-        const existing = styleMatch[2];
-        const merged = mergeInlineStyle(existing, styles);
-        const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
-        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
-      } else {
-        const merged = mergeInlineStyle('', styles);
-        const newAttributes = attributes ? `${attributes} style="${merged}"` : `style="${merged}"`;
-        newFullTag = `<${tagName} ${newAttributes}>`;
-      }
-      return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
+  // Fallback 1: match by line:col
+  let tagLoc = line && col ? findTagAtLineCol(astroCode, line, col) : null;
+  // Fallback 2: match by selector
+  if (!tagLoc) {
+    tagLoc = findTagBySelectorOrText(astroCode, targetId);
+  }
+
+  if (tagLoc) {
+    const { tagName, attributes, startIndex, endIndex } = tagLoc;
+    const styleRegex = /style=(['"])(.*?)\1/;
+    const styleMatch = attributes.match(styleRegex);
+    let newFullTag: string;
+    if (styleMatch) {
+      const quote = styleMatch[1];
+      const existing = styleMatch[2];
+      const merged = mergeInlineStyle(existing, styles);
+      const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
+      newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
+    } else {
+      const merged = mergeInlineStyle('', styles);
+      const newAttributes = attributes ? `${attributes} style="${merged}"` : `style="${merged}"`;
+      newFullTag = `<${tagName} ${newAttributes}>`;
     }
+    return astroCode.substring(0, startIndex) + newFullTag + astroCode.substring(endIndex);
   }
 
   return astroCode;
@@ -140,18 +146,21 @@ export function updateAstroText(
     return astroCode.replace(elementRegex, `${openTag}${newText}${closeTag}`);
   }
 
-  // Fallback: match by line:col
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(astroCode, line, col);
-    if (tagLoc) {
-      const { tagName, endIndex } = tagLoc;
-      const closeTagStr = `</${tagName}>`;
-      const restOfCode = astroCode.substring(endIndex);
-      const closeIndex = restOfCode.toLowerCase().indexOf(closeTagStr.toLowerCase());
-      if (closeIndex !== -1) {
-        const absoluteCloseIndex = endIndex + closeIndex;
-        return astroCode.substring(0, endIndex) + newText + astroCode.substring(absoluteCloseIndex);
-      }
+  // Fallback 1: match by line:col
+  let tagLoc = line && col ? findTagAtLineCol(astroCode, line, col) : null;
+  // Fallback 2: match by selector or text
+  if (!tagLoc) {
+    tagLoc = findTagBySelectorOrText(astroCode, targetId, newText);
+  }
+
+  if (tagLoc) {
+    const { tagName, endIndex } = tagLoc;
+    const closeTagStr = `</${tagName}>`;
+    const restOfCode = astroCode.substring(endIndex);
+    const closeIndex = restOfCode.toLowerCase().indexOf(closeTagStr.toLowerCase());
+    if (closeIndex !== -1) {
+      const absoluteCloseIndex = endIndex + closeIndex;
+      return astroCode.substring(0, endIndex) + newText + astroCode.substring(absoluteCloseIndex);
     }
   }
 
