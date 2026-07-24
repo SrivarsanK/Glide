@@ -31,19 +31,29 @@ export function parseTargetId(targetId: string): { file?: string; line?: number;
 
 export function findTagAtLineCol(code: string, line: number, col: number): TagLocation | null {
   if (!code || line < 1) return null;
-  const lines = code.split('\n');
+  const normalizedCode = code.replace(/\r\n/g, '\n');
+  const lines = normalizedCode.split('\n');
   if (line > lines.length) return null;
 
-  // Compute 0-based character index of (line, col)
-  let charIndex = 0;
+  let normIndex = 0;
   for (let i = 0; i < line - 1; i++) {
-    charIndex += lines[i].length + 1; // +1 for \n
+    normIndex += lines[i].length + 1;
   }
-  charIndex += Math.max(0, col - 1);
+  normIndex += Math.max(0, col - 1);
 
-  // Search window around charIndex (margin of error ±15 chars for whitespace/indentation shifts)
-  const windowStart = Math.max(0, charIndex - 15);
-  const windowEnd = Math.min(code.length, charIndex + 60);
+  let charIndex = 0;
+  let normCount = 0;
+  for (let i = 0; i < code.length && normCount < normIndex; i++) {
+    if (code[i] === '\r' && code[i + 1] === '\n') {
+      // skip \r in counting towards normalized length
+    } else {
+      normCount++;
+    }
+    charIndex++;
+  }
+
+  const windowStart = Math.max(0, charIndex - 30);
+  const windowEnd = Math.min(code.length, charIndex + 120);
   const searchSubstring = code.substring(windowStart, windowEnd);
 
   const tagStartMatch = searchSubstring.match(/<([a-zA-Z][a-zA-Z0-9.-]*)/);

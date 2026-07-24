@@ -3417,6 +3417,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 expandAllCST(layerTree);
               }
               renderLayersTree(layerTree);
+              autoFitIframeHeight();
               // Sync iframe with current snap settings
               const ifrDOM = document.getElementById('app-iframe');
               if (ifrDOM && ifrDOM.contentWindow) {
@@ -3424,6 +3425,27 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 ifrDOM.contentWindow.postMessage({ type: 'glide:set-snap-pixel', enabled: snapPixelEnabled }, '*');
               }
               return;
+            }
+
+            function autoFitIframeHeight() {
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                try {
+                  const doc = iframe.contentWindow.document;
+                  if (doc && doc.body) {
+                    const h = Math.max(
+                      doc.body.scrollHeight || 0,
+                      doc.body.offsetHeight || 0,
+                      doc.documentElement ? doc.documentElement.scrollHeight : 0
+                    );
+                    if (h > 200) {
+                      iframe.style.height = h + 'px';
+                      const fw = document.getElementById('frame-wrapper');
+                      if (fw) fw.style.height = (h + 40) + 'px';
+                    }
+                  }
+                } catch(e) {}
+              }
             }
 
             if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
@@ -3601,13 +3623,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           function updateLayersPanel(data) {
             if (!data.source) return;
-            // CST source path: just ensure the layer is highlighted (tree already built from dom-tree msg)
-            // AST source path: request get-tree from server
-            const parsed = parseSource(data.source);
-            if (parsed && socket && socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+            // Only request get-tree if layerTree is completely empty
+            if ((!layerTree || layerTree.length === 0) && socket && socket.readyState === WebSocket.OPEN) {
+              const parsed = parseSource(data.source);
+              if (parsed && parsed.file) {
+                socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+              }
             }
-            // For CST sources, tree already rendered — click/hover highlighting handled below
+            // Highlight active layer node in current tree
+            document.querySelectorAll('.layer-item').forEach(item => {
+              if (item.dataset.source === data.source || item.dataset.nodeSource === data.source) {
+                item.classList.add('active');
+              } else if (!selectedSources.includes(item.dataset.source)) {
+                item.classList.remove('active');
+              }
+            });
           }
 
           // ═══════════════════════════════════════════════════════════════
