@@ -24,6 +24,9 @@ function isSafeFilePath(targetPath: string, rootDir: string = process.cwd()): bo
   if (!targetPath || typeof targetPath !== 'string') return false;
   const resolved = path.resolve(targetPath);
   const rootResolved = path.resolve(rootDir);
+  if (process.platform === 'win32') {
+    return resolved.toLowerCase().startsWith(rootResolved.toLowerCase());
+  }
   return resolved.startsWith(rootResolved);
 }
 

@@ -6,7 +6,11 @@ export function updateAstroClass(
   updatedClasses: string
 ): string {
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
+  const { line, col } = parseTargetId(targetId);
+  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
+  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
+
+  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${attrPattern}"[^>]*)>`, 'i');
   const match = astroCode.match(tagRegex);
 
   if (match) {
@@ -30,7 +34,6 @@ export function updateAstroClass(
   }
 
   // Fallback: match by line:col in targetId (e.g. "src/pages/index.astro:8:3")
-  const { line, col } = parseTargetId(targetId);
   if (line && col) {
     const tagLoc = findTagAtLineCol(astroCode, line, col);
     if (tagLoc) {
@@ -59,7 +62,11 @@ export function updateAstroStyle(
   styles: Record<string, string>
 ): string {
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${escapedId}"[^>]*)>`, 'i');
+  const { line, col } = parseTargetId(targetId);
+  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
+  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
+
+  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${attrPattern}"[^>]*)>`, 'i');
   const match = astroCode.match(tagRegex);
 
   if (match) {
@@ -86,7 +93,6 @@ export function updateAstroStyle(
   }
 
   // Fallback: match by line:col
-  const { line, col } = parseTargetId(targetId);
   if (line && col) {
     const tagLoc = findTagAtLineCol(astroCode, line, col);
     if (tagLoc) {
@@ -118,8 +124,12 @@ export function updateAstroText(
   newText: string
 ): string {
   const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const { line, col } = parseTargetId(targetId);
+  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
+  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
+
   const elementRegex = new RegExp(
-    `(<([\\w-]+)\\s+[^>]*data-gl-source="${escapedId}"[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
+    `(<([\\w-]+)\\s+[^>]*data-gl-source="${attrPattern}"[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
     'i'
   );
 
@@ -131,7 +141,6 @@ export function updateAstroText(
   }
 
   // Fallback: match by line:col
-  const { line, col } = parseTargetId(targetId);
   if (line && col) {
     const tagLoc = findTagAtLineCol(astroCode, line, col);
     if (tagLoc) {
