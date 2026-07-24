@@ -1027,12 +1027,13 @@ export class GlideServer {
                   return;
                 }
 
-                // Invalidate on drift check — skip for position edits
-                // (they write to glide-positions.json, not source files)
+                // Invalidate on drift check — skip for position edits and recent self-writes
                 if (change.type !== 'position') {
                   const normPath = normalizePathKey(file);
                   const currentGen = this.fileGenerations.get(normPath) || 0;
-                  if (generation !== undefined && generation !== currentGen) {
+                  const lastWrite = this.lastSelfWrites.get(normPath) || 0;
+                  const isRecentSelfWrite = Date.now() - lastWrite < 5000;
+                  if (!isRecentSelfWrite && generation !== undefined && generation < currentGen) {
                     ws.send(
                       JSON.stringify({
                         type: 'status',
@@ -1043,6 +1044,9 @@ export class GlideServer {
                     return;
                   }
                 }
+
+                // Record self-write timestamp so Chokidar watcher ignores this change
+                this.recordSelfWrite(file);
 
                 // Call registered edit callbacks
                 for (const callback of this.editCallbacks) {

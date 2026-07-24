@@ -68,8 +68,26 @@ function getPositionsFile(file: string): string {
   return path.join(path.dirname(file), 'glide-positions.json');
 }
 
+function resolveFilePath(file: string): string {
+  if (!file) return file;
+  if (path.isAbsolute(file) && fs.existsSync(file)) return file;
+
+  const candidates = [
+    file,
+    path.resolve(process.cwd(), file),
+    path.resolve(process.cwd(), '..', file)
+  ];
+
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) return cand;
+  }
+
+  return path.resolve(process.cwd(), file);
+}
+
 server.onEdit((file: string, line: number, column: number, change: any, hash?: string) => {
   const targetId = `${file}:${line}:${column}`;
+  const realFile = resolveFilePath(file);
 
   function buildDescription(change: any, file: string, line?: number): string {
     const shortFile = path.basename(file);
@@ -94,7 +112,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     // Write position to glide-positions.json instead of modifying the JSX source.
     // This avoids triggering Vite HMR and prevents full page reloads (flicker).
     // The Glide Vite plugin reads this file and injects CSS position overrides.
-    const positionsFile = getPositionsFile(file);
+    const positionsFile = getPositionsFile(realFile);
     let beforeContent = '';
     if (fs.existsSync(positionsFile)) {
       beforeContent = fs.readFileSync(positionsFile, 'utf-8');
@@ -107,9 +125,10 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     positions[targetId] = change.value as Record<string, string>;
     const afterContent = JSON.stringify(positions, null, 2);
     fs.writeFileSync(positionsFile, afterContent, 'utf-8');
+    server.recordSelfWrite(positionsFile);
     
     pushHistory({
-      description: `Moved element in ${path.basename(file)}`,
+      description: `Moved element in ${path.basename(realFile)}`,
       diffs: [{ file: positionsFile, before: beforeContent, after: afterContent }]
     });
 
@@ -118,40 +137,42 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
   }
 
   if (change.type === 'bake-position') {
-    const positionsFile = getPositionsFile(file);
+    const positionsFile = getPositionsFile(realFile);
     if (fs.existsSync(positionsFile)) {
-      const posContent = fs.readFileSync(positionsFile, 'utf-8');
       try {
+        const posContent = fs.readFileSync(positionsFile, 'utf-8');
         const positions = JSON.parse(posContent);
-        const posStyle = positions[targetId];
-        if (posStyle) {
-          const code = fs.readFileSync(file, 'utf-8');
+        const savedPos = positions[targetId];
+        if (savedPos && fs.existsSync(realFile)) {
+          const code = fs.readFileSync(realFile, 'utf-8');
           let updated = '';
-          if (file.endsWith('.vue')) {
-            updated = updateVueSFCStyle(code, targetId, posStyle);
-          } else if (file.endsWith('.svelte')) {
-            updated = updateSvelteStyle(code, targetId, posStyle);
-          } else if (file.endsWith('.astro')) {
-            updated = updateAstroStyle(code, targetId, posStyle);
-          } else if (file.endsWith('.html')) {
-            updated = updateHTMLStyle(code, targetId, posStyle);
+          if (realFile.endsWith('.vue')) {
+            updated = updateVueSFCStyle(code, targetId, savedPos);
+          } else if (realFile.endsWith('.svelte')) {
+            updated = updateSvelteStyle(code, targetId, savedPos);
+          } else if (realFile.endsWith('.astro')) {
+            updated = updateAstroStyle(code, targetId, savedPos);
+          } else if (realFile.endsWith('.html')) {
+            updated = updateHTMLStyle(code, targetId, savedPos);
           } else {
-            updated = updateJSXStyleProp(code, line, column, posStyle, hash);
+            updated = updateJSXStyleProp(code, line, column, savedPos, hash);
           }
-          fs.writeFileSync(file, updated, 'utf-8');
+          fs.writeFileSync(realFile, updated, 'utf-8');
+          server.recordSelfWrite(realFile);
 
           delete positions[targetId];
           const newPosContent = JSON.stringify(positions, null, 2);
           fs.writeFileSync(positionsFile, newPosContent, 'utf-8');
+          server.recordSelfWrite(positionsFile);
 
           pushHistory({
-            description: `Baked position into source in ${path.basename(file)}`,
+            description: `Baked position into ${path.basename(realFile)}`,
             diffs: [
-              { file: path.resolve(file), before: code, after: updated },
+              { file: path.resolve(realFile), before: code, after: updated },
               { file: positionsFile, before: posContent, after: newPosContent }
             ]
           });
-          console.log(`[Glide] Baked position for ${targetId} into ${file}`);
+          console.log(`[Glide] Baked position for ${targetId} into ${realFile}`);
         }
       } catch (e) {
         console.error(`[Glide] Failed to bake position:`, e);
@@ -160,35 +181,37 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     return;
   }
 
-  const code = fs.readFileSync(file, 'utf-8');
+  const code = fs.readFileSync(realFile, 'utf-8');
 
   if (change.type === 'group') {
-    if (file.endsWith('.vue') || file.endsWith('.svelte') || file.endsWith('.astro') || file.endsWith('.html')) {
-      console.warn(`[Glide] Grouping is currently supported for JSX files only (${path.basename(file)})`);
+    if (realFile.endsWith('.vue') || realFile.endsWith('.svelte') || realFile.endsWith('.astro') || realFile.endsWith('.html')) {
+      console.warn(`[Glide] Grouping is currently supported for JSX files only (${path.basename(realFile)})`);
       return;
     }
     const updated = groupJSXElements(code, change.sources!);
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: `Grouped elements in ${path.basename(file)}`,
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      description: `Grouped elements in ${path.basename(realFile)}`,
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
-    console.log(`[Glide] Grouped elements in ${file}`);
+    console.log(`[Glide] Grouped elements in ${realFile}`);
     return;
   }
 
   if (change.type === 'ungroup') {
-    if (file.endsWith('.vue') || file.endsWith('.svelte') || file.endsWith('.astro') || file.endsWith('.html')) {
-      console.warn(`[Glide] Ungrouping is currently supported for JSX files only (${path.basename(file)})`);
+    if (realFile.endsWith('.vue') || realFile.endsWith('.svelte') || realFile.endsWith('.astro') || realFile.endsWith('.html')) {
+      console.warn(`[Glide] Ungrouping is currently supported for JSX files only (${path.basename(realFile)})`);
       return;
     }
     const updated = ungroupJSXElement(code, change.source!);
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: `Ungrouped element in ${path.basename(file)}`,
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      description: `Ungrouped element in ${path.basename(realFile)}`,
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
-    console.log(`[Glide] Ungrouped element ${change.source!} in ${file}`);
+    console.log(`[Glide] Ungrouped element ${change.source!} in ${realFile}`);
     return;
   }
 
@@ -197,19 +220,19 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     const edits = change.value as Record<string, string>;
     let currentHash = hash;
     for (const [property, value] of Object.entries(edits)) {
-      if (file.endsWith('.vue')) {
+      if (realFile.endsWith('.vue')) {
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
         updated = updateVueSFCClass(updated, targetId, newClasses);
-      } else if (file.endsWith('.svelte')) {
+      } else if (realFile.endsWith('.svelte')) {
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
         updated = updateSvelteClass(updated, targetId, newClasses);
-      } else if (file.endsWith('.astro')) {
+      } else if (realFile.endsWith('.astro')) {
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
         updated = updateAstroClass(updated, targetId, newClasses);
-      } else if (file.endsWith('.html')) {
+      } else if (realFile.endsWith('.html')) {
         const existing = getElementClass(updated, targetId);
         const newClasses = updateClassString(existing, property, value);
         updated = updateHTMLClass(updated, targetId, newClasses);
@@ -218,34 +241,36 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         currentHash = undefined;
       }
     }
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: `Updated multiple styles in ${path.basename(file)}`,
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      description: `Updated multiple styles in ${path.basename(realFile)}`,
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
-    console.log(`[Glide] Updated multi style class in ${file}:${line}:${column}`);
+    console.log(`[Glide] Updated multi style class in ${realFile}:${line}:${column}`);
   } else if (change.type === 'style') {
     let updated = '';
     const styles = change.value as Record<string, string>;
-    if (file.endsWith('.vue')) {
+    if (realFile.endsWith('.vue')) {
       updated = updateVueSFCStyle(code, targetId, styles);
-    } else if (file.endsWith('.svelte')) {
+    } else if (realFile.endsWith('.svelte')) {
       updated = updateSvelteStyle(code, targetId, styles);
-    } else if (file.endsWith('.astro')) {
+    } else if (realFile.endsWith('.astro')) {
       updated = updateAstroStyle(code, targetId, styles);
-    } else if (file.endsWith('.html')) {
+    } else if (realFile.endsWith('.html')) {
       updated = updateHTMLStyle(code, targetId, styles);
     } else {
       updated = updateJSXStyleProp(code, line, column, styles, hash);
     }
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: buildDescription(change, file, line),
-      diffs: [{ file: path.resolve(file), before: code, after: updated }],
-      squashKey: `style:${path.resolve(file)}:${line}:${column}`,
+      description: buildDescription(change, realFile, line),
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }],
+      squashKey: `style:${path.resolve(realFile)}:${line}:${column}`,
       squashWindowMs: 2000
     });
-    console.log(`[Glide] Updated inline style in ${file}:${line}:${column}`);
+    console.log(`[Glide] Updated inline style in ${realFile}:${line}:${column}`);
   } else if (change.type === 'class') {
     let updated = '';
     const styleProps = [
@@ -259,31 +284,31 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     ];
     if (change.property && styleProps.includes(change.property)) {
       const styles = { [change.property]: change.value };
-      if (file.endsWith('.vue')) {
+      if (realFile.endsWith('.vue')) {
         updated = updateVueSFCStyle(code, targetId, styles);
-      } else if (file.endsWith('.svelte')) {
+      } else if (realFile.endsWith('.svelte')) {
         updated = updateSvelteStyle(code, targetId, styles);
-      } else if (file.endsWith('.astro')) {
+      } else if (realFile.endsWith('.astro')) {
         updated = updateAstroStyle(code, targetId, styles);
-      } else if (file.endsWith('.html')) {
+      } else if (realFile.endsWith('.html')) {
         updated = updateHTMLStyle(code, targetId, styles);
       } else {
         updated = updateJSXStyleProp(code, line, column, styles, hash);
       }
     } else {
-      if (file.endsWith('.vue')) {
+      if (realFile.endsWith('.vue')) {
         const existing = getElementClass(code, targetId);
         const newClasses = updateClassString(existing, change.property!, change.value);
         updated = updateVueSFCClass(code, targetId, newClasses);
-      } else if (file.endsWith('.svelte')) {
+      } else if (realFile.endsWith('.svelte')) {
         const existing = getElementClass(code, targetId);
         const newClasses = updateClassString(existing, change.property!, change.value);
         updated = updateSvelteClass(code, targetId, newClasses);
-      } else if (file.endsWith('.astro')) {
+      } else if (realFile.endsWith('.astro')) {
         const existing = getElementClass(code, targetId);
         const newClasses = updateClassString(existing, change.property!, change.value);
         updated = updateAstroClass(code, targetId, newClasses);
-      } else if (file.endsWith('.html')) {
+      } else if (realFile.endsWith('.html')) {
         const existing = getElementClass(code, targetId);
         const newClasses = updateClassString(existing, change.property!, change.value);
         updated = updateHTMLClass(code, targetId, newClasses);
@@ -291,31 +316,33 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
         updated = updateClassName(code, line, column, change.property!, change.value, undefined, hash);
       }
     }
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: buildDescription(change, file, line),
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      description: buildDescription(change, realFile, line),
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
-    console.log(`[Glide] Updated style class in ${file}:${line}:${column}`);
+    console.log(`[Glide] Updated style class in ${realFile}:${line}:${column}`);
   } else if (change.type === 'text') {
     let updated = '';
-    if (file.endsWith('.vue')) {
+    if (realFile.endsWith('.vue')) {
       updated = updateVueSFCText(code, targetId, change.value);
-    } else if (file.endsWith('.svelte')) {
+    } else if (realFile.endsWith('.svelte')) {
       updated = updateSvelteText(code, targetId, change.value);
-    } else if (file.endsWith('.astro')) {
+    } else if (realFile.endsWith('.astro')) {
       updated = updateAstroText(code, targetId, change.value);
-    } else if (file.endsWith('.html')) {
+    } else if (realFile.endsWith('.html')) {
       updated = updateHTMLText(code, targetId, change.value);
     } else {
       updated = updateJSXText(code, line, column, change.value, hash);
     }
-    fs.writeFileSync(file, updated, 'utf-8');
+    fs.writeFileSync(realFile, updated, 'utf-8');
+    server.recordSelfWrite(realFile);
     pushHistory({
-      description: buildDescription(change, file, line),
-      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+      description: buildDescription(change, realFile, line),
+      diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
-    console.log(`[Glide] Updated text content in ${file}:${line}:${column}`);
+    console.log(`[Glide] Updated text content in ${realFile}:${line}:${column}`);
   }
 });
 
