@@ -16,14 +16,23 @@ export interface TagLocation {
   endIndex: number;
 }
 
-export function parseTargetId(targetId: string): { file?: string; line?: number; col?: number } {
+export function parseTargetId(targetId: string): { file?: string; line?: number; col?: number; hash?: string } {
   if (!targetId || typeof targetId !== 'string') return {};
-  const match = targetId.match(/^(.*):(\d+):(\d+)$/);
+  const match = targetId.match(/^(.*?):(\d+):(\d+)(?::([a-fA-F0-9]+))?$/);
   if (match) {
     return {
       file: match[1],
       line: parseInt(match[2], 10),
-      col: parseInt(match[3], 10)
+      col: parseInt(match[3], 10),
+      hash: match[4] || undefined
+    };
+  }
+  const lineColMatch = targetId.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+  if (lineColMatch) {
+    return {
+      line: parseInt(lineColMatch[1], 10),
+      col: parseInt(lineColMatch[2], 10),
+      hash: lineColMatch[3] || undefined
     };
   }
   return {};

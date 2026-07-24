@@ -2072,6 +2072,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           let _editTimer = null;
+          let _pendingEdits = [];
+
           function sendEdit(change) {
             if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
 
@@ -2089,28 +2091,33 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 }, '*');
               }
             }
-            // Debounce rapid-fire edits (e.g. color picker drag)
+
+            _pendingEdits.push({ source: selectedElement.source, change });
+
             if (_editTimer) clearTimeout(_editTimer);
             _editTimer = setTimeout(() => {
               _editTimer = null;
-              if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
-              const parsed = parseSource(selectedElement.source);
-              if (!parsed) {
-                showToast('warning', 'Dynamically generated element — edit in source code');
-                return;
-              }
-              socket.send(JSON.stringify({
-                type: 'edit',
-                file: parsed.file,
-                line: parsed.line,
-                column: parsed.column,
-                hash: parsed.hash,
-                selector: parsed.cstSelector || null,
-                generation: currentGeneration,
-                viewportWidth: iframeWidth.current,
-                change
-              }));
-            }, 150);
+              const queue = _pendingEdits.slice();
+              _pendingEdits = [];
+
+              if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+              queue.forEach(item => {
+                const parsed = parseSource(item.source);
+                if (!parsed) return;
+                socket.send(JSON.stringify({
+                  type: 'edit',
+                  file: parsed.file,
+                  line: parsed.line,
+                  column: parsed.column,
+                  hash: parsed.hash,
+                  selector: parsed.cstSelector || null,
+                  generation: currentGeneration,
+                  viewportWidth: iframeWidth.current,
+                  change: item.change
+                }));
+              });
+            }, 80);
           }
 
           // ═══════════════════════════════════════════════════════════════
