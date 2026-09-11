@@ -2385,18 +2385,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           // ═══════════════════════════════════════════════════════════════
           // SOURCE HELPERS
           // ═══════════════════════════════════════════════════════════════
+          function normalizePathSlash(str) {
+            if (!str || typeof str !== 'string') return '';
+            return str.split(String.fromCharCode(92)).join('/');
+          }
+
           function parseSource(source) {
-            if (!source) return null;
-            const fileLineColMatch = source.match(/^(.*):(\d+):(\d+)(?::([a-fA-F0-9]+))?$/);
+            if (!source || typeof source !== 'string') return null;
+            const fileLineColMatch = source.match(/^(.*):([0-9]+):([0-9]+)(?::([a-fA-F0-9]+))?$/);
             if (fileLineColMatch) {
               return {
-                file: fileLineColMatch[1],
+                file: normalizePathSlash(fileLineColMatch[1]),
                 line: parseInt(fileLineColMatch[2], 10),
                 column: parseInt(fileLineColMatch[3], 10),
                 hash: fileLineColMatch[4] || null
               };
             }
-            const lineColMatch = source.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+            const lineColMatch = source.match(/^line:([0-9]+):col:([0-9]+)(?::([a-fA-F0-9]+))?$/);
             if (lineColMatch) {
               const targetFile = currentFile || null;
               return {
@@ -2407,7 +2412,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               };
             }
             const targetFile = currentFile || null;
-            const selectorStr = typeof source === 'string' && source.startsWith('__glide_cst_')
+            const selectorStr = source.startsWith('__glide_cst_')
               ? source.slice('__glide_cst_'.length)
               : source;
             return {
@@ -2420,12 +2425,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           function convertNodeIdToSource(nodeId, file) {
-            const match = nodeId.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+            if (!nodeId || typeof nodeId !== 'string') return '';
+            const match = nodeId.match(/^line:([0-9]+):col:([0-9]+)(?::([a-fA-F0-9]+))?$/);
             if (match) {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
               // Omit hash — DOM data-gl-source is stamped as "file:line:col" only
-              return (file ? file.replace(/\\/g, '/') + ':' : '') + line + ':' + col;
+              return (file ? normalizePathSlash(file) + ':' : '') + line + ':' + col;
             }
             return nodeId;
           }
@@ -3943,12 +3949,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
             // Highlight active layer node in current tree
             const targetSrc = data.source;
-            const targetNorm = targetSrc.replace(/\\/g, '/').toLowerCase();
-            const targetSuffix = (targetSrc.match(/:(\d+:\d+)$/) || [])[0] || '';
+            const targetNorm = normalizePathSlash(targetSrc).toLowerCase();
+            const targetParts = targetSrc.split(':');
+            const targetSuffix = targetParts.length >= 2 ? ':' + targetParts.slice(-2).join(':') : '';
             document.querySelectorAll('.layer-item').forEach(item => {
               const itemSrc = item.dataset.source || item.dataset.nodeSource || '';
-              const itemNorm = itemSrc.replace(/\\/g, '/').toLowerCase();
-              const itemSuffix = (itemSrc.match(/:(\d+:\d+)$/) || [])[0] || '';
+              const itemNorm = normalizePathSlash(itemSrc).toLowerCase();
+              const itemParts = itemSrc.split(':');
+              const itemSuffix = itemParts.length >= 2 ? ':' + itemParts.slice(-2).join(':') : '';
               const matches = (itemSrc === targetSrc) || 
                               (itemNorm && itemNorm === targetNorm) ||
                               (targetSuffix && itemSuffix && targetSuffix === itemSuffix);
@@ -4352,8 +4360,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                       socket.send(JSON.stringify({
                         type: 'edit',
                         file: currentFile,
-                        line: parseInt((nodeSource.match(/:(\d+):(\d+)$/) || [])[1] || '0', 10),
-                        column: parseInt((nodeSource.match(/:(\d+)$/) || [])[0].slice(1) || '0', 10),
+                        line: parseInt((nodeSource.match(/:([0-9]+):([0-9]+)$/) || [])[1] || '0', 10),
+                        column: parseInt((nodeSource.match(/:([0-9]+)$/) || [])[0].slice(1) || '0', 10),
                         change: { type: 'text', value: newText }
                       }));
                     }
