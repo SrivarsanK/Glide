@@ -653,8 +653,9 @@ export class GlideServer {
                   }));
                 } else {
                   ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
+                    type: 'tree',
+                    file,
+                    tree: null,
                     error: `Invalid or unaccessible file: ${file}`
                   }));
                 }
