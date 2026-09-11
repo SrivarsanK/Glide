@@ -15,3 +15,5 @@ export { loadConfigFromDisk } from './config-loader.js';
 export { buildRegistry, watchRegistry, collectSourceFiles } from './component-registry.js';
 export type { ComponentRegistry, ComponentBucket, RegistryElement, RegistryOptions } from './component-registry.js';
 export { camelToKebab, kebabToCamel, parseInlineStyle, mergeInlineStyle } from './style-utils.js';
+export * from './staged-edits.js';
+
