@@ -107,6 +107,24 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     return `${prop}: ${val} on ${shortFile}${locSuffix}`;
   }
 
+  function pushEditHistory(entry: {
+    description: string;
+    diffs: Array<{ file: string; before: string; after: string }>;
+    squashKey?: string;
+    squashWindowMs?: number;
+  }) {
+    if (change && change.batchSquashKey) {
+      pushHistory({
+        description: change.batchDescription || entry.description,
+        diffs: entry.diffs,
+        squashKey: change.batchSquashKey,
+        squashWindowMs: 60000,
+      });
+    } else {
+      pushHistory(entry);
+    }
+  }
+
   if (change.type === 'position') {
     // ── ZERO-FLICKER POSITION STORAGE ────────────────────────────────────
     // Write position to glide-positions.json instead of modifying the JSX source.
@@ -247,7 +265,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
-    pushHistory({
+    pushEditHistory({
       description: `Updated multiple styles in ${path.basename(realFile)}`,
       diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
@@ -272,7 +290,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
-    pushHistory({
+    pushEditHistory({
       description: buildDescription(change, realFile, line),
       diffs: [{ file: path.resolve(realFile), before: code, after: updated }],
       squashKey: `style:${path.resolve(realFile)}:${line}:${column}`,
@@ -330,7 +348,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
-    pushHistory({
+    pushEditHistory({
       description: buildDescription(change, realFile, line),
       diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });
@@ -354,7 +372,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     }
     fs.writeFileSync(realFile, updated, 'utf-8');
     server.recordSelfWrite(realFile);
-    pushHistory({
+    pushEditHistory({
       description: buildDescription(change, realFile, line),
       diffs: [{ file: path.resolve(realFile), before: code, after: updated }]
     });

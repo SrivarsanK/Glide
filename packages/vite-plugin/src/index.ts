@@ -1227,6 +1227,52 @@ export function buildBridgeScript(
         }
       }
     }
+    if (e.data.type === 'glide:preview-style') {
+      var pid = e.data.sourceId || e.data.id;
+      var pstyles = e.data.styles;
+      var pel = null;
+      var pcst = '__glide_cst_';
+      if (pid && pid.indexOf(pcst) === 0) {
+        try { pel = document.querySelector(pid.slice(pcst.length)); } catch(e2) {}
+      } else if (pid) {
+        try { pel = document.querySelector('[${sourceAttr}="' + pid.replace(/"/g,'\\"') + '"]'); } catch(e2) {}
+      }
+      if (pel && pstyles) {
+        if (!pel.__glide_original_styles__) pel.__glide_original_styles__ = {};
+        for (var pprop in pstyles) {
+          if (!(pprop in pel.__glide_original_styles__)) {
+            pel.__glide_original_styles__[pprop] = pel.style[pprop] || '';
+          }
+          pel.style[pprop] = pstyles[pprop];
+        }
+      }
+    }
+    if (e.data.type === 'glide:clear-preview') {
+      var cid = e.data.sourceId || e.data.id;
+      var ctargets = [];
+      if (cid) {
+        var ccst = '__glide_cst_';
+        var cel = null;
+        if (cid.indexOf(ccst) === 0) {
+          try { cel = document.querySelector(cid.slice(ccst.length)); } catch(e3) {}
+        } else {
+          try { cel = document.querySelector('[${sourceAttr}="' + cid.replace(/"/g,'\\"') + '"]'); } catch(e3) {}
+        }
+        if (cel) ctargets.push(cel);
+      } else {
+        document.querySelectorAll('*').forEach(function(node) {
+          if (node.__glide_original_styles__) ctargets.push(node);
+        });
+      }
+      ctargets.forEach(function(targetEl) {
+        if (targetEl.__glide_original_styles__) {
+          for (var p in targetEl.__glide_original_styles__) {
+            targetEl.style[p] = targetEl.__glide_original_styles__[p];
+          }
+          delete targetEl.__glide_original_styles__;
+        }
+      });
+    }
     if (e.data.type === 'glide:resize-start') {
       var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
       if (el) {

@@ -254,6 +254,52 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       if (selected) sendMsgForAny('glide:element-selected', selected);
       if (hovered) sendMsgForAny('glide:element-hovered', hovered);
     }
+    if (e.data.type === 'glide:preview-style') {
+      var id = e.data.sourceId || e.data.id;
+      var styles = e.data.styles;
+      var target = null;
+      var cstPrefix = '__glide_cst_';
+      if (id && id.startsWith(cstPrefix)) {
+        try { target = document.querySelector(id.slice(cstPrefix.length)); } catch(e2) {}
+      } else if (id) {
+        try { target = document.querySelector('[${sourceAttr}="' + id.replace(/"/g,'\\"') + '"]'); } catch(e2) {}
+      }
+      if (target && styles) {
+        if (!target.__glide_original_styles__) target.__glide_original_styles__ = {};
+        for (var prop in styles) {
+          if (!(prop in target.__glide_original_styles__)) {
+            target.__glide_original_styles__[prop] = target.style[prop] || '';
+          }
+          target.style[prop] = styles[prop];
+        }
+      }
+    }
+    if (e.data.type === 'glide:clear-preview') {
+      var clearId = e.data.sourceId || e.data.id;
+      var targets = [];
+      if (clearId) {
+        var cstP = '__glide_cst_';
+        var tEl = null;
+        if (clearId.startsWith(cstP)) {
+          try { tEl = document.querySelector(clearId.slice(cstP.length)); } catch(e3) {}
+        } else {
+          try { tEl = document.querySelector('[${sourceAttr}="' + clearId.replace(/"/g,'\\"') + '"]'); } catch(e3) {}
+        }
+        if (tEl) targets.push(tEl);
+      } else {
+        document.querySelectorAll('*').forEach(function(el) {
+          if (el.__glide_original_styles__) targets.push(el);
+        });
+      }
+      targets.forEach(function(t) {
+        if (t.__glide_original_styles__) {
+          for (var p in t.__glide_original_styles__) {
+            t.style[p] = t.__glide_original_styles__[p];
+          }
+          delete t.__glide_original_styles__;
+        }
+      });
+    }
   });
 
   function updateRectsOnScrollOrResize() {
@@ -1010,6 +1056,48 @@ export class GlideServer {
                 return;
               }
 
+              if (message.type === 'batch-edit') {
+                const { edits, batchId } = message as any;
+                if (!Array.isArray(edits) || edits.length === 0) {
+                  ws.send(JSON.stringify({ type: 'status', success: false, error: 'Empty or invalid batch-edit payload' }));
+                  return;
+                }
+                const batchSquashKey = batchId || `batch:${Date.now()}`;
+                const batchDescription = `Applied ${edits.length} staged change${edits.length > 1 ? 's' : ''}`;
+                let successCount = 0;
+
+                for (const item of edits) {
+                  const { file, line, column, change, hash } = item;
+                  if (!file || !isSafeFilePath(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
+                    continue;
+                  }
+                  change.batchSquashKey = batchSquashKey;
+                  change.batchDescription = batchDescription;
+
+                  for (const callback of this.editCallbacks) {
+                    try {
+                      await callback(file, line, column, change, hash);
+                      successCount++;
+                    } catch (err: any) {
+                      console.error(`[Glide] Batch item error (${file}:${line}:${column}):`, err.message);
+                    }
+                  }
+                  this.recordSelfWrite(file);
+                }
+
+                ws.send(JSON.stringify({
+                  type: 'status',
+                  success: true,
+                  action: 'batch-edit',
+                  count: successCount,
+                }));
+
+                ws.send(JSON.stringify({
+                  type: 'HISTORY_UPDATE',
+                  ...getHistoryState()
+                }));
+                return;
+              }
 
               if (message.type === 'edit') {
                 const { file, line, column, change, hash, generation } = message as any;
