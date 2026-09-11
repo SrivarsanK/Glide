@@ -2035,6 +2035,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               try {
                 const message = JSON.parse(event.data);
                 if (message.type === 'tree') {
+                  if (!message.tree) {
+                    console.warn('[Glide] Tree not available for file:', message.file, message.error);
+                    return;
+                  }
                   currentFile = message.file;
                   currentGeneration = message.generation || 0;
                   layerTree = message.tree;
@@ -2390,7 +2394,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
             const lineColMatch = source.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
             if (lineColMatch) {
-              const targetFile = currentFile || 'src/pages/index.astro';
+              const targetFile = currentFile || null;
               return {
                 file: targetFile,
                 line: parseInt(lineColMatch[1], 10),
@@ -2398,7 +2402,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 hash: lineColMatch[3] || null
               };
             }
-            const targetFile = currentFile || 'src/pages/index.astro';
+            const targetFile = currentFile || null;
             const selectorStr = typeof source === 'string' && source.startsWith('__glide_cst_')
               ? source.slice('__glide_cst_'.length)
               : source;
@@ -2417,7 +2421,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
               // Omit hash — DOM data-gl-source is stamped as "file:line:col" only
-              return file + ':' + line + ':' + col;
+              return (file ? file + ':' : '') + line + ':' + col;
             }
             return nodeId;
           }
@@ -3595,7 +3599,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               }
               // Also try AST path if we have a file source
               const parsed = parseSource(data.source);
-              if (parsed && socket && socket.readyState === WebSocket.OPEN) {
+              if (parsed && parsed.file && !parsed.cstSelector && socket && socket.readyState === WebSocket.OPEN) {
                 currentFile = parsed.file;
                 socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
               }
@@ -3912,12 +3916,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
           });
 
+          let lastRequestedTreeFile = null;
+
           function updateLayersPanel(data) {
             if (!data.source) return;
-            // Only request get-tree if layerTree is completely empty
+            // Only request get-tree if layerTree is completely empty and file is valid non-CST
             if ((!layerTree || layerTree.length === 0) && socket && socket.readyState === WebSocket.OPEN) {
               const parsed = parseSource(data.source);
-              if (parsed && parsed.file) {
+              if (parsed && parsed.file && !parsed.cstSelector && parsed.file !== lastRequestedTreeFile) {
+                lastRequestedTreeFile = parsed.file;
                 socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
               }
             }
@@ -5850,7 +5857,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           function showToast(type, text) {
             const container = document.getElementById('toast-container');
-            if (!container) return;
+            if (!container || !text) return;
+
+            // Deduplicate active toasts with identical text
+            const activeToasts = container.querySelectorAll('.toast');
+            for (let i = 0; i < activeToasts.length; i++) {
+              if (activeToasts[i].textContent && activeToasts[i].textContent.includes(text)) {
+                return;
+              }
+            }
             
             const toast = document.createElement('div');
             toast.className = 'toast ' + type;
