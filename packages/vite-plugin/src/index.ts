@@ -185,13 +185,54 @@ export function buildBridgeScript(
     }, '*');
   }
 
+  // ── DOM tree serializer ─────────────────────────────────────────────────
+  // Builds a lightweight node tree from live DOM for the Layers panel.
+  // Skips script/style/noscript/template and Glide-injected nodes.
+  var SKIP_TAGS = { SCRIPT:1, STYLE:1, NOSCRIPT:1, TEMPLATE:1, META:1, LINK:1, TITLE:1 };
+  var MAX_DEPTH = 12;
+  function serializeDOMNode(el, depth) {
+    if (!el || el.nodeType !== 1) return null;
+    if (SKIP_TAGS[el.tagName]) return null;
+    if (el.hasAttribute('data-glide-bridge')) return null;
+    if (el.id === '__glide_styles__') return null;
+    var id = getElId(el);
+    var tag = el.tagName.toLowerCase();
+    var cls = (el.className && typeof el.className === 'string') ? el.className.replace(/\s*(__glide\S*)\s*/g,'').trim() : '';
+    // Gather direct text content (leaf only)
+    var text = '';
+    if (!el.children || el.children.length === 0) {
+      el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
+      text = text.trim().slice(0, 40);
+    }
+    var children = [];
+    if (depth < MAX_DEPTH && el.children) {
+      for (var i = 0; i < el.children.length; i++) {
+        var child = serializeDOMNode(el.children[i], depth + 1);
+        if (child) children.push(child);
+      }
+    }
+    return { id: id, name: tag, className: cls, text: text || undefined, children: children };
+  }
+
+  function sendDOMTree() {
+    var body = document.body;
+    if (!body) return;
+    var tree = [];
+    for (var i = 0; i < body.children.length; i++) {
+      var node = serializeDOMNode(body.children[i], 0);
+      if (node) tree.push(node);
+    }
+    window.parent.postMessage({ type: 'glide:dom-tree', tree: tree }, '*');
+  }
+
   function sendReadyState() {
     if (readyStateSent) return;
     // Try sourceAttr element first; fall back to any visible element in body
     var el = document.querySelector('[${sourceAttr}]') || (document.body && document.body.firstElementChild);
     if (el) {
-      var src = el.getAttribute && el.getAttribute('${sourceAttr}') || getElId(el);
+      var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) || getElId(el);
       window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
+      sendDOMTree();
       readyStateSent = true;
       if (readyInterval) { clearInterval(readyInterval); readyInterval = null; }
     }
@@ -231,7 +272,7 @@ export function buildBridgeScript(
   };
 
   function sendMsg(type, el, isShift) {
-    var src = el.getAttribute('${sourceAttr}') || '';
+    var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) || getElId(el);
     var r = el.getBoundingClientRect();
     
     // Extract computed styles
@@ -1379,8 +1420,42 @@ export function buildBridgeScript(
         window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
       }
     }
+    if (e.data.type === 'glide:request-dom-tree') {
+      sendDOMTree();
+    }
+
+    function resolveElementById(targetId) {
+      if (!targetId) return null;
+      var pcst = '__glide_cst_';
+      if (targetId.indexOf(pcst) === 0) {
+        try { return document.querySelector(targetId.slice(pcst.length)); } catch(err) {}
+      }
+      // 1. Exact data-gl-source match
+      try {
+        var exact = document.querySelector('[${sourceAttr}="' + targetId.replace(/"/g, '\\"') + '"]');
+        if (exact) return exact;
+      } catch(err) {}
+      // 2. Normalized path match (casing, backslashes vs forward slashes)
+      var normTarget = targetId.replace(/\\\\/g, '/').toLowerCase();
+      var allStamped = document.querySelectorAll('[${sourceAttr}]');
+      for (var i = 0; i < allStamped.length; i++) {
+        var s = (allStamped[i].getAttribute('${sourceAttr}') || '').replace(/\\\\/g, '/').toLowerCase();
+        if (s === normTarget) return allStamped[i];
+      }
+      // 3. Line:col suffix match
+      var lineColMatch = targetId.match(/:(\d+:\d+)$/);
+      var suffix = lineColMatch ? lineColMatch[0] : (targetId.match(/^\d+:\d+$/) ? ':' + targetId : null);
+      if (suffix) {
+        for (var j = 0; j < allStamped.length; j++) {
+          var srcAttr = (allStamped[j].getAttribute('${sourceAttr}') || '').replace(/\\\\/g, '/');
+          if (srcAttr.endsWith(suffix)) return allStamped[j];
+        }
+      }
+      return null;
+    }
+
     if (e.data.type === 'glide:select-element-by-id') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
+      var el = resolveElementById(e.data.id);
       var isShift = e.data.isShift;
       if (el) {
         if (!isShift) {
@@ -1402,7 +1477,7 @@ export function buildBridgeScript(
       }
     }
     if (e.data.type === 'glide:hover-element-by-id') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
+      var el = resolveElementById(e.data.id);
       if (el) {
         if (hovered && hovered !== el) {
           hovered.removeAttribute('${hoverAttr}');
