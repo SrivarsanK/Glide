@@ -2016,6 +2016,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               dot.classList.remove('error');
               statusEl.textContent = 'Connected to Glide server';
               setTimeout(() => { statusEl.textContent = 'Ready'; }, 2000);
+              if (!layerTree || layerTree.length === 0) {
+                socket.send(JSON.stringify({ type: 'get-tree' }));
+              }
             });
 
             socket.addEventListener('close', () => {
@@ -2363,9 +2366,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               queue.forEach(item => {
                 const parsed = parseSource(item.source);
                 if (!parsed) return;
+                const targetFile = parsed.file || currentFile;
                 socket.send(JSON.stringify({
                   type: 'edit',
-                  file: parsed.file,
+                  file: targetFile,
                   line: parsed.line,
                   column: parsed.column,
                   hash: parsed.hash,
@@ -2421,7 +2425,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const line = parseInt(match[1], 10);
               const col = parseInt(match[2], 10) + 1;
               // Omit hash — DOM data-gl-source is stamped as "file:line:col" only
-              return (file ? file + ':' : '') + line + ':' + col;
+              return (file ? file.replace(/\\/g, '/') + ':' : '') + line + ':' + col;
             }
             return nodeId;
           }
@@ -3058,9 +3062,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 if (sizeChanged && socket && socket.readyState === WebSocket.OPEN) {
                   const resizeParsed = parseSource(selectedElement.source);
                   if (resizeParsed) {
+                    const targetFile = resizeParsed.file || currentFile;
                     socket.send(JSON.stringify({
                       type: 'edit',
-                      file: resizeParsed.file,
+                      file: targetFile,
                       line: resizeParsed.line,
                       column: resizeParsed.column,
                       hash: resizeParsed.hash,
@@ -3695,23 +3700,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               if (loadingEl) loadingEl.style.display = 'none';
 
               if (!data.tree || !Array.isArray(data.tree)) return;
-              // Convert bridge DOM nodes into layerTree format.
-              // node.id already is a CST id (__glide_cst_...) usable as data-source.
-              // currentFile = null in CST mode; convertNodeIdToSource returns id as-is.
-              currentFile = null;
-              layerTree = data.tree;
-              // Auto-expand all nodes recursively
-              if (expandedNodeIds.size === 0 && layerTree.length > 0) {
-                function expandAllCST(nodes) {
-                  if (!nodes || !Array.isArray(nodes)) return;
-                  nodes.forEach(function(n) {
-                    expandedNodeIds.add(n.id);
-                    if (n.children && n.children.length > 0) expandAllCST(n.children);
-                  });
+              // Only adopt DOM tree if layerTree is currently empty
+              if (!layerTree || layerTree.length === 0) {
+                layerTree = data.tree;
+                if (expandedNodeIds.size === 0 && layerTree.length > 0) {
+                  function expandAllCST(nodes) {
+                    if (!nodes || !Array.isArray(nodes)) return;
+                    nodes.forEach(function(n) {
+                      expandedNodeIds.add(n.id);
+                      if (n.children && n.children.length > 0) expandAllCST(n.children);
+                    });
+                  }
+                  expandAllCST(layerTree);
                 }
-                expandAllCST(layerTree);
+                renderLayersTree(layerTree);
               }
-              renderLayersTree(layerTree);
               autoFitIframeHeight();
               // Sync iframe with current snap settings
               const ifrDOM = document.getElementById('app-iframe');
@@ -3759,6 +3762,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const source = data.source;
                 const rect = data.rect;
                 
+                if (source) {
+                  const parsed = parseSource(source);
+                  if (parsed && parsed.file && !parsed.cstSelector) {
+                    currentFile = parsed.file;
+                  }
+                }
+
                 if (!isShift) {
                   selectedSources = [source];
                   selectedRects = [rect];
@@ -3920,19 +3930,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           function updateLayersPanel(data) {
             if (!data.source) return;
+            const parsed = parseSource(data.source);
+            if (parsed && parsed.file && !parsed.cstSelector) {
+              currentFile = parsed.file;
+            }
             // Only request get-tree if layerTree is completely empty and file is valid non-CST
             if ((!layerTree || layerTree.length === 0) && socket && socket.readyState === WebSocket.OPEN) {
-              const parsed = parseSource(data.source);
               if (parsed && parsed.file && !parsed.cstSelector && parsed.file !== lastRequestedTreeFile) {
                 lastRequestedTreeFile = parsed.file;
                 socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
               }
             }
             // Highlight active layer node in current tree
+            const targetSrc = data.source;
+            const targetNorm = targetSrc.replace(/\\/g, '/').toLowerCase();
+            const targetSuffix = (targetSrc.match(/:(\d+:\d+)$/) || [])[0] || '';
             document.querySelectorAll('.layer-item').forEach(item => {
-              if (item.dataset.source === data.source || item.dataset.nodeSource === data.source) {
+              const itemSrc = item.dataset.source || item.dataset.nodeSource || '';
+              const itemNorm = itemSrc.replace(/\\/g, '/').toLowerCase();
+              const itemSuffix = (itemSrc.match(/:(\d+:\d+)$/) || [])[0] || '';
+              const matches = (itemSrc === targetSrc) || 
+                              (itemNorm && itemNorm === targetNorm) ||
+                              (targetSuffix && itemSuffix && targetSuffix === itemSuffix);
+              if (matches) {
                 item.classList.add('active');
-              } else if (!selectedSources.includes(item.dataset.source)) {
+                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              } else if (!selectedSources.includes(itemSrc)) {
                 item.classList.remove('active');
               }
             });
@@ -5354,9 +5377,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
+            const targetFile = parsed.file || currentFile;
             socket.send(JSON.stringify({
               type: 'edit',
-              file: parsed.file,
+              file: targetFile,
               line: parsed.line,
               column: parsed.column,
               viewportWidth: iframeWidth.current,
@@ -5564,9 +5588,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               if (!socket || socket.readyState !== WebSocket.OPEN) return;
               const parsed = parseSource(capturedSource);
               if (!parsed) return;
+              const targetFile = parsed.file || currentFile;
               socket.send(JSON.stringify({
                 type: 'edit',
-                file: parsed.file,
+                file: targetFile,
                 line: parsed.line,
                 column: parsed.column,
                 hash: parsed.hash,
@@ -5585,9 +5610,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
+            const targetFile = parsed.file || currentFile;
             socket.send(JSON.stringify({
               type: 'edit',
-              file: parsed.file,
+              file: targetFile,
               line: parsed.line,
               column: parsed.column,
               hash: parsed.hash,
@@ -5601,11 +5627,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
+            const targetFile = parsed.file || currentFile;
             // Sends 'position' type — server writes to glide-positions.json, NOT App.tsx.
             // The Vite plugin injects CSS overrides via HMR event — zero flicker, zero reload.
             socket.send(JSON.stringify({
               type: 'edit',
-              file: parsed.file,
+              file: targetFile,
               line: parsed.line,
               column: parsed.column,
               hash: parsed.hash,
@@ -5619,9 +5646,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(selectedElement.source);
             if (!parsed) return;
+            const targetFile = parsed.file || currentFile;
             socket.send(JSON.stringify({
               type: 'edit',
-              file: parsed.file,
+              file: targetFile,
               line: parsed.line,
               column: parsed.column,
               hash: parsed.hash,
