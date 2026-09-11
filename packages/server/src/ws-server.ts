@@ -35,6 +35,43 @@ function isSafeFilePath(targetPath: string, rootDir?: string): boolean {
   return true;
 }
 
+function findProjectEntryFile(projectDir: string): string | null {
+  try {
+    const regPath = path.join(projectDir, 'glide-components.json');
+    if (fs.existsSync(regPath)) {
+      const reg = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
+      if (reg && reg.buckets && reg.buckets.length > 0 && reg.buckets[0].file) {
+        if (fs.existsSync(reg.buckets[0].file)) {
+          return reg.buckets[0].file;
+        }
+      }
+    }
+  } catch {}
+
+  const candidates = [
+    'src/App.tsx',
+    'src/App.jsx',
+    'src/App.vue',
+    'src/App.svelte',
+    'src/routes/+page.svelte',
+    'src/pages/index.astro',
+    'src/main.tsx',
+    'src/main.jsx',
+    'src/index.tsx',
+    'src/index.jsx',
+    'index.html'
+  ];
+
+  for (const rel of candidates) {
+    const full = path.resolve(projectDir, rel);
+    if (fs.existsSync(full)) {
+      return full;
+    }
+  }
+
+  return null;
+}
+
 // ── Glide Bridge Script (injected into proxied HTML) ──────────────────────
 // Self-contained IIFE with full CST detection. Injected into user's app HTML
 // by the proxy route so no Vite plugin install is required.
@@ -633,12 +670,35 @@ export class GlideServer {
           ws.on('error', (err) => {
             console.error('[Glide WS] Client connection error:', err);
           });
+
+          // Proactively send entry component tree on client connection
+          try {
+            const entryFile = findProjectEntryFile(process.cwd());
+            if (entryFile && fs.existsSync(entryFile)) {
+              try { activeProjectGitRoot = findGitRoot(entryFile); } catch {}
+              const code = fs.readFileSync(entryFile, 'utf-8');
+              const tree = buildComponentTree(code, entryFile);
+              const normPath = normalizePathKey(entryFile);
+              ws.send(JSON.stringify({
+                type: 'tree',
+                file: entryFile,
+                tree,
+                generation: this.fileGenerations.get(normPath) || 0
+              }));
+            }
+          } catch (err) {
+            console.warn('[Glide WS] Failed to send initial component tree:', err);
+          }
+
           ws.on('message', async (data: string) => {
             try {
               const message = JSON.parse(data);
 
               if (message.type === 'get-tree') {
-                const { file } = message;
+                const requestedFile = message.file;
+                const file = (requestedFile && isSafeFilePath(requestedFile) && fs.existsSync(requestedFile))
+                  ? requestedFile
+                  : findProjectEntryFile(process.cwd());
                 if (file && isSafeFilePath(file) && fs.existsSync(file)) {
                   // Track the user's project git root for git commands
                   try { activeProjectGitRoot = findGitRoot(file); } catch {}
@@ -654,9 +714,9 @@ export class GlideServer {
                 } else {
                   ws.send(JSON.stringify({
                     type: 'tree',
-                    file,
+                    file: requestedFile || null,
                     tree: null,
-                    error: `Invalid or unaccessible file: ${file}`
+                    error: `Invalid or unaccessible file: ${requestedFile}`
                   }));
                 }
                 return;
@@ -1068,7 +1128,10 @@ export class GlideServer {
                 let successCount = 0;
 
                 for (const item of edits) {
-                  const { file, line, column, change, hash } = item;
+                  let { file, line, column, change, hash } = item;
+                  if (!file) {
+                    file = findProjectEntryFile(process.cwd());
+                  }
                   if (!file || !isSafeFilePath(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
                     continue;
                   }
@@ -1101,7 +1164,10 @@ export class GlideServer {
               }
 
               if (message.type === 'edit') {
-                const { file, line, column, change, hash, generation } = message as any;
+                let { file, line, column, change, hash, generation } = message as any;
+                if (!file) {
+                  file = findProjectEntryFile(process.cwd());
+                }
                 console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
 
                 // Validate parameters
