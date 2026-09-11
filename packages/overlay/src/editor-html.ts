@@ -897,6 +897,91 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             to { transform: translateY(0); opacity: 1; }
           }
 
+          /* ── STAGED EDITS ACTION BAR ── */
+          .staging-bar {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(18, 24, 38, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 9999px;
+            box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            display: none;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 14px;
+            z-index: 1000;
+            font-family: inherit;
+            animation: stagingBarSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          }
+          @keyframes stagingBarSlideUp {
+            from { opacity: 0; transform: translate(-50%, 12px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+          }
+          .staging-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            letter-spacing: 0.2px;
+          }
+          .staging-badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 8px #38bdf8;
+          }
+          .staging-btn {
+            height: 28px;
+            padding: 0 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 9999px;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            user-select: none;
+          }
+          .staging-btn.secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+          }
+          .staging-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: #ffffff;
+          }
+          .staging-btn.danger {
+            background: rgba(244, 63, 94, 0.12);
+            color: #fb7185;
+            border: 1px solid rgba(244, 63, 94, 0.25);
+          }
+          .staging-btn.danger:hover {
+            background: rgba(244, 63, 94, 0.22);
+            color: #ffffff;
+          }
+          .staging-btn.primary {
+            background: #38bdf8;
+            color: #0f172a;
+            font-weight: 600;
+          }
+          .staging-btn.primary:hover {
+            background: #7dd3fc;
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+          }
+
           /* ── BRANCHING DIALOG ── */
           .modal-overlay {
             position: fixed;
@@ -1048,6 +1133,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               <button class="header-sidebar-btn" id="btn-branching-nav" title="Git Branching Mode">
                 <i data-lucide="git-branch" style="width: 14px; height: 14px;"></i>
               </button>
+              <button class="header-sidebar-btn active" id="btn-staged-mode-nav" title="Toggle Staged Edits Mode (Buffer before writing)">
+                <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+              </button>
             </div>
           </div>
 
@@ -1193,6 +1281,26 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   <!-- selection/hover drawn dynamically -->
                 </svg>
               </div>
+            </div>
+
+            <!-- STAGED EDITS ACTION BAR -->
+            <div id="staging-bar" class="staging-bar">
+              <span class="staging-badge">
+                <span class="staging-badge-dot"></span>
+                <span id="staging-count">0 changes staged</span>
+              </span>
+              <button id="staging-toggle-preview" class="staging-btn secondary" title="Toggle Before/After Visual Preview">
+                <i data-lucide="eye" style="width: 12px; height: 12px;"></i>
+                <span id="staging-preview-label">Before</span>
+              </button>
+              <button id="staging-discard-btn" class="staging-btn danger" title="Discard all staged changes">
+                <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                Discard
+              </button>
+              <button id="staging-apply-btn" class="staging-btn primary" title="Apply changes and commit to source code">
+                <i data-lucide="check" style="width: 12px; height: 12px;"></i>
+                Apply Changes
+              </button>
             </div>
 
             <!-- TOAST CONTAINER -->
@@ -2054,8 +2162,174 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           let _editTimer = null;
           let _pendingEdits = [];
 
+          // ── STAGED EDITS BUFFER STATE ──
+          let stagingModeActive = true;
+          const stagedEdits = new Map(); // sourceId -> Map<propKey, { change, parsed, timestamp }>
+          let previewState = 'after'; // 'after' = previewing staged, 'before' = previewing original
+
+          function previewStyleInIframe(sourceId, styles) {
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:preview-style',
+                sourceId: sourceId,
+                styles: styles
+              }, '*');
+            }
+          }
+
+          function clearPreviewInIframe(sourceId) {
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:clear-preview',
+                sourceId: sourceId || undefined
+              }, '*');
+            }
+          }
+
+          function getStagedCount() {
+            let count = 0;
+            stagedEdits.forEach(propMap => {
+              count += propMap.size;
+            });
+            return count;
+          }
+
+          function updateStagingBarUI() {
+            const bar = document.getElementById('staging-bar');
+            const countEl = document.getElementById('staging-count');
+            const previewLabel = document.getElementById('staging-preview-label');
+            if (!bar || !countEl || !previewLabel) return;
+
+            const count = getStagedCount();
+            if (count > 0 && stagingModeActive) {
+              bar.style.display = 'inline-flex';
+              countEl.textContent = `${count} change${count > 1 ? 's' : ''} staged`;
+              previewLabel.textContent = previewState === 'after' ? 'Before' : 'After';
+            } else {
+              bar.style.display = 'none';
+            }
+          }
+
+          function stageEdit(source, change) {
+            const parsed = parseSource(source);
+            if (!parsed) return;
+
+            if (!stagedEdits.has(source)) {
+              stagedEdits.set(source, new Map());
+            }
+            const propMap = stagedEdits.get(source);
+
+            if (change.type === 'class' && change.property) {
+              propMap.set(change.property, { change, parsed, timestamp: Date.now() });
+              previewStyleInIframe(source, { [change.property]: change.value });
+            } else if (change.type === 'multi-class' && typeof change.value === 'object') {
+              for (const [p, v] of Object.entries(change.value)) {
+                propMap.set(p, {
+                  change: { type: 'class', property: p, value: v },
+                  parsed,
+                  timestamp: Date.now()
+                });
+              }
+              previewStyleInIframe(source, change.value);
+            } else if (change.type === 'text') {
+              propMap.set('__text__', { change, parsed, timestamp: Date.now() });
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                  type: 'glide:optimistic-text',
+                  source: source,
+                  value: change.value
+                }, '*');
+              }
+            } else {
+              const key = change.property || change.type || 'style';
+              propMap.set(key, { change, parsed, timestamp: Date.now() });
+              if (change.property) {
+                previewStyleInIframe(source, { [change.property]: change.value });
+              }
+            }
+
+            previewState = 'after';
+            updateStagingBarUI();
+          }
+
+          function togglePreviewMode() {
+            if (previewState === 'after') {
+              previewState = 'before';
+              clearPreviewInIframe();
+            } else {
+              previewState = 'after';
+              stagedEdits.forEach((propMap, source) => {
+                const styles = {};
+                propMap.forEach((item) => {
+                  if (item.change.property) {
+                    styles[item.change.property] = item.change.value;
+                  }
+                });
+                if (Object.keys(styles).length > 0) {
+                  previewStyleInIframe(source, styles);
+                }
+              });
+            }
+            updateStagingBarUI();
+          }
+
+          function discardStagedEdits() {
+            clearPreviewInIframe();
+            stagedEdits.clear();
+            previewState = 'after';
+            updateStagingBarUI();
+            showToast('info', 'Discarded all staged changes');
+          }
+
+          function applyStagedEdits() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+              showToast('error', 'WebSocket not connected');
+              return;
+            }
+            const edits = [];
+            stagedEdits.forEach((propMap) => {
+              propMap.forEach((item) => {
+                edits.push({
+                  file: item.parsed.file,
+                  line: item.parsed.line,
+                  column: item.parsed.column,
+                  hash: item.parsed.hash,
+                  selector: item.parsed.cstSelector || null,
+                  generation: currentGeneration,
+                  viewportWidth: iframeWidth.current,
+                  change: item.change
+                });
+              });
+            });
+
+            if (edits.length === 0) return;
+
+            socket.send(JSON.stringify({
+              type: 'batch-edit',
+              batchId: `batch:${Date.now()}`,
+              edits: edits
+            }));
+
+            clearPreviewInIframe();
+            stagedEdits.clear();
+            previewState = 'after';
+            updateStagingBarUI();
+            showToast('success', `Applied ${edits.length} staged change${edits.length > 1 ? 's' : ''}`);
+          }
+
           function sendEdit(change) {
-            if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
+            if (!selectedElement) return;
+
+            // Intercept style & class edits when Staged Mode is enabled
+            if (stagingModeActive && change.type !== 'position' && change.type !== 'bake-position') {
+              stageEdit(selectedElement.source, change);
+              return;
+            }
+
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
             if (change.type === 'class' && change.property) {
@@ -5297,6 +5571,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           function sendMultiClassChange(source, styles) {
+            if (stagingModeActive) {
+              stageEdit(source, { type: 'multi-class', value: styles });
+              return;
+            }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
@@ -6034,6 +6312,31 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             });
           }
 
+          const btnStagedMode = document.getElementById('btn-staged-mode-nav');
+          if (btnStagedMode) {
+            btnStagedMode.addEventListener('click', () => {
+              stagingModeActive = !stagingModeActive;
+              btnStagedMode.classList.toggle('active', stagingModeActive);
+              updateStagingBarUI();
+              showToast('info', stagingModeActive ? 'Staged Mode enabled (Preview & Buffer)' : 'Live Mode enabled (Instant disk writes)');
+            });
+          }
+
+          const btnTogglePreview = document.getElementById('staging-toggle-preview');
+          if (btnTogglePreview) {
+            btnTogglePreview.addEventListener('click', togglePreviewMode);
+          }
+
+          const btnDiscardStaged = document.getElementById('staging-discard-btn');
+          if (btnDiscardStaged) {
+            btnDiscardStaged.addEventListener('click', discardStagedEdits);
+          }
+
+          const btnApplyStaged = document.getElementById('staging-apply-btn');
+          if (btnApplyStaged) {
+            btnApplyStaged.addEventListener('click', applyStagedEdits);
+          }
+
           connectSocket();
           // Load default url on start
           const defaultUrl = document.getElementById('app-url').value.trim();
@@ -6058,6 +6361,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
               'chevron-down': '<path d="m6 9 6 6 6-6"/>',
               'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+              'layers': '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+              'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+              'check': '<path d="M20 6 9 17l-5-5"/>',
               'plus': '<path d="M5 12h14M12 5v14"/>',
               'file': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
               'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
