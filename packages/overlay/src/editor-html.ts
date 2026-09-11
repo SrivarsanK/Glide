@@ -2205,7 +2205,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const count = getStagedCount();
             if (count > 0 && stagingModeActive) {
               bar.style.display = 'inline-flex';
-              countEl.textContent = `${count} change${count > 1 ? 's' : ''} staged`;
+              countEl.textContent = count + ' change' + (count > 1 ? 's' : '') + ' staged';
               previewLabel.textContent = previewState === 'after' ? 'Before' : 'After';
             } else {
               bar.style.display = 'none';
@@ -2309,7 +2309,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             socket.send(JSON.stringify({
               type: 'batch-edit',
-              batchId: `batch:${Date.now()}`,
+              batchId: 'batch:' + Date.now(),
               edits: edits
             }));
 
@@ -2317,7 +2317,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             stagedEdits.clear();
             previewState = 'after';
             updateStagingBarUI();
-            showToast('success', `Applied ${edits.length} staged change${edits.length > 1 ? 's' : ''}`);
+            showToast('success', 'Applied ' + edits.length + ' staged change' + (edits.length > 1 ? 's' : ''));
           }
 
           function sendEdit(change) {
