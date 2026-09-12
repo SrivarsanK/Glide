@@ -920,6 +920,66 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             to { transform: translateY(0); opacity: 1; }
           }
 
+          /* ── WRITEBACK MODE SEGMENTED TOGGLE (INSTANT vs STAGED) ── */
+          .writeback-mode-pill {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid var(--border-color);
+            border-radius: 9999px;
+            padding: 2px;
+            gap: 2px;
+            user-select: none;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+          }
+          .writeback-mode-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            line-height: 1.2;
+            white-space: nowrap;
+          }
+          .writeback-mode-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+          }
+          .writeback-mode-btn.active[data-mode="live"] {
+            background: rgba(16, 185, 129, 0.18);
+            color: #34d399;
+            font-weight: 600;
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+          }
+          .writeback-mode-btn.active[data-mode="staged"] {
+            background: rgba(56, 189, 248, 0.18);
+            color: #38bdf8;
+            font-weight: 600;
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+          }
+          .writeback-mode-btn .mode-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.5;
+            transition: all 0.15s ease;
+          }
+          .writeback-mode-btn.active .mode-dot {
+            opacity: 1;
+            box-shadow: 0 0 6px currentColor;
+          }
+
           /* ── STAGED EDITS ACTION BAR ── */
           .staging-bar {
             position: absolute;
@@ -1139,6 +1199,20 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
 
+            <!-- Writeback Mode Selector: Instant vs Staged -->
+            <div class="writeback-mode-pill" id="writeback-mode-pill" role="radiogroup" aria-label="Code Writeback Mode" title="Target Write Mode: Instant writes directly to disk, Staged buffers edits with Apply button">
+              <button type="button" class="writeback-mode-btn" id="mode-btn-live" data-mode="live" title="⚡ Instant Mode: visual edits write directly to source code on disk immediately">
+                <span class="mode-dot live"></span>
+                <span class="mode-label">⚡ Instant</span>
+              </button>
+              <button type="button" class="writeback-mode-btn active" id="mode-btn-staged" data-mode="staged" title="📦 Staged Mode: buffer edits in memory, click Apply to write">
+                <span class="mode-dot staged"></span>
+                <span class="mode-label">📦 Staged</span>
+              </button>
+            </div>
+
+            <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
+
             <!-- Snapping & Editor Controls in Navbar -->
             <div style="display: flex; align-items: center; gap: 4px;">
               <button class="header-sidebar-btn active" id="btn-snap-object-nav" title="Snap to Objects">
@@ -1155,9 +1229,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               </button>
               <button class="header-sidebar-btn" id="btn-branching-nav" title="Git Branching Mode">
                 <i data-lucide="git-branch" style="width: 14px; height: 14px;"></i>
-              </button>
-              <button class="header-sidebar-btn active" id="btn-staged-mode-nav" title="Toggle Staged Edits Mode (Buffer before writing)">
-                <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
               </button>
             </div>
           </div>
@@ -2194,8 +2265,46 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           // ── STAGED EDITS BUFFER STATE ──
           let stagingModeActive = true;
+          try {
+            const savedMode = localStorage.getItem('glide_writeback_mode');
+            if (savedMode === 'live') {
+              stagingModeActive = false;
+            } else if (savedMode === 'staged') {
+              stagingModeActive = true;
+            }
+          } catch(e) {}
           const stagedEdits = new Map(); // sourceId -> Map<propKey, { change, parsed, timestamp }>
           let previewState = 'after'; // 'after' = previewing staged, 'before' = previewing original
+
+          function syncWritebackModeUI() {
+            const btnLive = document.getElementById('mode-btn-live');
+            const btnStaged = document.getElementById('mode-btn-staged');
+            if (btnLive) btnLive.classList.toggle('active', !stagingModeActive);
+            if (btnStaged) btnStaged.classList.toggle('active', stagingModeActive);
+            const oldBtn = document.getElementById('btn-staged-mode-nav');
+            if (oldBtn) oldBtn.classList.toggle('active', stagingModeActive);
+            updateStagingBarUI();
+          }
+
+          function setWritebackMode(mode) {
+            if (mode === 'live') {
+              const count = getStagedCount();
+              stagingModeActive = false;
+              try { localStorage.setItem('glide_writeback_mode', 'live'); } catch(e) {}
+              syncWritebackModeUI();
+              if (count > 0) {
+                applyStagedEdits();
+                showToast('success', '⚡ Instant Mode active: applied ' + count + ' staged edit' + (count > 1 ? 's' : '') + ' directly to disk.');
+              } else {
+                showToast('info', '⚡ Instant Mode active: edits write directly to source code on disk immediately.');
+              }
+            } else {
+              stagingModeActive = true;
+              try { localStorage.setItem('glide_writeback_mode', 'staged'); } catch(e) {}
+              syncWritebackModeUI();
+              showToast('info', '📦 Staged Mode active: edits are buffered in memory. Click "Apply Changes" at bottom to commit to code.');
+            }
+          }
 
           function previewStyleInIframe(sourceId, styles) {
             const iframe = document.getElementById('app-iframe');
@@ -6492,15 +6601,24 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             });
           }
 
+          const btnModeLive = document.getElementById('mode-btn-live');
+          if (btnModeLive) {
+            btnModeLive.addEventListener('click', () => setWritebackMode('live'));
+          }
+
+          const btnModeStaged = document.getElementById('mode-btn-staged');
+          if (btnModeStaged) {
+            btnModeStaged.addEventListener('click', () => setWritebackMode('staged'));
+          }
+
           const btnStagedMode = document.getElementById('btn-staged-mode-nav');
           if (btnStagedMode) {
             btnStagedMode.addEventListener('click', () => {
-              stagingModeActive = !stagingModeActive;
-              btnStagedMode.classList.toggle('active', stagingModeActive);
-              updateStagingBarUI();
-              showToast('info', stagingModeActive ? 'Staged Mode enabled (Preview & Buffer)' : 'Live Mode enabled (Instant disk writes)');
+              setWritebackMode(stagingModeActive ? 'live' : 'staged');
             });
           }
+
+          syncWritebackModeUI();
 
           const btnTogglePreview = document.getElementById('staging-toggle-preview');
           if (btnTogglePreview) {

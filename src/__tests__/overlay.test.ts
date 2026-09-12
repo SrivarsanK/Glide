@@ -1,5 +1,6 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 import { GlideOverlay } from '../../packages/overlay/src/overlay.js';
+import { getEditorHTML } from '../../packages/overlay/src/editor-html.js';
 
 describe('GlideOverlay Canvas Layer', () => {
   let mockWindow: any;
@@ -111,5 +112,14 @@ describe('GlideOverlay Canvas Layer', () => {
 
     upHandler();
     expect((overlay as any).dragHandle).toBeNull();
+  });
+
+  test('should render writeback mode toggle pill with instant and staged options in getEditorHTML', () => {
+    const html = getEditorHTML();
+    expect(html).toContain('id="writeback-mode-pill"');
+    expect(html).toContain('id="mode-btn-live"');
+    expect(html).toContain('id="mode-btn-staged"');
+    expect(html).toContain('⚡ Instant');
+    expect(html).toContain('📦 Staged');
   });
 });
