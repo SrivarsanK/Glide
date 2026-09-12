@@ -76,4 +76,50 @@ describe('JSX Component Tree Parser', () => {
 
     expect(path).toEqual([]);
   });
+
+  test('should extract image attributes and label for img elements', () => {
+    const code = `
+      export function Banner() {
+        return (
+          <div data-gl-source="root">
+            <img src="/assets/hero-banner.png" alt="Hero Banner" data-gl-source="img-1" />
+            <img src="/images/avatar.jpg" data-gl-source="img-2" />
+          </div>
+        );
+      }
+    `;
+
+    const tree = buildComponentTree(code);
+    expect(tree).toHaveLength(1);
+    const images = tree[0].children;
+    expect(images).toHaveLength(2);
+    expect(images[0].name).toBe('img');
+    expect(images[0].alt).toBe('Hero Banner');
+    expect(images[0].src).toBe('/assets/hero-banner.png');
+    expect(images[0].imageLabel).toBe('Hero Banner');
+
+    expect(images[1].name).toBe('img');
+    expect(images[1].src).toBe('/images/avatar.jpg');
+    expect(images[1].imageLabel).toBe('avatar.jpg');
+  });
+
+  test('should preserve text on text elements in tree nodes', () => {
+    const code = `
+      export function CTA() {
+        return (
+          <button className="btn-primary" data-gl-source="btn-1">
+            <span>Start Free Trial</span>
+          </button>
+        );
+      }
+    `;
+
+    const tree = buildComponentTree(code);
+    expect(tree).toHaveLength(1);
+    const btn = tree[0];
+    expect(btn.name).toBe('button');
+    expect(btn.children).toHaveLength(1);
+    expect(btn.children[0].name).toBe('span');
+    expect(btn.children[0].text).toBe('Start Free Trial');
+  });
 });

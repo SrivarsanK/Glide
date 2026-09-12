@@ -197,13 +197,32 @@ export function buildBridgeScript(
     if (el.id === '__glide_styles__') return null;
     var id = getElId(el);
     var tag = el.tagName.toLowerCase();
-    var cls = (el.className && typeof el.className === 'string') ? el.className.replace(/\s*(__glide\S*)\s*/g,'').trim() : '';
-    // Gather direct text content (leaf only)
+    // Gather direct text content
     var text = '';
-    if (!el.children || el.children.length === 0) {
-      el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
-      text = text.trim().slice(0, 40);
+    el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
+    text = text.trim().replace(/\s+/g, ' ');
+    if (!text && (!el.children || el.children.length === 0)) {
+      text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
     }
+    if (text) text = text.slice(0, 60);
+
+    var alt = '';
+    var src = '';
+    var imageLabel = '';
+    if (tag === 'img') {
+      alt = el.getAttribute('alt') || '';
+      src = el.getAttribute('src') || '';
+      var imgName = '';
+      if (src) {
+        try {
+          var cleanSrc = src.split('?')[0].split('#')[0];
+          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf('\\'));
+          imgName = (lastSlash >= 0) ? cleanSrc.substring(lastSlash + 1) : cleanSrc;
+        } catch(e) {}
+      }
+      imageLabel = alt || imgName || 'Image';
+    }
+
     var children = [];
     if (depth < MAX_DEPTH && el.children) {
       for (var i = 0; i < el.children.length; i++) {
@@ -211,7 +230,16 @@ export function buildBridgeScript(
         if (child) children.push(child);
       }
     }
-    return { id: id, name: tag, className: cls, text: text || undefined, children: children };
+    return {
+      id: id,
+      name: tag,
+      className: cls,
+      text: text || undefined,
+      alt: alt || undefined,
+      src: src || undefined,
+      imageLabel: imageLabel || undefined,
+      children: children
+    };
   }
 
   function sendDOMTree() {
@@ -1252,9 +1280,13 @@ export function buildBridgeScript(
       });
     }
     if (e.data.type === 'glide:optimistic-text') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
+      var el = resolveElementById(e.data.source || e.data.id);
       if (el) {
-        el.textContent = e.data.value;
+        if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+          el.value = e.data.value;
+        } else {
+          el.textContent = e.data.value;
+        }
       }
     }
     if (e.data.type === 'glide:optimistic-style') {

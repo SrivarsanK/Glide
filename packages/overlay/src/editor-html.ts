@@ -364,9 +364,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
             white-space: nowrap;
             flex-shrink: 0;
-            max-width: 80px;
+            max-width: 95px;
             overflow: hidden;
             text-overflow: ellipsis;
+            padding: 0 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.03);
+          }
+          .layer-item.active .layer-tag {
+            color: rgba(255,255,255,0.7) !important;
+            background: rgba(0,0,0,0.2) !important;
+          }
+          .layer-inline-input {
+            background: #11141a;
+            border: 1px solid var(--accent-color, #3b82f6);
+            border-radius: 3px;
+            color: #ffffff;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 1px 5px;
+            height: 20px;
+            line-height: 20px;
+            width: 100%;
+            outline: none;
+            box-sizing: border-box;
+            box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+            margin: 0;
           }
           /* text content shown when hovering — italic amber */
           .layer-text {
@@ -2450,6 +2473,62 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             return search(tree, targetId);
           }
 
+          function sendLayerTextEdit(source, newText, node) {
+            if (!source) return;
+            const change = { type: 'text', value: newText };
+
+            // 1. Optimistic live update to canvas
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:optimistic-text',
+                source: source,
+                id: source,
+                value: newText
+              }, '*');
+            }
+
+            // 2. In-memory update of tree node
+            if (node) {
+              node.text = newText;
+            }
+
+            // 3. Staged Mode or Direct Mode
+            if (stagingModeActive) {
+              stageEdit(source, change);
+            } else {
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                const parsed = parseSource(source);
+                if (parsed) {
+                  const targetFile = parsed.file || currentFile;
+                  socket.send(JSON.stringify({
+                    type: 'edit',
+                    file: targetFile,
+                    line: parsed.line,
+                    column: parsed.column,
+                    hash: parsed.hash,
+                    selector: parsed.cstSelector || null,
+                    generation: currentGeneration,
+                    viewportWidth: iframeWidth.current,
+                    change: change
+                  }));
+                }
+              }
+            }
+
+            // 4. Select element in iframe so properties panel is in sync
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'glide:select-element-by-id',
+                id: source,
+                isShift: false
+              }, '*');
+            }
+
+            renderLayersTree(layerTree);
+            showToast('success', 'Updated text to "' + (newText.length > 25 ? newText.slice(0, 22) + '…' : newText) + '"');
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // DEVICE PREVIEW
           // ═══════════════════════════════════════════════════════════════
@@ -4157,19 +4236,41 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
               const iconSVG = getLayerIconSVG(node.name);
 
-              // Display: tagName as-is per FEATURES.md §18, first class as dim tag
-              let displayName = node.name;
-              let tagLabel = '';
-              if (isComponent) {
-                if (node.className) {
-                  const firstClass = node.className.split(' ').filter(Boolean)[0];
-                  if (firstClass) tagLabel = '.' + firstClass;
+              // Determine element category
+              const nodeNameLower = (node.name || '').toLowerCase();
+              const isImage = nodeNameLower === 'img' || nodeNameLower === 'image';
+              const textTags = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'a', 'label', 'strong', 'em', 'b', 'i', 'small', 'sub', 'sup', 'caption', 'li'];
+              const isTextTag = textTags.includes(nodeNameLower);
+              const hasText = typeof node.text === 'string' && node.text.trim().length > 0;
+              const isText = hasText || isTextTag;
+
+              let primaryLabel = '';
+              let secondaryType = '';
+
+              const firstClass = (node.className && typeof node.className === 'string')
+                ? node.className.split(' ').filter(Boolean)[0]
+                : '';
+              const classTag = firstClass ? '.' + firstClass : '';
+
+              if (isText && hasText) {
+                // Text element with text: Text first, then type + class
+                primaryLabel = node.text.trim();
+                secondaryType = node.name + classTag;
+              } else if (isImage) {
+                // Image element: image name/alt first, then 'img' + class
+                let imgName = node.imageLabel || node.alt || '';
+                if (!imgName && node.src) {
+                  try {
+                    const clean = node.src.split('?')[0].split('#')[0].split(String.fromCharCode(92)).join('/');
+                    imgName = clean.substring(clean.lastIndexOf('/') + 1);
+                  } catch (e) {}
                 }
+                primaryLabel = imgName || 'Image';
+                secondaryType = 'img' + classTag;
               } else {
-                if (node.className) {
-                  const firstClass = node.className.split(' ').filter(Boolean)[0];
-                  if (firstClass) tagLabel = '.' + firstClass;
-                }
+                // Generic / container / text element without text yet
+                primaryLabel = node.name;
+                secondaryType = classTag;
               }
 
               const isHidden = hiddenIds.has(node.id);
@@ -4192,15 +4293,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 ? '<i data-lucide="lock" style="width: 12px; height: 12px;"></i>'
                 : '<i data-lucide="unlock" style="width: 12px; height: 12px;"></i>';
 
+              // Edit icon SVG (pencil)
+              const editSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+
               item.innerHTML =
                 caretSVG +
                 '<span class="layer-icon-svg">' + iconSVG + '</span>' +
                 '<span class="layer-label">' +
-                  '<span class="layer-name layer-name-text">' + escapeHtml(displayName) + '</span>' +
-                  (tagLabel ? '<span class="layer-tag">' + escapeHtml(tagLabel) + '</span>' : '') +
-                  (node.text ? '<span class="layer-text">' + escapeHtml(node.text.slice(0, 20)) + (node.text.length > 20 ? '…' : '') + '</span>' : '') +
+                  '<span class="layer-name layer-name-text" title="' + escapeHtml(primaryLabel) + '">' + escapeHtml(primaryLabel) + '</span>' +
+                  (secondaryType ? '<span class="layer-tag" title="' + escapeHtml(secondaryType) + '">' + escapeHtml(secondaryType) + '</span>' : '') +
                 '</span>' +
                 '<div class="layer-actions">' +
+                  '<button class="layer-action-btn edit-btn" data-node-id="' + node.id + '" title="Edit text directly">' + editSVG + '</button>' +
                   '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + node.id + '" title="Toggle lock">' + lockSVG + '</button>' +
                   '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
@@ -4321,61 +4425,86 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 }
               });
 
-              // Double-click → inline edit
-              item.addEventListener('dblclick', (e) => {
-                if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
+              // Direct inline text editing from Layers tab
+              function startInlineTextEdit() {
+                if (item.querySelector('.layer-inline-input')) return;
+
                 const nameSpan = item.querySelector('.layer-name-text');
-                const original = node.name + (node.text ? ': ' + node.text : '');
+                const tagSpan = item.querySelector('.layer-tag');
+                if (!nameSpan) return;
+
+                const initialVal = (typeof node.text === 'string') ? node.text : (hasText ? primaryLabel : '');
+
                 const inp = document.createElement('input');
-                inp.value = node.text || node.name;
-                inp.style.cssText = 'background:var(--bg-base);border:1px solid var(--accent-color);color:var(--text-primary);padding:2px 4px;border-radius:3px;font-size:12px;font-family:inherit;outline:none;width:100%;';
+                inp.type = 'text';
+                inp.className = 'layer-inline-input';
+                inp.value = initialVal;
+                inp.setAttribute('spellcheck', 'false');
+
+                if (tagSpan) tagSpan.style.display = 'none';
                 nameSpan.innerHTML = '';
                 nameSpan.appendChild(inp);
+
                 inp.focus();
-                
-                // auto-select text
-                const len = inp.value.length;
-                inp.setSelectionRange(0, len);
+                inp.select();
 
-                inp.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                });
-
-                // Style validation during input
-                inp.addEventListener('input', () => {
-                  const newVal = inp.value.trim();
-                  if (newVal === '') {
-                    inp.style.border = '1px solid #ef4444';
-                    inp.style.boxShadow = '0 0 0 1px #ef4444';
-                  } else {
-                    inp.style.border = '1px solid var(--accent-color)';
-                    inp.style.boxShadow = 'none';
-                  }
-                });
+                let isCommitted = false;
 
                 const commit = () => {
-                  const newText = inp.value.trim();
-                  if (newText && newText !== (node.text || node.name) && node.text !== undefined) {
-                    if (socket && socket.readyState === WebSocket.OPEN) {
-                      socket.send(JSON.stringify({
-                        type: 'edit',
-                        file: currentFile,
-                        line: parseInt((nodeSource.match(/:([0-9]+):([0-9]+)$/) || [])[1] || '0', 10),
-                        column: parseInt((nodeSource.match(/:([0-9]+)$/) || [])[0].slice(1) || '0', 10),
-                        change: { type: 'text', value: newText }
-                      }));
-                    }
+                  if (isCommitted) return;
+                  isCommitted = true;
+                  const newText = inp.value;
+                  if (newText !== initialVal) {
+                    sendLayerTextEdit(nodeSource, newText, node);
+                  } else {
+                    renderLayersTree(layerTree);
                   }
+                };
+
+                const cancel = () => {
+                  if (isCommitted) return;
+                  isCommitted = true;
                   renderLayersTree(layerTree);
                 };
 
+                inp.addEventListener('click', (ev) => ev.stopPropagation());
+                inp.addEventListener('dblclick', (ev) => ev.stopPropagation());
+                inp.addEventListener('mousedown', (ev) => ev.stopPropagation());
+
                 inp.addEventListener('keydown', (ev) => {
-                  if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
-                  if (ev.key === 'Escape') { renderLayersTree(layerTree); }
-                  ev.stopPropagation();
+                  if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    commit();
+                  } else if (ev.key === 'Escape') {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    cancel();
+                  }
                 });
-                inp.addEventListener('blur', commit);
+
+                inp.addEventListener('blur', () => {
+                  commit();
+                });
+              }
+
+              // Double-click on item → inline edit
+              item.addEventListener('dblclick', (e) => {
+                if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret') || e.target.closest('.layer-inline-input')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                startInlineTextEdit();
               });
+
+              // Edit button click in actions
+              const editBtn = item.querySelector('.edit-btn');
+              if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  startInlineTextEdit();
+                });
+              }
 
               list.appendChild(item);
 

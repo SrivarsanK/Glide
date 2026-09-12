@@ -197,13 +197,32 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     if (el.id === '__glide_styles__') return null;
     var id = getElId(el);
     var tag = el.tagName.toLowerCase();
-    var cls = (el.className && typeof el.className === 'string') ? el.className.replace(/\s*(__glide\S*)\s*/g,'').trim() : '';
-    // Gather direct text content (leaf only)
+    // Gather direct text content
     var text = '';
-    if (!el.children || el.children.length === 0) {
-      el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
-      text = text.trim().slice(0, 40);
+    el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
+    text = text.trim().replace(/\s+/g, ' ');
+    if (!text && (!el.children || el.children.length === 0)) {
+      text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
     }
+    if (text) text = text.slice(0, 60);
+
+    var alt = '';
+    var src = '';
+    var imageLabel = '';
+    if (tag === 'img') {
+      alt = el.getAttribute('alt') || '';
+      src = el.getAttribute('src') || '';
+      var imgName = '';
+      if (src) {
+        try {
+          var cleanSrc = src.split('?')[0].split('#')[0];
+          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf('\\'));
+          imgName = (lastSlash >= 0) ? cleanSrc.substring(lastSlash + 1) : cleanSrc;
+        } catch(e) {}
+      }
+      imageLabel = alt || imgName || 'Image';
+    }
+
     var children = [];
     if (depth < MAX_DEPTH && el.children) {
       for (var i = 0; i < el.children.length; i++) {
@@ -211,7 +230,16 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
         if (child) children.push(child);
       }
     }
-    return { id: id, name: tag, className: cls, text: text || undefined, children: children };
+    return {
+      id: id,
+      name: tag,
+      className: cls,
+      text: text || undefined,
+      alt: alt || undefined,
+      src: src || undefined,
+      imageLabel: imageLabel || undefined,
+      children: children
+    };
   }
 
   function sendDOMTree() {
@@ -290,6 +318,23 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     if (e.data.type === 'glide:refresh-rects' || e.data.type === 'glide:refresh-selection') {
       if (selected) sendMsgForAny('glide:element-selected', selected);
       if (hovered) sendMsgForAny('glide:element-hovered', hovered);
+    }
+    if (e.data.type === 'glide:optimistic-text') {
+      var id = e.data.source || e.data.id;
+      var target = null;
+      var cstPrefix = '__glide_cst_';
+      if (id && id.startsWith(cstPrefix)) {
+        try { target = document.querySelector(id.slice(cstPrefix.length)); } catch(e2) {}
+      } else if (id) {
+        try { target = document.querySelector('[${sourceAttr}="' + id.replace(/"/g,'\\"') + '"]'); } catch(e2) {}
+      }
+      if (target) {
+        if (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'textarea') {
+          target.value = e.data.value;
+        } else {
+          target.textContent = e.data.value;
+        }
+      }
     }
     if (e.data.type === 'glide:preview-style') {
       var id = e.data.sourceId || e.data.id;

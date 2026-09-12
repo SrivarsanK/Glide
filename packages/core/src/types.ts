@@ -29,6 +29,9 @@ export interface ComponentTreeNode {
   name: string;
   className?: string;
   text?: string;
+  alt?: string;
+  src?: string;
+  imageLabel?: string;
   children: ComponentTreeNode[];
 }
 

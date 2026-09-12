@@ -102,12 +102,29 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
             text = text.substring(0, 22) + '...';
           }
 
+          let alt = '';
+          let src = '';
+          let imageLabel = '';
+          if (name.toLowerCase() === 'img') {
+            alt = node.attribs?.['alt'] || '';
+            src = node.attribs?.['src'] || '';
+            let fileName = '';
+            if (src) {
+              const clean = src.split('?')[0].split('#')[0];
+              fileName = clean.substring(Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\')) + 1);
+            }
+            imageLabel = alt || fileName || 'Image';
+          }
+
           const treeNode: import('./types.js').ComponentTreeNode = {
             id,
             name,
             children: convertNodes(node.children || []),
             ...(className ? { className } : {}),
-            ...(text ? { text } : {})
+            ...(text ? { text } : {}),
+            ...(alt ? { alt } : {}),
+            ...(src ? { src } : {}),
+            ...(imageLabel ? { imageLabel } : {})
           };
 
           result.push(treeNode);
@@ -214,12 +231,36 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
       text = text.substring(0, 22) + '...';
     }
 
+    let alt = '';
+    let src = '';
+    let imageLabel = '';
+    if (!isFragment && name.toLowerCase() === 'img') {
+      path.node.openingElement.attributes.forEach((attr: any) => {
+        if (attr.type === 'JSXAttribute') {
+          if (attr.name?.name === 'alt' && attr.value?.type === 'StringLiteral') {
+            alt = attr.value.value;
+          } else if (attr.name?.name === 'src' && attr.value?.type === 'StringLiteral') {
+            src = attr.value.value;
+          }
+        }
+      });
+      let fileName = '';
+      if (src) {
+        const clean = src.split('?')[0].split('#')[0];
+        fileName = clean.substring(Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\')) + 1);
+      }
+      imageLabel = alt || fileName || 'Image';
+    }
+
     const treeNode: import('./types.js').ComponentTreeNode = {
       id,
       name,
       children: [],
       ...(className ? { className } : {}),
       ...(text ? { text } : {}),
+      ...(alt ? { alt } : {}),
+      ...(src ? { src } : {}),
+      ...(imageLabel ? { imageLabel } : {})
     };
 
     nodeMap.set(path.node, treeNode);
