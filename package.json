@@ -2,17 +2,44 @@
   "name": "@srivarsank/glide",
   "version": "1.0.47",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
+  "license": "Apache-2.0",
+  "author": "Srivarsan Kannan <srivarsankannan@gmail.com> (https://github.com/SrivarsanK)",
+  "homepage": "https://github.com/SrivarsanK/Glide#readme",
+  "bugs": {
+    "url": "https://github.com/SrivarsanK/Glide/issues"
+  },
+  "keywords": [
+    "glide",
+    "visual-editor",
+    "code-native",
+    "react",
+    "vue",
+    "svelte",
+    "astro",
+    "vite",
+    "ast",
+    "cst",
+    "wysiwyg",
+    "design-mode",
+    "devtools"
+  ],
   "workspaces": [
     "packages/*",
     "packages/adapters/*"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SrivarsanK/Glide.git"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "files": [
     "dist"
@@ -81,7 +108,9 @@
     "js-yaml": "^4.2.0",
     "tar": "^7.5.16",
     "vite": "^6.4.2",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "smol-toml": "^1.8.0",
+    "brace-expansion": "^5.0.9"
   },
   "allowScripts": {
     "esbuild": true,
