@@ -434,3 +434,64 @@ export function arrangeJSXElement(
 
   return recastPrint(ast).code;
 }
+
+// ── parseJSXElements ──────────────────────────────────────────────────────────
+/**
+ * Walk a JSX/TSX source file and return the position record for every JSX
+ * opening element, in document order (depth-first).
+ *
+ * The `id` matches the format the babel-plugin stamps as `data-gl-source`:
+ *   `{absoluteFilePath}:{line}:{col}` where col is 1-indexed.
+ *
+ * This is the authoritative "what JSX nodes exist in this file" snapshot used
+ * by the server's bidirectional sync pass (Phase 2) to notify the overlay
+ * when external code edits change the element layout.
+ */
+export interface JSXElementRecord {
+  /** Same value as the data-gl-source attribute the babel-plugin injects. */
+  id: string;
+  /** Lower-cased JSX tag name (e.g. "div", "Button"). */
+  tag: string;
+  /** 1-indexed source line. */
+  line: number;
+  /** 1-indexed source column. */
+  col: number;
+}
+
+export function parseJSXElements(
+  source: string,
+  filePath: string,
+): JSXElementRecord[] {
+  const results: JSXElementRecord[] = [];
+
+  let ast: any;
+  try {
+    ast = recastParse(source, { parser: tsxParser });
+  } catch {
+    // Not a valid JSX/TSX file — return empty (caller handles gracefully)
+    return results;
+  }
+
+  traverse(ast, {
+    JSXOpeningElement(path: any) {
+      const loc = path.node.loc;
+      if (!loc) return;
+      const line = loc.start.line;
+      const col = loc.start.column + 1; // make 1-indexed to match babel-plugin
+      const normalizedFile = filePath.replace(/\\/g, '/');
+      const tag = (() => {
+        const name = path.node.name;
+        if (!name) return 'unknown';
+        if (name.type === 'JSXIdentifier') return name.name.toLowerCase();
+        if (name.type === 'JSXMemberExpression') {
+          return [name.object?.name, name.property?.name].filter(Boolean).join('.').toLowerCase();
+        }
+        return 'unknown';
+      })();
+      results.push({ id: `${normalizedFile}:${line}:${col}`, tag, line, col });
+    },
+  });
+
+  return results;
+}
+
