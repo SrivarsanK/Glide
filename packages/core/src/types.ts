@@ -130,6 +130,36 @@ export interface OpenFileMessage {
   line: number;
 }
 
+// ── Component Definition Resolution Types ──────────────────────────────
+
+export interface ComponentDefinition {
+  componentName: string;
+  file: string;
+  line: number;
+  column: number;
+  isLocal: boolean;
+  exportType?: 'default' | 'named' | 'local' | 'sfc' | 'anonymous' | 'html';
+}
+
+export interface ResolveComponentMessage {
+  type: 'resolve_component';
+  file?: string;
+  componentName: string;
+  openInEditor?: boolean;
+}
+
+export interface ResolvedComponentMessage {
+  type: 'resolved_component';
+  success: boolean;
+  componentName: string;
+  file?: string;
+  line?: number;
+  column?: number;
+  isLocal?: boolean;
+  opened?: boolean;
+  error?: string;
+}
+
 // ── Toast Types ────────────────────────────────────────────────────────
 
 export interface ToastMessage {

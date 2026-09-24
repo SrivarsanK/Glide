@@ -16,4 +16,6 @@ export { buildRegistry, watchRegistry, collectSourceFiles } from './component-re
 export type { ComponentRegistry, ComponentBucket, RegistryElement, RegistryOptions } from './component-registry.js';
 export { camelToKebab, kebabToCamel, parseInlineStyle, mergeInlineStyle } from './style-utils.js';
 export * from './staged-edits.js';
+export { resolveComponentDefinition } from './resolve.js';
+export type { ResolveComponentOptions } from './resolve.js';
 
