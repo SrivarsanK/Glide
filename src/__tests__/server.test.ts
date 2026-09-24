@@ -288,4 +288,114 @@ describe('GlideServer WebSocket Server', () => {
 
     client.close();
   });
+
+  test('should enforce property-level LWW conflict resolution on incoming edits', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    server.onEdit(() => {});
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    const targetFile = 'src/App.tsx';
+
+    // 1. Send first write with timestamp 2000
+    client.send(JSON.stringify({
+      type: 'edit',
+      file: targetFile,
+      line: 10,
+      column: 5,
+      timestamp: 2000,
+      change: {
+        type: 'style',
+        value: { width: '200px' }
+      }
+    }));
+
+    const resp1 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+    const res1 = JSON.parse(resp1);
+    expect(res1.success).toBe(true);
+    expect(res1.properties).toContain('width');
+
+    // 2. Send older write with timestamp 1500 to the same property -> should be rejected under LWW
+    client.send(JSON.stringify({
+      type: 'edit',
+      file: targetFile,
+      line: 10,
+      column: 5,
+      timestamp: 1500,
+      change: {
+        type: 'style',
+        value: { width: '150px' }
+      }
+    }));
+
+    const resp2 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+    const res2 = JSON.parse(resp2);
+    expect(res2.success).toBe(false);
+    expect(res2.error).toContain('STALE_PROPERTY_WRITE');
+
+    // 3. Send write to a DIFFERENT property on same node with timestamp 1500 -> should succeed (no conflict across properties!)
+    client.send(JSON.stringify({
+      type: 'edit',
+      file: targetFile,
+      line: 10,
+      column: 5,
+      timestamp: 1500,
+      change: {
+        type: 'style',
+        value: { backgroundColor: '#ff0000' }
+      }
+    }));
+
+    const resp3 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+    const res3 = JSON.parse(resp3);
+    expect(res3.success).toBe(true);
+    expect(res3.properties).toContain('backgroundColor');
+
+    client.close();
+  });
+
+  test('should handle GET_PENDING_OPS and ACK_OP messages', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    // Request pending ops stats
+    client.send(JSON.stringify({ type: 'GET_PENDING_OPS' }));
+    const resp1 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+    const res1 = JSON.parse(resp1);
+    expect(res1.type).toBe('PENDING_OPS');
+    expect(typeof res1.pendingCount).toBe('number');
+
+    // Enqueue a pending op directly on server queue and ack it via WS
+    const q = server.getDeltaQueue();
+    const opId = q.enqueuePending('node-test', 'opacity', 0.5);
+
+    client.send(JSON.stringify({
+      type: 'ACK_OP',
+      opId
+    }));
+
+    const resp2 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+    const res2 = JSON.parse(resp2);
+    expect(res2.type).toBe('ACK_OP_STATUS');
+    expect(res2.success).toBe(true);
+    expect(res2.opId).toBe(opId);
+
+    client.close();
+  });
 });
