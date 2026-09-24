@@ -208,4 +208,33 @@ describe('GlideServer WebSocket Server', () => {
 
     client.close();
   });
+
+  test('should handle reparent message and return status', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    const reparentPayload = {
+      type: 'reparent',
+      file: 'non-existent-file.tsx',
+      sourceId: 'elem-1',
+      newParentId: 'container-2',
+      newIndex: 0
+    };
+
+    client.send(JSON.stringify(reparentPayload));
+
+    const response = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+
+    const resObj = JSON.parse(response);
+    expect(resObj.type).toBe('status');
+    expect(resObj.success).toBe(false);
+    expect(resObj.error).toContain('File not found');
+
+    client.close();
+  });
 });

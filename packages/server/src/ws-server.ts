@@ -930,6 +930,65 @@ export class GlideServer {
                 return;
               }
 
+              if (message.type === 'reparent') {
+                let { file, sourceId, newParentId, newIndex, siblingId, position } = message;
+                if (!file) {
+                  file = findProjectEntryFile(process.cwd());
+                }
+                const targetFile = file && fs.existsSync(file)
+                  ? file
+                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+
+                if (targetFile && isSafeFilePath(targetFile)) {
+                  try {
+                    const code = fs.readFileSync(targetFile, 'utf-8');
+                    const updated = reorderJSXElement(
+                      code,
+                      sourceId,
+                      newParentId,
+                      siblingId || null,
+                      position || 'after',
+                      newIndex
+                    );
+                    this.recordSelfWrite(targetFile);
+                    fs.writeFileSync(targetFile, updated, 'utf-8');
+                    pushHistory({
+                      description: `Reparented element in ${path.basename(targetFile)}`,
+                      diffs: [{ file: path.resolve(targetFile), before: code, after: updated }]
+                    });
+                    ws.send(JSON.stringify({
+                      type: 'HISTORY_UPDATE',
+                      ...getHistoryState()
+                    }));
+                    const tree = buildComponentTree(updated, targetFile);
+                    ws.send(JSON.stringify({
+                      type: 'tree',
+                      file: targetFile,
+                      tree,
+                      generation: this.fileGenerations.get(normalizePathKey(targetFile)) || 0
+                    }));
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: true,
+                      action: 'reparent'
+                    }));
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'status',
+                      success: false,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    success: false,
+                    error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
               if (message.type === 'group') {
                 const { file, selectedIds } = message;
                 if (fs.existsSync(file)) {
