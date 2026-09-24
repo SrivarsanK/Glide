@@ -14,8 +14,7 @@
     "@srivarsank/babel-plugin": "^1.0.1"
   },
   "devDependencies": {
-    "typescript": "^5.4.2",
-    "vite": "^5.1.6"
+    "typescript": "^5.4.2"
   },
   "repository": {
     "type": "git",
