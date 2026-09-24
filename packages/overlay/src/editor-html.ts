@@ -1674,9 +1674,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           <!-- RIGHT SIDEBAR — PROPERTIES -->
           <div class="sidebar sidebar-right" id="glide-properties">
-            <div class="sidebar-header">
-              <span>Properties</span>
-              <span id="selected-tag" style="font-size:10px;color:var(--accent-color);font-weight:400;font-family:monospace"></span>
+            <div class="sidebar-header" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+                <span>Properties</span>
+                <span id="selected-tag" style="font-size:10px;color:var(--accent-color);font-weight:400;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+              </div>
+              <button id="btn-jump-definition" title="Jump to Component Definition" style="display: none; background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.4); color: #c4b5fd; font-size: 10px; border-radius: 4px; padding: 2px 6px; cursor: pointer; align-items: center; gap: 4px; white-space: nowrap;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>Jump</span>
+              </button>
             </div>
 
             <div id="no-selection-msg" style="display: flex; flex-direction: column; height: calc(100% - 37px); text-align: left; align-items: stretch; justify-content: flex-start; gap: 0; padding: 0;">
@@ -2476,6 +2482,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   } else {
                     console.error('[Glide] Git error:', message.error);
                     showToast('error', 'Git error: ' + message.error);
+                  }
+                } else if (message.type === 'resolved_component') {
+                  if (message.success && message.file) {
+                    const shortFile = message.file.split(/[\\/]/).pop();
+                    showToast('success', 'Resolved <' + message.componentName + '> in ' + shortFile + (message.line ? (':' + message.line) : ''));
+                    currentFile = message.file;
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({ type: 'get-tree', file: message.file }));
+                    }
+                  } else {
+                    showToast('error', message.error || ('Could not resolve component <' + message.componentName + '>'));
                   }
                 }
               } catch (e) {
@@ -4987,6 +5004,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
               // Edit icon SVG (pencil)
               const editSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+              const jumpSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+              const jumpActionHTML = isComponent
+                ? '<button class="layer-action-btn jump-btn" data-component-name="' + escapeHtml(node.name) + '" title="Jump to <' + escapeHtml(node.name) + '> definition">' + jumpSVG + '</button>'
+                : '';
 
               item.innerHTML =
                 caretSVG +
@@ -4996,10 +5017,29 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   (secondaryType ? '<span class="layer-tag" title="' + escapeHtml(secondaryType) + '">' + escapeHtml(secondaryType) + '</span>' : '') +
                 '</span>' +
                 '<div class="layer-actions">' +
+                  jumpActionHTML +
                   '<button class="layer-action-btn edit-btn" data-node-id="' + node.id + '" title="Edit text directly">' + editSVG + '</button>' +
                   '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + node.id + '" title="Toggle lock">' + lockSVG + '</button>' +
                   '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
+
+              if (isComponent) {
+                const jBtn = item.querySelector('.jump-btn');
+                if (jBtn) {
+                  jBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const cName = jBtn.dataset.componentName;
+                    if (cName && socket && socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({
+                        type: 'resolve_component',
+                        file: currentFile,
+                        componentName: cName,
+                        openInEditor: true
+                      }));
+                    }
+                  });
+                }
+              }
 
               // Caret click to toggle collapse/expand
               if (hasChildren) {
@@ -5347,6 +5387,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
+            const jumpBtn = document.getElementById('btn-jump-definition');
+            if (jumpBtn) jumpBtn.style.display = 'none';
           }
 
           function showPropsPanel(tagName) {
@@ -5354,6 +5396,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
             
+            const isComponent = tagName && /^[A-Z]/.test(tagName);
+            const jumpBtn = document.getElementById('btn-jump-definition');
+            if (jumpBtn) {
+              jumpBtn.style.display = isComponent ? 'inline-flex' : 'none';
+              if (isComponent) jumpBtn.dataset.component = tagName;
+            }
+
             const nameMap = {
               'div': 'Frame',
               'section': 'Frame',
@@ -6490,6 +6539,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           document.getElementById('btn-bake-position')?.addEventListener('click', bakePosition);
+          document.getElementById('btn-jump-definition')?.addEventListener('click', () => {
+            const btn = document.getElementById('btn-jump-definition');
+            const comp = btn?.dataset.component;
+            if (comp && socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: 'resolve_component',
+                file: currentFile,
+                componentName: comp,
+                openInEditor: true
+              }));
+            }
+          });
 
           function triggerCopy() {
             if (!selectedElement || !selectedElement.source) return;
