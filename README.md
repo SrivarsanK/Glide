@@ -10,6 +10,8 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@srivarsank/glide"><img src="https://img.shields.io/badge/npm-v1.0.47-blue.svg" alt="npm version"></a>
+  <a href="https://github.com/SrivarsanK/Glide/pkgs/npm/glide"><img src="https://img.shields.io/badge/GitHub%20Packages-v1.0.47-black?logo=github" alt="GitHub Packages"></a>
+  <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img src="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
   <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
@@ -49,47 +51,50 @@ flowchart LR
 
 ## Quick Start
 
-### Prerequisites
+### Installation & Execution
 
-- **Node.js** v18+
-- **npm** v8+
-- **GitHub Packages Registry Configuration**
+Glide is published to both the **public npm registry** and **GitHub Packages**.
 
-  Since this package is hosted on GitHub Packages under the `@srivarsank` scope, you need to configure npm to route requests to GitHub:
+#### Option A: Direct via Public npm (Recommended — Zero Config)
 
-  **Step 1** — Add to `.npmrc` in your project root (or `~/.npmrc` globally):
-  ```ini
-  @srivarsank:registry=https://npm.pkg.github.com
-  ```
-
-  **Step 2** — Authenticate with a GitHub Personal Access Token (PAT) with `read:packages` scope:
-  ```bash
-  npm login --registry=https://npm.pkg.github.com
-  # Username: your GitHub username
-  # Password: your GitHub PAT
-  ```
-
----
-
-### Method 1: Run via npx (Easiest)
-
-Once the registry is configured, point Glide at any running frontend project — no cloning needed.
+No `.npmrc` configuration or authentication required:
 
 ```bash
-# Terminal 1 — your app
+# Terminal 1 — your running frontend app
 npm run dev
 
-# Terminal 2 — Glide
+# Terminal 2 — start Glide targeting your app's port
 npx @srivarsank/glide 5173
 ```
 
+Or install as a local devDependency:
+```bash
+npm install -D @srivarsank/glide
+```
+
+#### Option B: Via GitHub Packages (`npm.pkg.github.com`)
+
+If your team consumes packages from GitHub Packages:
+
+1. Add the scope mapping to your project `.npmrc` (or `~/.npmrc`):
+   ```ini
+   @srivarsank:registry=https://npm.pkg.github.com
+   ```
+2. Authenticate using a GitHub Personal Access Token (PAT) with `read:packages` scope:
+   ```bash
+   npm login --registry=https://npm.pkg.github.com
+   ```
+3. Run via npx or install normally:
+   ```bash
+   npx @srivarsank/glide 5173
+   ```
+
 Then open **http://localhost:7777** in your browser.
 
-> Replace `5173` with whatever port your frontend app is using.
 
 ---
 
-### Method 2: Local Development & Source Build
+### Local Development & Source Build
 
 If you want to run Glide from source:
 
@@ -264,6 +269,16 @@ Once active, the agent follows this 6-step pattern for every component edit:
 | ⚡ **Vue / Svelte / Astro editing** | ✅ Fully Supported (class, style, and text writeback across all 5 frameworks) |
 | 🏷️ **Source Stamping** | By design (`data-gl-source` tagged automatically by Vite plugin) |
 | 📍 **Drag Positions** | By design (stored in `glide-positions.json` for zero-flicker live drag) |
+
+---
+
+## Contributing
+
+We welcome contributions of all kinds — bug fixes, performance improvements, framework adapters, and documentation!
+
+- Read our **[Contributing Guide](CONTRIBUTING.md)** for local architecture details, development commands, and pull request requirements.
+- Follow our conventional atomic commit guidelines.
+- Explore in-depth architectural notes and CST research in [`docs/research/`](docs/research/).
 
 ---
 

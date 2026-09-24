@@ -1,21 +1,18 @@
 # Contributing to Glide
 
-Welcome! Thank you for your interest in contributing to Glide. Setting up healthy guidelines helps ensure a smooth process for everyone.
-
-Please review this document before submitting your first pull request or opening an issue.
+Welcome! Thank you for your interest in contributing to **Glide**. This guide provides everything you need to set up your environment, understand our architecture, write tests, and submit your contributions smoothly.
 
 ---
 
 ## Table of Contents
 
 1. [Code of Conduct](#code-of-conduct)
-2. [How Can I Contribute?](#how-can-i-contribute)
-   - [Reporting Bugs](#reporting-bugs)
-   - [Suggesting Enhancements](#suggesting-enhancements)
-   - [Submitting Pull Requests](#submitting-pull-requests)
+2. [Architecture Overview](#architecture-overview)
 3. [Local Development Setup](#local-development-setup)
-4. [Pull Request Guidelines](#pull-request-guidelines)
-5. [Style Guide](#style-guide)
+4. [Available Scripts](#available-scripts)
+5. [Pull Request & Commit Discipline](#pull-request--commit-discipline)
+6. [Testing & Quality Standards](#testing--quality-standards)
+7. [Dual Registry Publishing (Maintainers)](#dual-registry-publishing-maintainers)
 
 ---
 
@@ -25,75 +22,144 @@ We expect all contributors to adhere to a respectful and inclusive environment. 
 
 ---
 
-## How Can I Contribute?
+## Architecture Overview
 
-### Reporting Bugs
+Glide is organized as an npm workspace monorepo where individual modular packages feed into the unified distribution bundle:
 
-If you find a bug, please open a GitHub Issue with the following details:
-* A clear, descriptive title.
-* Numbered steps to reproduce the issue.
-* Expected vs. actual behavior.
-* Environment details (Node.js version, OS, browser, target framework).
+```
+Glide/
+├── packages/
+│   ├── core/           # Core CST engine, Kd-Tree spatial index, snapping & guides
+│   ├── ast-writer/     # AST/CST transformers (Babel & Recast for JSX, Vue, Svelte, Astro)
+│   ├── overlay/        # In-browser editor chrome, selection canvas, inspector UI
+│   ├── server/         # WebSocket bridge between canvas and local filesystem
+│   ├── vite-plugin/    # Vite dev server plugin with hot module update coordination
+│   ├── babel-plugin/   # Source-location attribute injector (data-glide-id)
+│   ├── adapters/       # Framework adapters (React, Vue, Svelte runtime connectors)
+│   └── cli/            # Command-line executable (`glide <port>`)
+├── src/                # Root bundling & unified package entrypoints
+├── docs/               # Technical specs, architecture docs, and research notes
+│   └── research/       # Deep dives on CST parsing, DOM manipulation & Figma bridge
+└── scripts/            # Build and single-package bundler scripts
+```
 
-### Suggesting Enhancements
+### Core Invariants
 
-We welcome suggestions for new features! To request an enhancement:
-* Search existing issues to ensure it hasn't been suggested already.
-* Explain the problem Glide does not currently solve, and why your proposed feature is a good solution.
-
-### Submitting Pull Requests
-
-1. Fork the repository and create your branch from `main`.
-2. Follow the [Local Development Setup](#local-development-setup) to install dependencies and verify the build.
-3. Add tests for any new logic or bug fixes.
-4. Ensure all tests pass before submitting.
-5. Keep pull requests focused on a single logical change.
+1. **Source Code Integrity First**: AST transformations must be clean, minimal, and preserve developer formatting (indentation, line breaks, comment preservation).
+2. **Predictable Precision**: Canvas snapping and resizing must behave deterministically using Kd-Trees and smart guides.
+3. **Clean Chrome, Rich Canvas**: The editor frame is high-contrast and unobtrusive so the user's application stands out.
 
 ---
 
 ## Local Development Setup
 
-To get Glide running locally, follow these steps:
+### Prerequisites
 
-1. **Clone the repository:**
+- **Node.js**: `>=18.0.0`
+- **npm**: `>=8.0.0`
+- **Git**
+
+### Step-by-Step Setup
+
+1. **Fork and clone the repository:**
    ```bash
-   git clone https://github.com/YOUR-USERNAME/glide.git
-   cd glide
+   git clone https://github.com/YOUR-USERNAME/Glide.git
+   cd Glide
    ```
 
-2. **Install dependencies:**
+2. **Install all dependencies:**
    ```bash
    npm install
    ```
 
-3. **Build the compiler and server:**
+3. **Verify the type definitions and build:**
    ```bash
+   npm run typecheck
    npm run build
    ```
 
-4. **Run TypeScript compiler in watch mode (optional):**
-   ```bash
-   npm run dev
-   ```
-
-5. **Run the Vitest unit tests:**
+4. **Run the test suite:**
    ```bash
    npm test
    ```
 
 ---
 
-## Pull Request Guidelines
+## Available Scripts
 
-* **Testing:** All pull requests must pass the existing Vitest test suite (`npm test`). If you write new code, please add corresponding unit tests in `src/__tests__/`.
-* **Branch Naming:** Use descriptive branch names (e.g., `fix/snapping-offset` or `feat/layers-menu`).
-* **Commit Messages:** Write clear, concise commit messages. Prefer conventional commit formats (e.g., `feat(canvas): ...` or `fix(compiler): ...`).
-* **Documentation:** If you change user-facing behavior, please update the `README.md` or files inside the `docs/` directory accordingly.
+| Command | Description |
+| :--- | :--- |
+| `npm run build` | Builds unified distribution bundles in `dist/` with type definitions |
+| `npm run typecheck` | Runs `tsc --noEmit` across all workspace packages without emitting files |
+| `npm test` | Runs the full Vitest suite once (125+ tests) |
+| `npm run test:watch` | Launches Vitest in interactive watch mode for TDD |
+| `npm run dev` | Runs the single-package builder in development mode |
+| `npm run publish:npm` | Publishes package to standard npm (`registry.npmjs.org`) with public access |
+| `npm run publish:gpr` | Publishes package to GitHub Packages (`npm.pkg.github.com`) |
+| `npm run publish:all` | Sequentially publishes to both npm and GitHub Packages |
 
 ---
 
-## Style Guide
+## Pull Request & Commit Discipline
 
-* **TypeScript:** Write type-safe code using the strict configuration defined in `tsconfig.json`.
-* **ES Modules (ESM):** We use `"type": "module"`. When importing other local modules, always specify the file extension (e.g., `import { snapToGrid } from './snap.js';`).
-* **AST Preservation:** When editing AST transformers in `src/writer.ts` or framework helpers, prioritize preserving user code formatting (indentation, line breaks, comments).
+We practice strict **Atomic Commits** and **Conventional Commits**:
+
+### Commit Message Format
+
+```
+<type>(<scope>): <imperative summary under 72 chars>
+
+<optional body explaining WHY this change is necessary>
+```
+
+- **Types**: `feat` | `fix` | `refactor` | `perf` | `test` | `docs` | `style` | `build` | `ci` | `chore`
+- **Scopes**: e.g., `core`, `ast-writer`, `overlay`, `server`, `vite-plugin`, `adapters`, `cli`, `repo`
+- **Example**:
+  ```
+  feat(ast-writer): preserve multiline comments during JSX attribute update
+  ```
+
+### Pull Request Checklist
+
+Before submitting a PR:
+- [ ] Run `npm run typecheck` and ensure zero TypeScript errors.
+- [ ] Run `npm test` and ensure all tests pass.
+- [ ] Add unit tests in `src/__tests__/` or `packages/<pkg>/__tests__/` covering new behavior.
+- [ ] Ensure your PR focuses on a single logical change (atomic).
+
+---
+
+## Testing & Quality Standards
+
+- **Vitest**: Used as the test runner. Tests are colocated in `src/__tests__/` and package directories.
+- **Strict TypeScript**: Never use `any` unless interacting with dynamic AST node dictionaries where specifically isolated.
+- **No Format Pollution**: Do not mix formatting/whitespace changes with logic changes.
+
+---
+
+## Dual Registry Publishing (Maintainers)
+
+Glide is published to both **npm** (`registry.npmjs.org`) and **GitHub Packages** (`npm.pkg.github.com`) under `@srivarsank/glide`.
+
+### Automated Release via GitHub Actions
+
+When a new version tag (e.g. `v1.0.48`) is pushed or a GitHub Release is created:
+1. `.github/workflows/ci.yml` runs full validation (`typecheck`, `test`, `build`).
+2. `.github/workflows/publish.yml` automatically triggers parallel jobs:
+   - `publish-npm`: Publishes to public npm with provenance using `NPM_TOKEN`.
+   - `publish-github`: Publishes to GitHub Packages using the repository `GITHUB_TOKEN`.
+
+### Manual CLI Release
+
+Maintainers can publish manually if needed:
+
+```bash
+# Publish to public npm
+npm run publish:npm
+
+# Publish to GitHub Packages (requires GITHUB_TOKEN or auth in ~/.npmrc)
+npm run publish:gpr
+
+# Or publish to both registries in one command
+npm run publish:all
+```
