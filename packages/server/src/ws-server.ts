@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server, request as httpRequest } from 'http';
 import * as fs from 'fs';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement, parseJSXElements } from '@srivarsank/ast-writer';
@@ -984,6 +984,144 @@ export class GlideServer {
                     type: 'status',
                     success: false,
                     error: `File not found: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'resolve_component') {
+                let { file, componentName, openInEditor: shouldOpen } = message;
+                if (!componentName) {
+                  ws.send(JSON.stringify({
+                    type: 'resolved_component',
+                    success: false,
+                    componentName: '',
+                    error: 'componentName is required'
+                  }));
+                  return;
+                }
+                if (!file) {
+                  file = findProjectEntryFile(process.cwd());
+                }
+                const targetFile = file && fs.existsSync(file)
+                  ? file
+                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+
+                if (targetFile && isSafeFilePath(targetFile)) {
+                  try {
+                    const def = resolveComponentDefinition({
+                      filepath: targetFile,
+                      componentName,
+                      projectRoot: process.cwd()
+                    });
+
+                    if (def) {
+                      let opened = false;
+                      if (shouldOpen) {
+                        try {
+                          await execFileAsync('code', ['-g', `${def.file}:${def.line}:${def.column}`], { timeout: 3000 });
+                          opened = true;
+                        } catch {
+                          try {
+                            await execFileAsync('cursor', ['-g', `${def.file}:${def.line}:${def.column}`], { timeout: 3000 });
+                            opened = true;
+                          } catch {}
+                        }
+                      }
+
+                      ws.send(JSON.stringify({
+                        type: 'resolved_component',
+                        success: true,
+                        componentName,
+                        file: def.file,
+                        line: def.line,
+                        column: def.column,
+                        isLocal: def.isLocal,
+                        exportType: def.exportType,
+                        opened
+                      }));
+                    } else {
+                      ws.send(JSON.stringify({
+                        type: 'resolved_component',
+                        success: false,
+                        componentName,
+                        error: `Could not resolve definition for component <${componentName}>`
+                      }));
+                    }
+                  } catch (err: any) {
+                    ws.send(JSON.stringify({
+                      type: 'resolved_component',
+                      success: false,
+                      componentName,
+                      error: err.message
+                    }));
+                  }
+                } else {
+                  // Fallback without targetFile: try resolving in default src/App.tsx with process.cwd()
+                  try {
+                    const candidateEntry = findProjectEntryFile(process.cwd()) || path.join(process.cwd(), 'src', 'App.tsx');
+                    const def = resolveComponentDefinition({
+                      filepath: candidateEntry,
+                      componentName,
+                      projectRoot: process.cwd()
+                    });
+                    if (def) {
+                      ws.send(JSON.stringify({
+                        type: 'resolved_component',
+                        success: true,
+                        componentName,
+                        file: def.file,
+                        line: def.line,
+                        column: def.column,
+                        isLocal: def.isLocal,
+                        exportType: def.exportType,
+                        opened: false
+                      }));
+                      return;
+                    }
+                  } catch {}
+
+                  ws.send(JSON.stringify({
+                    type: 'resolved_component',
+                    success: false,
+                    componentName,
+                    error: `File not found or unsafe: ${file}`
+                  }));
+                }
+                return;
+              }
+
+              if (message.type === 'open_component') {
+                const { file, line, column } = message;
+                const targetFile = file && fs.existsSync(file)
+                  ? file
+                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+
+                if (targetFile && isSafeFilePath(targetFile)) {
+                  let opened = false;
+                  try {
+                    await execFileAsync('code', ['-g', `${targetFile}:${line || 1}:${column || 1}`], { timeout: 3000 });
+                    opened = true;
+                  } catch {
+                    try {
+                      await execFileAsync('cursor', ['-g', `${targetFile}:${line || 1}:${column || 1}`], { timeout: 3000 });
+                      opened = true;
+                    } catch {}
+                  }
+
+                  ws.send(JSON.stringify({
+                    type: 'open_component_status',
+                    success: true,
+                    file: targetFile,
+                    line: line || 1,
+                    column: column || 1,
+                    opened
+                  }));
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'open_component_status',
+                    success: false,
+                    error: `File not found or unsafe path: ${file}`
                   }));
                 }
                 return;
