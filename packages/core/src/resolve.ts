@@ -211,8 +211,8 @@ function findExportCoordinatesInFile(
   }
 
   return {
-    line: foundLoc ? foundLoc.line : 1,
-    column: foundLoc ? foundLoc.column : 0,
+    line: (foundLoc as any)?.line ?? 1,
+    column: (foundLoc as any)?.column ?? 0,
     exportType: resolvedExportType
   };
 }
