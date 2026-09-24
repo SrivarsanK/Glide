@@ -920,6 +920,65 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             border-color: #f87171;
           }
 
+          /* ── FLYING REACTIONS (Figma-style) ── */
+          .flying-reaction {
+            position: fixed;
+            pointer-events: none;
+            user-select: none;
+            font-size: 26px;
+            z-index: 100000;
+            will-change: transform, opacity;
+            animation: flyUpAndFade 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          }
+          @keyframes flyUpAndFade {
+            0% {
+              opacity: 1;
+              transform: translate(0, 0) scale(0.6) rotate(0deg);
+            }
+            30% {
+              opacity: 1;
+              transform: translate(var(--drift-x, 15px), -45px) scale(1.25) rotate(var(--rot, 10deg));
+            }
+            100% {
+              opacity: 0;
+              transform: translate(var(--drift-end-x, 25px), -150px) scale(0.9) rotate(var(--rot-end, -15deg));
+            }
+          }
+          .reaction-selector-bar {
+            position: absolute;
+            bottom: 68px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #181825;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 24px;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+            z-index: 1000;
+            animation: popIn 0.15s ease-out;
+          }
+          @keyframes popIn {
+            from { opacity: 0; transform: translateX(-50%) scale(0.85); }
+            to { opacity: 1; transform: translateX(-50%) scale(1); }
+          }
+          .reaction-btn {
+            background: transparent;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 50%;
+            transition: transform 0.15s, background 0.15s;
+            line-height: 1;
+          }
+          .reaction-btn:hover {
+            transform: scale(1.3);
+            background: rgba(255,255,255,0.1);
+          }
+
           /* ── STATUS BAR ── */
           .status-bar {
             height: 24px;
@@ -1593,6 +1652,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               <button class="tool-btn" id="tool-comment" data-tool="comment" title="Comment (C)">
                 <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
               </button>
+              <button class="tool-btn" id="tool-reaction" data-tool="reaction" title="Reactions (E)">
+                <i data-lucide="smile" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+
+            <!-- REACTION SELECTOR BAR -->
+            <div id="reaction-selector-bar" class="reaction-selector-bar" style="display: none;">
+              <button class="reaction-btn" data-emoji="👍" title="Thumbs Up (1)">👍</button>
+              <button class="reaction-btn" data-emoji="❤️" title="Heart (2)">❤️</button>
+              <button class="reaction-btn" data-emoji="🔥" title="Fire (3)">🔥</button>
+              <button class="reaction-btn" data-emoji="🎉" title="Party (4)">🎉</button>
+              <button class="reaction-btn" data-emoji="🚀" title="Rocket (5)">🚀</button>
+              <button class="reaction-btn" data-emoji="👀" title="Eyes (6)">👀</button>
+              <button class="reaction-btn" data-emoji="💡" title="Idea (7)">💡</button>
+              <button class="reaction-btn" data-emoji="💯" title="100 (8)">💯</button>
             </div>
           </div>
 
@@ -2093,7 +2167,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           <div class="status-dot" id="ws-dot"></div>
           <span id="ws-status">Connecting…</span>
           <span style="margin-left:auto;" id="cursor-pos"></span>
-          <span id="shortcut-hint" style="color:var(--text-secondary)">V=Select H=Hand F=Frame R=Rect O=Ellipse T=Text C=Comment</span>
+          <span id="shortcut-hint" style="color:var(--text-secondary)">V=Select H=Hand F=Frame R=Rect O=Ellipse T=Text C=Comment E=Reactions</span>
         </div>
 
         <!-- ── Custom Colour Picker Popup (replaces native OS dialog) ─────────── -->
@@ -3054,6 +3128,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           // TOOL SWITCHER
           // ═══════════════════════════════════════════════════════════════
           function setTool(name) {
+            if (name === 'reaction') {
+              toggleReactionSelector();
+              return;
+            }
             currentTool = name;
             document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
             const btn = document.querySelector('[data-tool="' + name + '"]');
@@ -3140,6 +3218,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
             if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
             if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
+            if (!ctrl && (key === 'e' || key === 'E')) { toggleReactionSelector(); return; }
+
+            // Number keys 1-8 for reaction picker
+            const reactionEmojis = ['👍', '❤️', '🔥', '🎉', '🚀', '👀', '💡', '💯'];
+            const numKey = parseInt(key, 10);
+            if (!ctrl && numKey >= 1 && numKey <= 8) {
+              const bar = document.getElementById('reaction-selector-bar');
+              if (bar && bar.style.display !== 'none') {
+                e.preventDefault();
+                triggerFlyingReaction(reactionEmojis[numKey - 1]);
+                return;
+              }
+            }
 
             // Escape = deselect
             if (key === 'Escape') {
@@ -6559,6 +6650,58 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               .replace(/'/g, '&#039;');
           }
 
+          // ── FLYING REACTIONS (Figma-style) ──
+          function toggleReactionSelector() {
+            const bar = document.getElementById('reaction-selector-bar');
+            if (!bar) return;
+            const isHidden = bar.style.display === 'none' || !bar.style.display;
+            bar.style.display = isHidden ? 'flex' : 'none';
+            if (isHidden) {
+              showToast('info', 'Choose a reaction or press 1-8');
+            }
+          }
+
+          function triggerFlyingReaction(emoji, x, y) {
+            const container = document.body;
+            let targetX = x;
+            let targetY = y;
+
+            if (targetX === undefined || targetY === undefined) {
+              if (selectedRect) {
+                targetX = selectedRect.left + selectedRect.width / 2;
+                targetY = selectedRect.top + selectedRect.height / 2;
+              } else {
+                targetX = window.innerWidth / 2;
+                targetY = window.innerHeight / 2;
+              }
+            }
+
+            const count = 4;
+            for (let i = 0; i < count; i++) {
+              setTimeout(() => {
+                const el = document.createElement('div');
+                el.className = 'flying-reaction';
+                el.textContent = emoji;
+                
+                const driftX = (Math.random() - 0.5) * 60;
+                const driftEndX = (Math.random() - 0.5) * 120;
+                const rot = (Math.random() - 0.5) * 30;
+                const rotEnd = (Math.random() - 0.5) * 60;
+
+                el.style.setProperty('--drift-x', driftX + 'px');
+                el.style.setProperty('--drift-end-x', driftEndX + 'px');
+                el.style.setProperty('--rot', rot + 'deg');
+                el.style.setProperty('--rot-end', rotEnd + 'deg');
+
+                el.style.left = (targetX + (Math.random() - 0.5) * 30) + 'px';
+                el.style.top = (targetY + (Math.random() - 0.5) * 20) + 'px';
+
+                container.appendChild(el);
+                el.addEventListener('animationend', () => el.remove());
+              }, i * 70);
+            }
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // INIT
           // ═══════════════════════════════════════════════════════════════
@@ -6645,6 +6788,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           // Initial render of saved comments
           renderComments();
+
+          // Reaction selector button listeners
+          document.querySelectorAll('.reaction-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const emoji = btn.getAttribute('data-emoji') || '🎉';
+              triggerFlyingReaction(emoji);
+            });
+          });
+
+          // Dismiss reaction selector on outside click
+          document.addEventListener('click', (e) => {
+            if (!e.target.closest('#reaction-selector-bar') && !e.target.closest('#tool-reaction')) {
+              const bar = document.getElementById('reaction-selector-bar');
+              if (bar) bar.style.display = 'none';
+            }
+          });
 
           const mGroup = document.getElementById('menu-group');
           if (mGroup) mGroup.addEventListener('click', triggerGroup);
@@ -6818,6 +6978,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             el.textContent = 'SAVED';
             document.body.appendChild(el);
             el.addEventListener('animationend', () => el.remove());
+            triggerFlyingReaction('⚡', window.innerWidth / 2, window.innerHeight - 80);
           }
 
           window.triggerUndo = function() {
