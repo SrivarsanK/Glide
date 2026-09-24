@@ -1,0 +1,29 @@
+{
+  "skill_name": "glide",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to change the primary button background color in my React app to dark blue using Glide. How should I locate the button and edit its Tailwind class without breaking existing classes?",
+      "expected_output": "Agent reads glide-components.json, finds the Button bucket, targets the button element ID, and applies surgical Tailwind token rewrite replacing bg-* utility with bg-blue-900 or bg-[#1e3a8a] while preserving other classes.",
+      "files": ["glide-components.json"]
+    },
+    {
+      "id": 2,
+      "prompt": "We have two cards rendered in App.tsx. I want to drag an element from the first card into the second card container. How does Glide handle this visual reparenting in the source code?",
+      "expected_output": "Agent explains that cross-parent canvas drop sends a reparent WebSocket message, invoking reorderJSXElement to detach the child from the source parent AST node and splice it into the target container's JSX children array.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Why doesn't Glide reload the page or iframe when I edit code in VS Code while Glide is running?",
+      "expected_output": "Agent explains bidirectional Code-to-Canvas sync: Chokidar watcher re-parses AST on file save, extracts JSX element coordinates, and broadcasts a scene_update WebSocket event that hot-patches the In-Memory SceneGraph directly without iframe reloads.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Two designers are adjusting properties on the same component simultaneously: one is changing width and one is changing background color. How does Glide prevent one write from clobbering the other?",
+      "expected_output": "Agent explains Glide's Property-Level Delta Queue and LWW conflict resolution: clocks and pending ops are tracked per (nodeId, propKey) composite key, so separate properties have independent logical timestamps and do not overwrite each other.",
+      "files": []
+    }
+  ]
+}

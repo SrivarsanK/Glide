@@ -66,11 +66,20 @@ describe('Glide AI Skill Installer', () => {
     expect(fs.existsSync(path.join(targetDir, 'glide-component-segregator', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(targetDir, 'glide-setup', 'SKILL.md'))).toBe(true);
 
+    // Verify bundled progressive disclosure references and scripts
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'architecture.md'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'framework-adapters.md'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'tailwind-rewriting.md'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'staged-edits.md'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'query-components.js'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'verify-setup.js'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'evals', 'evals.json'))).toBe(true);
+
     // Verify content of installed skill
     const content = fs.readFileSync(path.join(targetDir, 'glide', 'SKILL.md'), 'utf-8');
     expect(content).toContain('name: glide');
     expect(content).toContain('In-Memory SceneGraph');
-    expect(content).toContain('Property Delta Queue');
+    expect(content).toContain('Property-Level LWW Delta Queue');
   });
 
   it('should skip already installed skills unless force is true', () => {

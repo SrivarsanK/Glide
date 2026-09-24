@@ -84,7 +84,8 @@ export function installSkills(projectRoot: string, options: InstallOptions = {})
   const skillNames = ['glide', 'glide-component-segregator', 'glide-setup'];
 
   for (const skill of skillNames) {
-    const srcSkillFile = path.join(sourceDir, skill, 'SKILL.md');
+    const srcSkillDir = path.join(sourceDir, skill);
+    const srcSkillFile = path.join(srcSkillDir, 'SKILL.md');
     const destSkillDir = path.join(targetDir, skill);
     const destSkillFile = path.join(destSkillDir, 'SKILL.md');
 
@@ -99,7 +100,7 @@ export function installSkills(projectRoot: string, options: InstallOptions = {})
     }
 
     fs.mkdirSync(destSkillDir, { recursive: true });
-    fs.copyFileSync(srcSkillFile, destSkillFile);
+    fs.cpSync(srcSkillDir, destSkillDir, { recursive: true });
     installed.push(destSkillFile);
   }
 
