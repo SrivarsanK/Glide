@@ -175,4 +175,37 @@ describe('GlideServer WebSocket Server', () => {
 
     client.close();
   });
+
+  test('should broadcast messages including scene_update to connected clients', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    const receivedMessages: any[] = [];
+    client.on('message', (data) => {
+      receivedMessages.push(JSON.parse(data.toString()));
+    });
+
+    server.broadcast({
+      type: 'scene_update',
+      file: 'src/App.tsx',
+      elements: [
+        { id: 'src/App.tsx:10:5', tag: 'div', line: 10, col: 5 }
+      ],
+      generation: 2
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const updateMsg = receivedMessages.find((m) => m.type === 'scene_update');
+    expect(updateMsg).toBeDefined();
+    expect(updateMsg.file).toBe('src/App.tsx');
+    expect(updateMsg.elements.length).toBe(1);
+    expect(updateMsg.elements[0].id).toBe('src/App.tsx:10:5');
+    expect(updateMsg.generation).toBe(2);
+
+    client.close();
+  });
 });

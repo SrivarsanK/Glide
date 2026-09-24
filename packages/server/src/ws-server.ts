@@ -5,7 +5,7 @@ import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement } from '@srivarsank/ast-writer';
+import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement, parseJSXElements } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
@@ -675,6 +675,16 @@ export class GlideServer {
     this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
   }
 
+  public broadcast(msg: string | object) {
+    if (!this.wss || !this.wss.clients) return;
+    const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
+    for (const client of this.wss.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  }
+
   constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG) {
     this.port = port;
     this.targetPort = targetPort;
@@ -742,6 +752,36 @@ export class GlideServer {
           }
           this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
           console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
+
+          // Bidirectional sync: parse JSX elements on drift and broadcast scene_update to overlay
+          try {
+            if (fs.existsSync(filePath)) {
+              const ext = path.extname(filePath).toLowerCase();
+              if (['.tsx', '.jsx', '.js', '.ts'].includes(ext)) {
+                const code = fs.readFileSync(filePath, 'utf-8');
+                const elements = parseJSXElements(code, filePath);
+                this.broadcast({
+                  type: 'scene_update',
+                  file: filePath,
+                  elements,
+                  generation: this.fileGenerations.get(normPath) || 0
+                });
+
+                // Proactively update component tree if valid
+                try {
+                  const tree = buildComponentTree(code, filePath);
+                  this.broadcast({
+                    type: 'tree',
+                    file: filePath,
+                    tree,
+                    generation: this.fileGenerations.get(normPath) || 0
+                  });
+                } catch {}
+              }
+            }
+          } catch (err) {
+            console.warn('[Glide] Failed to parse JSX elements on external drift:', err);
+          }
         });
         this.watcher.on('error', (err: any) => {
           console.error('[Glide Watcher] Watcher error:', err);
