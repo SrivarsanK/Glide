@@ -1,0 +1,49 @@
+name: 🐛 Bug Report
+description: File a bug report to help improve Glide
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Run 'npx @srivarsank/glide 5173'
+        2. Click on component '...'
+        3. Edit property '...'
+        4. See error '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment Info
+      description: Node.js version, OS, browser, and framework (React / Vue / Svelte / Astro).
+      placeholder: "Node 20.x, Windows 11, Chrome 124, React 19 + Vite 6"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console / Terminal Logs
+      description: Please copy and paste any relevant terminal output or browser console errors.
+      render: shell

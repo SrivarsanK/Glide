@@ -129,4 +129,6 @@ skills-lock.json
 # Graphify & Scratch
 graphify-out/
 scratch/
+opencode.json
+.cursor/
 

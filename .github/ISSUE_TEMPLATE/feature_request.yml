@@ -1,0 +1,33 @@
+name: ✨ Feature Request
+description: Suggest an idea or enhancement for Glide
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new idea or feature!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: Is your feature request related to a problem or limitation? (e.g. "I'm always frustrated when...")
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like and how it should work visually or code-wise.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or workarounds you've considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any mockups, screenshots, or design system references here.
