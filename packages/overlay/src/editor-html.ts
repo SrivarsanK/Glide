@@ -3412,9 +3412,49 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           });
 
           // ═══════════════════════════════════════════════════════════════
-          // CANVAS HAND-PANNING
+          // ═══════════════════════════════════════════════════════════════
+          // CANVAS INTERACTIONS & SHAPE DRAWING
           // ═══════════════════════════════════════════════════════════════
           const canvasContainer = document.getElementById('canvas-container');
+
+          function handleShapeDrawStart(e) {
+            if (!['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) return;
+            if (e.button !== 0) return;
+            const fw = document.getElementById('frame-wrapper');
+            if (!fw) return;
+            const fwRect = fw.getBoundingClientRect();
+            const startX = Math.round((e.clientX - fwRect.left) / zoomLevel);
+            const startY = Math.round((e.clientY - fwRect.top) / zoomLevel);
+
+            isDrawingShape = true;
+            drawStart = { x: startX, y: startY };
+
+            const previewEl = document.getElementById('draw-preview');
+            if (previewEl) {
+              if (currentTool === 'rect') {
+                previewEl.style.border = '2px solid #38bdf8';
+                previewEl.style.background = 'rgba(56, 189, 248, 0.15)';
+                previewEl.style.borderRadius = '0px';
+              } else if (currentTool === 'ellipse') {
+                previewEl.style.border = '2px solid #a78bfa';
+                previewEl.style.background = 'rgba(167, 139, 250, 0.15)';
+                previewEl.style.borderRadius = '50%';
+              } else if (currentTool === 'frame') {
+                previewEl.style.border = '2px dashed #94a3b8';
+                previewEl.style.background = 'rgba(148, 163, 184, 0.1)';
+                previewEl.style.borderRadius = '0px';
+              } else if (currentTool === 'text') {
+                previewEl.style.border = '1.5px dashed #38bdf8';
+                previewEl.style.background = 'rgba(56, 189, 248, 0.08)';
+                previewEl.style.borderRadius = '2px';
+              }
+              previewEl.style.left = startX + 'px';
+              previewEl.style.top = startY + 'px';
+              previewEl.style.width = '0px';
+              previewEl.style.height = '0px';
+              previewEl.style.display = 'block';
+            }
+          }
 
           canvasContainer.addEventListener('pointerdown', (e) => {
             if (currentTool === 'hand' || e.button === 1) {
@@ -3423,6 +3463,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               canvasContainer.style.cursor = 'grabbing';
               try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
               e.preventDefault();
+              return;
+            }
+            if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
+              handleShapeDrawStart(e);
             }
           });
 
@@ -3432,6 +3476,26 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           });
 
           document.addEventListener('pointermove', (e) => {
+            if (isDrawingShape) {
+              const fw = document.getElementById('frame-wrapper');
+              if (fw) {
+                const fwRect = fw.getBoundingClientRect();
+                const curX = Math.round((e.clientX - fwRect.left) / zoomLevel);
+                const curY = Math.round((e.clientY - fwRect.top) / zoomLevel);
+                const left = Math.min(drawStart.x, curX);
+                const top = Math.min(drawStart.y, curY);
+                const width = Math.abs(curX - drawStart.x);
+                const height = Math.abs(curY - drawStart.y);
+
+                const previewEl = document.getElementById('draw-preview');
+                if (previewEl) {
+                  previewEl.style.left = left + 'px';
+                  previewEl.style.top = top + 'px';
+                  previewEl.style.width = width + 'px';
+                  previewEl.style.height = height + 'px';
+                }
+              }
+            }
             if (isPanning) {
               panX = e.clientX - panStart.x;
               panY = e.clientY - panStart.y;
@@ -3530,6 +3594,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           });
 
           document.addEventListener('pointerup', (e) => {
+            if (isDrawingShape) {
+              isDrawingShape = false;
+              const previewEl = document.getElementById('draw-preview');
+              if (previewEl) previewEl.style.display = 'none';
+              handleFinishShapeDraw(e);
+            }
             if (isPanning) {
               isPanning = false;
               canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
@@ -3616,6 +3686,29 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               syncUserGuidesToIframe();
             }
           });
+
+          function handleFinishShapeDraw(e) {
+            const fw = document.getElementById('frame-wrapper');
+            if (!fw) return;
+            const fwRect = fw.getBoundingClientRect();
+            const endX = Math.round((e.clientX - fwRect.left) / zoomLevel);
+            const endY = Math.round((e.clientY - fwRect.top) / zoomLevel);
+            const left = Math.min(drawStart.x, endX);
+            const top = Math.min(drawStart.y, endY);
+            let width = Math.abs(endX - drawStart.x);
+            let height = Math.abs(endY - drawStart.y);
+
+            // Minimum dimensions threshold: if clicked without dragging, use default size
+            if (width < 10 && height < 10) {
+              width = currentTool === 'text' ? 120 : 100;
+              height = currentTool === 'text' ? 32 : 100;
+            }
+            dispatchShapeInsert(currentTool, left, top, width, height);
+          }
+
+          function dispatchShapeInsert(tool, x, y, width, height) {
+            // Placeholder: wired in Commit 5
+          }
 
           // Spacebar = temp hand tool
           let spaceHeld = false;
@@ -6812,9 +6905,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             });
           }
 
-          // Blocker click to drop comment pin when comment tool is active
+          // Blocker interactions
           const blockerEl = document.getElementById('iframe-blocker');
           if (blockerEl) {
+            blockerEl.addEventListener('pointerdown', (e) => {
+              if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
+                handleShapeDrawStart(e);
+              }
+            });
             blockerEl.addEventListener('click', (e) => {
               if (currentTool === 'comment') {
                 e.preventDefault();
