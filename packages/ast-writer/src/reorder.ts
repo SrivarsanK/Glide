@@ -131,25 +131,44 @@ export function reorderJSXElement(
   return recastPrint(ast).code;
 }
 
+export interface InsertElementOptions {
+  width?: number;
+  height?: number;
+}
+
 export function insertJSXElement(
   code: string,
-  parentId: string,
-  elementType: 'rectangle' | 'ellipse' | 'frame' | 'text'
+  parentId: string | null | undefined,
+  elementType: 'rectangle' | 'ellipse' | 'frame' | 'text',
+  options?: InsertElementOptions
 ): string {
   const ast = recastParse(code, { parser: tsxParser });
 
   let parentPath: any = null;
 
-  traverse(ast, {
-    JSXElement(path: any) {
-      if (matchesSourceId(path, parentId)) {
-        parentPath = path;
-      }
-    },
-  });
+  if (parentId) {
+    traverse(ast, {
+      JSXElement(path: any) {
+        if (matchesSourceId(path, parentId)) {
+          parentPath = path;
+        }
+      },
+    });
+  }
+
+  // Fallback to the first JSXElement in the AST if parentId not provided or not matched
+  if (!parentPath) {
+    traverse(ast, {
+      JSXElement(path: any) {
+        if (!parentPath) {
+          parentPath = path;
+        }
+      },
+    });
+  }
 
   if (!parentPath) {
-    throw new Error(`Parent element with id "${parentId}" not found.`);
+    throw new Error(`Parent element with id "${parentId || 'root'}" not found.`);
   }
 
   let newElement: t.JSXElement;
@@ -165,9 +184,12 @@ export function insertJSXElement(
     const closing = t.jsxClosingElement(t.jsxIdentifier('span'));
     newElement = t.jsxElement(opening, closing, [t.jsxText('New Text Element')], false);
   } else {
+    const wVal = options?.width && options.width > 0 ? `${Math.round(options.width)}px` : '100px';
+    const hVal = options?.height && options.height > 0 ? `${Math.round(options.height)}px` : '100px';
+
     let styleProps = [
-      t.objectProperty(t.identifier('width'), t.stringLiteral('100px')),
-      t.objectProperty(t.identifier('height'), t.stringLiteral('100px')),
+      t.objectProperty(t.identifier('width'), t.stringLiteral(wVal)),
+      t.objectProperty(t.identifier('height'), t.stringLiteral(hVal)),
     ];
 
     if (elementType === 'rectangle') {

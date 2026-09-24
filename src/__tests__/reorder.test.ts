@@ -114,3 +114,51 @@ describe('AST Group & Ungroup', () => {
     expect(clean(updated)).toContain(clean('<h1 data-gl-source="h1">Title</h1>'));
   });
 });
+
+import { insertJSXElement } from '../../packages/ast-writer/src/reorder.js';
+
+describe('AST Element Insertion', () => {
+  const baseCode = `
+    export function App() {
+      return (
+        <div data-gl-source="root">
+          <h1 data-gl-source="title">Hello World</h1>
+        </div>
+      );
+    }
+  `;
+
+  test('should insert a rectangle with custom dimensions', () => {
+    const updated = insertJSXElement(baseCode, 'root', 'rectangle', { width: 250, height: 180 });
+    expect(clean(updated)).toContain(clean('backgroundColor: "#38bdf8"'));
+    expect(clean(updated)).toContain(clean('width: "250px"'));
+    expect(clean(updated)).toContain(clean('height: "180px"'));
+    expect(clean(updated)).toContain(clean('<h1 data-gl-source="title">Hello World</h1>'));
+  });
+
+  test('should insert an ellipse with circular border radius', () => {
+    const updated = insertJSXElement(baseCode, 'root', 'ellipse', { width: 80, height: 80 });
+    expect(clean(updated)).toContain(clean('backgroundColor: "#a78bfa"'));
+    expect(clean(updated)).toContain(clean('borderRadius: "9999px"'));
+    expect(clean(updated)).toContain(clean('width: "80px"'));
+  });
+
+  test('should insert a frame container with dashed border', () => {
+    const updated = insertJSXElement(baseCode, 'root', 'frame');
+    expect(clean(updated)).toContain(clean('border: "1px dashed #4b5563"'));
+    expect(clean(updated)).toContain(clean('padding: "16px"'));
+  });
+
+  test('should insert a text element with span', () => {
+    const updated = insertJSXElement(baseCode, 'root', 'text');
+    expect(clean(updated)).toContain(clean('New Text Element</span>'));
+    expect(clean(updated)).toContain(clean('fontSize: "14px"'));
+  });
+
+  test('should fallback to root JSXElement when parentId is omitted', () => {
+    const updated = insertJSXElement(baseCode, null, 'rectangle');
+    expect(clean(updated)).toContain(clean('backgroundColor: "#38bdf8"'));
+    expect(clean(updated)).toContain(clean('<div data-gl-source="root">'));
+  });
+});
+
