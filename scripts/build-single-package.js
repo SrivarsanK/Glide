@@ -153,6 +153,28 @@ async function runBuild() {
   execSync('npx dts-bundle-generator -o dist/vite-plugin.d.ts packages/vite-plugin/src/index.ts', { stdio: 'inherit' });
   execSync('npx dts-bundle-generator -o dist/babel-plugin.d.ts packages/babel-plugin/src/index.ts', { stdio: 'inherit' });
 
+  // 5. Package skills and synchronize to .agents/skills/
+  console.log('Packaging AI agent skills...');
+  const skillsSrcDir = path.join(projectRoot, 'skills');
+  const distSkillsDir = path.join(distDir, 'skills');
+  const agentSkillsDir = path.join(projectRoot, '.agents', 'skills');
+
+  if (fs.existsSync(skillsSrcDir)) {
+    fs.cpSync(skillsSrcDir, distSkillsDir, { recursive: true });
+    console.log('Copied skills to dist/skills/');
+
+    // Keep workspace .agents/skills in sync
+    for (const skill of ['glide', 'glide-component-segregator', 'glide-setup']) {
+      const src = path.join(skillsSrcDir, skill);
+      const dst = path.join(agentSkillsDir, skill);
+      if (fs.existsSync(src)) {
+        fs.mkdirSync(dst, { recursive: true });
+        fs.cpSync(src, dst, { recursive: true });
+      }
+    }
+    console.log('Synchronized skills to .agents/skills/');
+  }
+
   console.log('Build completed successfully!');
 }
 
