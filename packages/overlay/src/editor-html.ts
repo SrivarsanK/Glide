@@ -1553,6 +1553,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 <iframe id="app-iframe" title="App Preview"></iframe>
                 <!-- Transparent blocker shown during resize/drag to prevent iframe eating pointer events -->
                 <div id="iframe-blocker" style="position:absolute;inset:0;z-index:9;display:none;cursor:inherit;"></div>
+                <!-- Draw preview for creation tools (Frame/Rect/Text/Ellipse) -->
+                <div id="draw-preview" style="position:absolute;z-index:11;display:none;pointer-events:none;box-sizing:border-box;"></div>
                 <svg id="overlay-svg" style="position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:10;">
                   <defs>
                     <filter id="shadow-filter">
@@ -2240,6 +2242,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           let hoveredElement = null;
           let hoveredRect = null;
           let currentTool = 'select';
+          let isDrawingShape = false;
+          let drawStart = { x: 0, y: 0 };
           let zoomLevel = 1.0;
           let panX = 0, panY = 0;
           let isPanning = false, panStart = {x:0,y:0};
@@ -3125,8 +3129,47 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           // ═══════════════════════════════════════════════════════════════
-          // TOOL SWITCHER
           // ═══════════════════════════════════════════════════════════════
+          // TOOL DEFINITIONS & STATE MACHINE
+          // ═══════════════════════════════════════════════════════════════
+          const TOOL_CONFIGS = {
+            select: {
+              cursor: 'default',
+              needsBlocker: false,
+              toast: null
+            },
+            hand: {
+              cursor: 'grab',
+              needsBlocker: false,
+              toast: null
+            },
+            frame: {
+              cursor: 'crosshair',
+              needsBlocker: true,
+              toast: '📐 Click & drag to draw a frame container'
+            },
+            rect: {
+              cursor: 'crosshair',
+              needsBlocker: true,
+              toast: '▭ Click & drag to draw a rectangle'
+            },
+            ellipse: {
+              cursor: 'crosshair',
+              needsBlocker: true,
+              toast: '⬭ Click & drag to draw an ellipse'
+            },
+            text: {
+              cursor: 'text',
+              needsBlocker: true,
+              toast: 'T Click & drag to add text'
+            },
+            comment: {
+              cursor: 'crosshair',
+              needsBlocker: true,
+              toast: '💬 Click canvas to drop a comment pin'
+            }
+          };
+
           function setTool(name) {
             if (name === 'reaction') {
               toggleReactionSelector();
@@ -3137,21 +3180,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const btn = document.querySelector('[data-tool="' + name + '"]');
             if (btn) btn.classList.add('active');
 
+            const config = TOOL_CONFIGS[name] || TOOL_CONFIGS.select;
             const container = document.getElementById('canvas-container');
             const blocker = document.getElementById('iframe-blocker');
-            if (name === 'hand') {
-              container.style.cursor = 'grab';
-              if (blocker && !isResizing && !isDragging) blocker.style.display = 'none';
-            } else if (name === 'comment') {
-              container.style.cursor = 'crosshair';
-              if (blocker) {
+
+            if (container) container.style.cursor = config.cursor;
+            if (blocker) {
+              if (config.needsBlocker) {
                 blocker.style.display = 'block';
-                blocker.style.cursor = 'crosshair';
+                blocker.style.cursor = config.cursor;
+              } else if (!isResizing && !isDragging && !isDrawingShape) {
+                blocker.style.display = 'none';
+                blocker.style.cursor = 'default';
               }
-              showToast('info', '💬 Click canvas to drop a comment pin');
-            } else {
-              container.style.cursor = 'default';
-              if (blocker && !isResizing && !isDragging) blocker.style.display = 'none';
+            }
+            if (config.toast) {
+              showToast('info', config.toast);
             }
           }
 
@@ -3232,8 +3276,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               }
             }
 
-            // Escape = deselect
+            // Escape = cancel drawing / deselect / reset tool
             if (key === 'Escape') {
+              if (isDrawingShape) {
+                isDrawingShape = false;
+                const dp = document.getElementById('draw-preview');
+                if (dp) dp.style.display = 'none';
+              }
+              if (currentTool !== 'select') {
+                setTool('select');
+                return;
+              }
               selectedElement = null;
               selectedRect = null;
               selectedComputedStyles = null;
