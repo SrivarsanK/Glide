@@ -17,8 +17,25 @@ import {
   clearHistory,
   setHistoryLimit
 } from './history-manager.js';
+import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
 
 const execFileAsync = promisify(execFile);
+
+function extractModifiedProps(change: any): string[] {
+  if (!change) return ['unknown'];
+  if (change.type === 'style' && change.value && typeof change.value === 'object') {
+    const keys = Object.keys(change.value);
+    return keys.length > 0 ? keys : ['style'];
+  }
+  if (change.type === 'multi-class' && change.value && typeof change.value === 'object') {
+    const keys = Object.keys(change.value);
+    return keys.length > 0 ? keys : ['class'];
+  }
+  if (change.property) return [change.property];
+  if (change.type === 'text') return ['textContent'];
+  if (change.type === 'position') return ['position'];
+  return [change.type || 'unknown'];
+}
 
 function isSafeFilePath(targetPath: string, rootDir?: string): boolean {
   if (!targetPath || typeof targetPath !== 'string') return false;
@@ -1508,6 +1525,30 @@ export class GlideServer {
                   return;
                 }
 
+                const targetNodeId = `${file}:${line}:${column}`;
+                const modifiedProps = extractModifiedProps(change);
+                const opTimestamp = typeof message.timestamp === 'number'
+                  ? message.timestamp
+                  : (typeof change?.timestamp === 'number' ? change.timestamp : Date.now());
+
+                // Property-level LWW check
+                if (typeof message.timestamp === 'number' || typeof change?.timestamp === 'number') {
+                  for (const prop of modifiedProps) {
+                    if (!deltaQueue.canApplyLWW(targetNodeId, prop, opTimestamp)) {
+                      ws.send(
+                        JSON.stringify({
+                          type: 'status',
+                          success: false,
+                          error: `STALE_PROPERTY_WRITE: Edit for ${prop} was superseded by a newer write (LWW)`,
+                          targetId: targetNodeId,
+                          property: prop,
+                        })
+                      );
+                      return;
+                    }
+                  }
+                }
+
                 // Invalidate on drift check — skip for position edits and recent self-writes
                 if (change.type !== 'position') {
                   const normPath = normalizePathKey(file);
@@ -1553,6 +1594,11 @@ export class GlideServer {
                   this.recordSelfWrite(file);
                 }
 
+                // Record applied properties in PropertyDeltaQueue
+                for (const prop of modifiedProps) {
+                  deltaQueue.recordApplied(targetNodeId, prop, change.value, opTimestamp);
+                }
+
                 const normPath = normalizePathKey(file);
                 const newGen = this.fileGenerations.get(normPath) || 0;
                 ws.send(
@@ -1560,6 +1606,9 @@ export class GlideServer {
                     type: 'status',
                     success: true,
                     generation: newGen,
+                    targetId: targetNodeId,
+                    properties: modifiedProps,
+                    opId: message.opId || change?.opId,
                   })
                 );
 
@@ -1567,6 +1616,33 @@ export class GlideServer {
                   type: 'HISTORY_UPDATE',
                   ...getHistoryState()
                 }));
+                return;
+              }
+
+              if (message.type === 'GET_PENDING_OPS') {
+                ws.send(JSON.stringify({
+                  type: 'PENDING_OPS',
+                  ...deltaQueue.getStats()
+                }));
+                return;
+              }
+
+              if (message.type === 'ACK_OP') {
+                const { opId, nodeId, prop } = message;
+                let acked = false;
+                if (opId) {
+                  acked = deltaQueue.ackOpId(opId);
+                } else if (nodeId && prop) {
+                  acked = deltaQueue.ackPending(nodeId, prop);
+                }
+                ws.send(JSON.stringify({
+                  type: 'ACK_OP_STATUS',
+                  success: acked,
+                  opId,
+                  nodeId,
+                  prop
+                }));
+                return;
               } else {
                 ws.send(
                   JSON.stringify({
@@ -1648,5 +1724,9 @@ export class GlideServer {
 
   public onEdit(callback: EditCallback): void {
     this.editCallbacks.push(callback);
+  }
+
+  public getDeltaQueue(): PropertyDeltaQueue {
+    return deltaQueue;
   }
 }
