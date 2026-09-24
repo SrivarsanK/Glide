@@ -9,6 +9,18 @@ import { updateHTMLClass, updateHTMLStyle, updateHTMLText, getElementClass } fro
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfigFromDisk, buildRegistry, watchRegistry } from '@srivarsank/core';
+import { promptOrInstallSkills, installSkills, detectAIEnvironments, getSkillsSourceDir } from './installer.js';
+
+export { promptOrInstallSkills, installSkills, detectAIEnvironments, getSkillsSourceDir };
+
+// Handle standalone skill install command
+if (process.argv.includes('--install-skills') || process.argv.includes('install-skills') || process.argv.includes('init')) {
+  await promptOrInstallSkills(process.cwd(), process.argv);
+  process.exit(0);
+}
+
+// Check or install skills on server startup
+await promptOrInstallSkills(process.cwd(), process.argv);
 
 const config = await loadConfigFromDisk(process.cwd());
 
