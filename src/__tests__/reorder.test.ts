@@ -46,6 +46,26 @@ describe('AST Layer Reordering', () => {
     expect(clean(updated)).toContain(clean('<main data-gl-source="main"><p>Main content</p><span data-gl-source="target">Target Text</span></main>'));
   });
 
+  test('should insert at specific newIndex when moving element', () => {
+    const code = `
+      export function App() {
+        return (
+          <div data-gl-source="root">
+            <span data-gl-source="target">Item</span>
+            <ul data-gl-source="list">
+              <li>First</li>
+              <li>Second</li>
+            </ul>
+          </div>
+        );
+      }
+    `;
+
+    // Move target to index 0 of list
+    const updated = reorderJSXElement(code, 'target', 'list', null, 'after', 0);
+    expect(clean(updated)).toContain(clean('<ul data-gl-source="list"><span data-gl-source="target">Item</span><li>First</li><li>Second</li></ul>'));
+  });
+
   test('should keep comments and unrelated variables untouched', () => {
     const code = `
       // Helper variable

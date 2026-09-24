@@ -65,7 +65,8 @@ export function reorderJSXElement(
   targetId: string,
   parentId: string,
   siblingId: string | null,
-  position: 'before' | 'after'
+  position: 'before' | 'after',
+  newIndex?: number
 ): string {
   const ast = recastParse(code, { parser: tsxParser });
 
@@ -117,11 +118,19 @@ export function reorderJSXElement(
 
   // Insert target node into new parent's children
   if (!siblingId || !siblingPath) {
-    newParentPath.node.children.push(targetNode);
+    if (typeof newIndex === 'number' && !isNaN(newIndex) && newIndex >= 0 && newIndex <= newParentPath.node.children.length) {
+      newParentPath.node.children.splice(newIndex, 0, targetNode);
+    } else {
+      newParentPath.node.children.push(targetNode);
+    }
   } else {
     const siblingIndex = newParentPath.node.children.findIndex((child: any) => child === siblingPath.node);
     if (siblingIndex === -1) {
-      newParentPath.node.children.push(targetNode);
+      if (typeof newIndex === 'number' && !isNaN(newIndex) && newIndex >= 0 && newIndex <= newParentPath.node.children.length) {
+        newParentPath.node.children.splice(newIndex, 0, targetNode);
+      } else {
+        newParentPath.node.children.push(targetNode);
+      }
     } else {
       const insertIndex = position === 'before' ? siblingIndex : siblingIndex + 1;
       newParentPath.node.children.splice(insertIndex, 0, targetNode);
