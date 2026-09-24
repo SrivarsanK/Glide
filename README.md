@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img src="https://img.shields.io/badge/npm-v1.1.0-blue.svg" alt="npm version"></a>
-  <a href="https://github.com/SrivarsanK/Glide/pkgs/npm/glide"><img src="https://img.shields.io/badge/GitHub%20Packages-v1.1.0-black?logo=github" alt="GitHub Packages"></a>
+  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img src="https://img.shields.io/badge/npm-v1.1.1-blue.svg" alt="npm version"></a>
+  <a href="https://github.com/SrivarsanK/Glide/pkgs/npm/glide"><img src="https://img.shields.io/badge/GitHub%20Packages-v1.1.1-black?logo=github" alt="GitHub Packages"></a>
   <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img src="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="node">
   <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">

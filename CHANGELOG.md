@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2026-09-24
+
+### 🤖 AI Agent Skills Integration & CLI Installer
+
+#### Added
+- **Bundled AI Agent Skills (`dist/skills/`)**:
+  - `skills/glide/SKILL.md`: Comprehensive master AI agent skill detailing the full Figma/v0 bidirectional architecture, In-Memory SceneGraph, surgical Tailwind token rewriter, cross-parent reparenting, and property-level LWW delta queue.
+  - `skills/glide-component-segregator/SKILL.md`: Updated guide for AI agents to query `glide-components.json`, target elements, and coordinate with SceneGraph and LWW delta queue.
+  - `skills/glide-setup/SKILL.md`: Zero-error setup and configuration guide for React, Vue, Svelte, Astro, and HTML.
+- **Interactive CLI Skill Installer (`packages/cli/src/installer.ts`)**:
+  - Detects AI environments: Antigravity IDE, Claude Code, Cursor, Windsurf, GitHub Copilot.
+  - CLI flags: `--install-skills`, `install-skills`, `init`, `--yes`, `--no-skills`.
+  - Prompts user in interactive TTY and automatically installs skills to `.agents/skills/` in unattended / AI agent runs.
+  - Automatically generates `.cursor/rules/glide.mdc` when Cursor is detected.
+- **Build Pipeline Skill Packaging (`scripts/build-single-package.js`)**:
+  - Automatically bundles `skills/` into `dist/skills/` and synchronizes to `.agents/skills/` on every build.
+  - Added `"skills"` to `package.json` `"files"` so npm tarball includes all skills.
+
+---
+
 ## [1.1.0] - 2026-09-24
 
 ### 🚀 Major Architectural Milestone (Figma/v0 Architecture Engine)
