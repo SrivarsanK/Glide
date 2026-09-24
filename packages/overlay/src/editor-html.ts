@@ -802,23 +802,123 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           .no-selection-icon { font-size: 32px; opacity: 0.3; }
           .no-selection-text { font-size: 12px; line-height: 1.5; }
 
-          /* ── COMMENT PINS ── */
+          /* ── COMMENT PINS & NOTES ── */
           .comment-pin {
             position: absolute;
             z-index: 1000;
-            cursor: default;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.15s ease;
+          }
+          .comment-pin:hover {
+            transform: scale(1.1);
           }
           .pin-dot {
             width: 24px; height: 24px;
-            background: var(--accent-color);
+            background: #6366f1;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
             display: flex; align-items: center; justify-content: center;
-            color: #000; font-size: 11px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            border: 2px solid white;
+            color: #fff; font-size: 11px; font-weight: 700;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            border: 2px solid #ffffff;
+            transition: background 0.15s;
+          }
+          .comment-pin.active .pin-dot {
+            background: #ec4899;
           }
           .pin-dot span { transform: rotate(45deg); display: inline-block; }
+          .comment-card {
+            position: absolute;
+            top: 28px;
+            left: 0;
+            width: 260px;
+            background: #181825;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 8px;
+            padding: 10px 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 1005;
+            font-size: 12px;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-sizing: border-box;
+          }
+          .comment-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #94a3b8;
+          }
+          .comment-card-author {
+            font-weight: 600;
+            color: #f1f5f9;
+          }
+          .comment-card-text {
+            color: #e2e8f0;
+            line-height: 1.4;
+            word-break: break-word;
+            white-space: pre-wrap;
+          }
+          .comment-card textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: #0f0f18;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 5px;
+            color: #fff;
+            padding: 6px 8px;
+            font-family: inherit;
+            font-size: 12px;
+            resize: none;
+            outline: none;
+            min-height: 56px;
+          }
+          .comment-card input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            background: #0f0f18;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 5px;
+            color: #fff;
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: 11px;
+            outline: none;
+          }
+          .comment-card-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            margin-top: 4px;
+          }
+          .comment-btn-primary {
+            background: #6366f1;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+          .comment-btn-secondary {
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+          }
+          .comment-btn-secondary:hover {
+            color: #f87171;
+            border-color: #f87171;
+          }
 
           /* ── STATUS BAR ── */
           .status-bar {
@@ -1402,6 +1502,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   </defs>
                   <!-- selection/hover drawn dynamically -->
                 </svg>
+                <!-- COMMENT PINS OVERLAY -->
+                <div id="comments-container" style="position:absolute;inset:0;pointer-events:none;z-index:20;"></div>
               </div>
             </div>
 
@@ -1983,6 +2085,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           <div class="context-menu-item" id="menu-backward">Send Backward <span class="shortcut">Ctrl+[</span></div>
           <div class="context-menu-separator"></div>
           <div class="context-menu-item" id="menu-export">Export Selection… <span class="shortcut">Ctrl+E</span></div>
+          <div class="context-menu-item" id="menu-comment">Add Comment <span class="shortcut">C</span></div>
         </div>
 
         <!-- STATUS BAR -->
@@ -2957,10 +3060,20 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (btn) btn.classList.add('active');
 
             const container = document.getElementById('canvas-container');
+            const blocker = document.getElementById('iframe-blocker');
             if (name === 'hand') {
               container.style.cursor = 'grab';
+              if (blocker && !isResizing && !isDragging) blocker.style.display = 'none';
+            } else if (name === 'comment') {
+              container.style.cursor = 'crosshair';
+              if (blocker) {
+                blocker.style.display = 'block';
+                blocker.style.cursor = 'crosshair';
+              }
+              showToast('info', '💬 Click canvas to drop a comment pin');
             } else {
               container.style.cursor = 'default';
+              if (blocker && !isResizing && !isDragging) blocker.style.display = 'none';
             }
           }
 
@@ -6263,6 +6376,189 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }, 100);
           }
 
+          // ── COMMENTS STATE & FUNCTIONS ──
+          let canvasComments = [];
+          try {
+            const rawComments = localStorage.getItem('glide_canvas_comments');
+            if (rawComments) canvasComments = JSON.parse(rawComments);
+          } catch(e) {
+            canvasComments = [];
+          }
+          let activeCommentId = null;
+
+          function saveComments() {
+            try {
+              localStorage.setItem('glide_canvas_comments', JSON.stringify(canvasComments));
+            } catch(e) {}
+            renderComments();
+          }
+
+          function renderComments() {
+            const container = document.getElementById('comments-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            canvasComments.forEach((c, idx) => {
+              const pin = document.createElement('div');
+              pin.className = 'comment-pin' + (activeCommentId === c.id ? ' active' : '');
+              pin.style.left = c.x + 'px';
+              pin.style.top = c.y + 'px';
+              pin.style.pointerEvents = 'auto';
+
+              const dot = document.createElement('div');
+              dot.className = 'pin-dot';
+              dot.innerHTML = '<span>' + (idx + 1) + '</span>';
+              pin.appendChild(dot);
+
+              if (activeCommentId === c.id) {
+                const card = document.createElement('div');
+                card.className = 'comment-card';
+                card.onclick = (e) => e.stopPropagation();
+
+                const timeStr = c.timestamp ? new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                card.innerHTML = 
+                  '<div class="comment-card-header">' +
+                    '<span class="comment-card-author">💬 ' + (escapeHtml(c.author) || 'Author') + '</span>' +
+                    '<span>' + timeStr + '</span>' +
+                  '</div>' +
+                  '<div class="comment-card-text">' + escapeHtml(c.text) + '</div>' +
+                  '<div class="comment-card-actions">' +
+                    '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + c.id + '">✓ Resolve</button>' +
+                    '<button class="comment-btn-primary comment-close-btn">Close</button>' +
+                  '</div>';
+                
+                card.querySelector('.comment-resolve-btn').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  resolveComment(c.id);
+                });
+                card.querySelector('.comment-close-btn').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  activeCommentId = null;
+                  renderComments();
+                });
+
+                pin.appendChild(card);
+              }
+
+              pin.addEventListener('click', (e) => {
+                e.stopPropagation();
+                activeCommentId = (activeCommentId === c.id) ? null : c.id;
+                renderComments();
+              });
+
+              container.appendChild(pin);
+            });
+          }
+
+          function openNewCommentComposer(x, y) {
+            const container = document.getElementById('comments-container');
+            if (!container) return;
+            activeCommentId = null;
+            renderComments();
+
+            const existingTemp = document.getElementById('temp-comment-pin');
+            if (existingTemp) existingTemp.remove();
+
+            const tempPin = document.createElement('div');
+            tempPin.id = 'temp-comment-pin';
+            tempPin.className = 'comment-pin active';
+            tempPin.style.left = x + 'px';
+            tempPin.style.top = y + 'px';
+            tempPin.style.pointerEvents = 'auto';
+
+            const dot = document.createElement('div');
+            dot.className = 'pin-dot';
+            dot.innerHTML = '<span>+</span>';
+            tempPin.appendChild(dot);
+
+            const card = document.createElement('div');
+            card.className = 'comment-card';
+            card.onclick = (e) => e.stopPropagation();
+
+            let savedAuthor = 'Designer';
+            try {
+              savedAuthor = localStorage.getItem('glide_comment_author') || 'Designer';
+            } catch(e) {}
+
+            card.innerHTML =
+              '<div class="comment-card-header">' +
+                '<span>New Note</span>' +
+                '<input type="text" id="comment-author-input" value="' + escapeHtml(savedAuthor) + '" placeholder="Your name" style="width:110px;padding:2px 6px;font-size:10px;">' +
+              '</div>' +
+              '<textarea id="comment-text-input" placeholder="Type a note or feedback..." autofocus></textarea>' +
+              '<div class="comment-card-actions">' +
+                '<button class="comment-btn-secondary" id="comment-cancel-btn">Cancel</button>' +
+                '<button class="comment-btn-primary" id="comment-post-btn">Post Note</button>' +
+              '</div>';
+
+            tempPin.appendChild(card);
+            container.appendChild(tempPin);
+
+            const textarea = card.querySelector('#comment-text-input');
+            if (textarea) textarea.focus();
+
+            card.querySelector('#comment-cancel-btn').addEventListener('click', (e) => {
+              e.stopPropagation();
+              tempPin.remove();
+              setTool('select');
+            });
+
+            const submitComment = () => {
+              const text = textarea.value.trim();
+              if (!text) return;
+              const authorInput = card.querySelector('#comment-author-input');
+              const author = (authorInput ? authorInput.value.trim() : '') || 'Designer';
+              try { localStorage.setItem('glide_comment_author', author); } catch(e) {}
+
+              const newComment = {
+                id: 'c_' + Date.now(),
+                x: x,
+                y: y,
+                author: author,
+                text: text,
+                timestamp: Date.now()
+              };
+              canvasComments.push(newComment);
+              tempPin.remove();
+              saveComments();
+              setTool('select');
+              showToast('success', '✓ Comment pinned to canvas');
+            };
+
+            card.querySelector('#comment-post-btn').addEventListener('click', (e) => {
+              e.stopPropagation();
+              submitComment();
+            });
+
+            textarea.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                submitComment();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                tempPin.remove();
+                setTool('select');
+              }
+            });
+          }
+
+          function resolveComment(id) {
+            canvasComments = canvasComments.filter(c => c.id !== id);
+            activeCommentId = null;
+            saveComments();
+            showToast('info', 'Comment resolved');
+          }
+
+          function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // INIT
           // ═══════════════════════════════════════════════════════════════
@@ -6304,6 +6600,51 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           const mExport = document.getElementById('menu-export');
           if (mExport) mExport.addEventListener('click', () => triggerExport());
+
+          const mComment = document.getElementById('menu-comment');
+          if (mComment) {
+            mComment.addEventListener('click', () => {
+              const menu = document.getElementById('glide-context-menu');
+              if (menu) menu.style.display = 'none';
+              if (selectedRect) {
+                const x = Math.round(selectedRect.left + selectedRect.width / 2);
+                const y = Math.round(selectedRect.top);
+                openNewCommentComposer(x, y);
+              } else {
+                setTool('comment');
+              }
+            });
+          }
+
+          // Blocker click to drop comment pin when comment tool is active
+          const blockerEl = document.getElementById('iframe-blocker');
+          if (blockerEl) {
+            blockerEl.addEventListener('click', (e) => {
+              if (currentTool === 'comment') {
+                e.preventDefault();
+                e.stopPropagation();
+                const fw = document.getElementById('frame-wrapper');
+                if (!fw) return;
+                const rect = fw.getBoundingClientRect();
+                const x = Math.round((e.clientX - rect.left) / zoomLevel);
+                const y = Math.round((e.clientY - rect.top) / zoomLevel);
+                openNewCommentComposer(x, y);
+              }
+            });
+          }
+
+          // Dismiss active comment card on outside click
+          document.addEventListener('click', (e) => {
+            if (!e.target.closest('.comment-pin')) {
+              if (activeCommentId) {
+                activeCommentId = null;
+                renderComments();
+              }
+            }
+          });
+
+          // Initial render of saved comments
+          renderComments();
 
           const mGroup = document.getElementById('menu-group');
           if (mGroup) mGroup.addEventListener('click', triggerGroup);
