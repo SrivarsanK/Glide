@@ -67,8 +67,13 @@
   "scripts": {
     "dev": "node scripts/build-single-package.js",
     "build": "node scripts/build-single-package.js",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "release": "npm publish"
+    "test:watch": "vitest",
+    "publish:npm": "npm publish --access public --registry https://registry.npmjs.org/",
+    "publish:gpr": "npm publish --access public --registry https://npm.pkg.github.com/",
+    "publish:all": "npm run publish:npm && npm run publish:gpr",
+    "release": "npm run publish:all"
   },
   "dependencies": {
     "@babel/core": "^7.24.0",
