@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish Package
 
 on:
   release:
@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
   id-token: write
+  packages: write
 
 jobs:
-  publish:
+  publish-npm:
+    name: Publish to npm
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -33,3 +35,33 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-github:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@srivarsank'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Publish to GitHub Packages
+        run: npm publish --registry https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
