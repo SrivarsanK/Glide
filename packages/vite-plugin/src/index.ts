@@ -242,6 +242,34 @@ export function buildBridgeScript(
     };
   }
 
+  // ── SceneGraph serializer (includes live bounding rects) ─────────────────
+  function serializeSceneNode(el, depth) {
+    if (!el || el.nodeType !== 1) return null;
+    if (SKIP_TAGS[el.tagName]) return null;
+    if (el.hasAttribute('data-glide-bridge')) return null;
+    if (el.id === '__glide_styles__') return null;
+    var id = getElId(el);
+    var tag = el.tagName.toLowerCase();
+    var r = el.getBoundingClientRect();
+    var sceneRect = {
+      left: Math.round(r.left),
+      top: Math.round(r.top),
+      right: Math.round(r.right),
+      bottom: Math.round(r.bottom),
+      width: Math.round(r.width),
+      height: Math.round(r.height)
+    };
+    if (sceneRect.width === 0 && sceneRect.height === 0) return null;
+    var children = [];
+    if (depth < MAX_DEPTH && el.children) {
+      for (var i = 0; i < el.children.length; i++) {
+        var child = serializeSceneNode(el.children[i], depth + 1);
+        if (child) children.push(child);
+      }
+    }
+    return { id: id, tag: tag, rect: sceneRect, children: children };
+  }
+
   function sendDOMTree() {
     var body = document.body;
     if (!body) return;
@@ -251,6 +279,13 @@ export function buildBridgeScript(
       if (node) tree.push(node);
     }
     window.parent.postMessage({ type: 'glide:dom-tree', tree: tree }, '*');
+    // Also send scene nodes (with rects) for the SceneGraph hit-test
+    var sceneNodes = [];
+    for (var j = 0; j < body.children.length; j++) {
+      var sn = serializeSceneNode(body.children[j], 0);
+      if (sn) sceneNodes.push(sn);
+    }
+    window.parent.postMessage({ type: 'glide:scene-nodes', nodes: sceneNodes }, '*');
   }
 
   function sendReadyState() {
@@ -1453,6 +1488,9 @@ export function buildBridgeScript(
       }
     }
     if (e.data.type === 'glide:request-dom-tree') {
+      sendDOMTree();
+    }
+    if (e.data.type === 'glide:request-scene-nodes') {
       sendDOMTree();
     }
 
