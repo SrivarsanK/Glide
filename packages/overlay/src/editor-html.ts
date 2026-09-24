@@ -2401,6 +2401,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                       }
                     });
                   }
+                } else if (message.type === 'scene_update') {
+                  if (typeof message.generation === 'number') {
+                    currentGeneration = message.generation;
+                  }
+                  // Request fresh scene nodes with bounding rects from iframe bridge
+                  const ifr = document.getElementById('app-iframe');
+                  if (ifr && ifr.contentWindow) {
+                    ifr.contentWindow.postMessage({ type: 'glide:request-scene-nodes' }, '*');
+                  }
+                  // If the edited file is currently displayed, request fresh component tree
+                  if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
+                  }
                 } else if (message.type === 'HISTORY_UPDATE') {
                   updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
@@ -4272,6 +4285,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               };
               this._roots = (nodes || []).map(n => hydrate(n, null));
               this._index = idx;
+            },
+            patch(id, rect) {
+              const node = this._index.get(id);
+              if (node && rect) node.rect = { ...rect };
+            },
+            patchMany(updates) {
+              if (!Array.isArray(updates)) return;
+              for (const u of updates) {
+                if (u && u.id && u.rect) this.patch(u.id, u.rect);
+              }
             },
             hitTest(x, y) {
               const inside = (r, px, py) =>

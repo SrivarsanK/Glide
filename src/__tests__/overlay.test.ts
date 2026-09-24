@@ -122,4 +122,10 @@ describe('GlideOverlay Canvas Layer', () => {
     expect(html).toContain('⚡ Instant');
     expect(html).toContain('📦 Staged');
   });
+
+  test('should include bidirectional scene_update handling in getEditorHTML', () => {
+    const html = getEditorHTML();
+    expect(html).toContain("message.type === 'scene_update'");
+    expect(html).toContain("glide:request-scene-nodes");
+  });
 });
