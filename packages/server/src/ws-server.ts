@@ -767,30 +767,36 @@ export class GlideServer {
                 return;
               }
 
-
               if (message.type === 'insert') {
-                const { file, parentId, elementType } = message;
-                if (fs.existsSync(file)) {
+                let { file, parentId, elementType, width, height } = message;
+                if (!file) {
+                  file = findProjectEntryFile(process.cwd());
+                }
+                const targetFile = file && fs.existsSync(file)
+                  ? file
+                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+
+                if (targetFile && isSafeFilePath(targetFile)) {
                   try {
-                    const code = fs.readFileSync(file, 'utf-8');
-                    const updated = insertJSXElement(code, parentId, elementType);
-                    this.recordSelfWrite(file);
-                    fs.writeFileSync(file, updated, 'utf-8');
+                    const code = fs.readFileSync(targetFile, 'utf-8');
+                    const updated = insertJSXElement(code, parentId, elementType, { width, height });
+                    this.recordSelfWrite(targetFile);
+                    fs.writeFileSync(targetFile, updated, 'utf-8');
                     pushHistory({
-                      description: `Inserted ${elementType} in ${path.basename(file)}`,
-                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
+                      description: `Inserted ${elementType} in ${path.basename(targetFile)}`,
+                      diffs: [{ file: path.resolve(targetFile), before: code, after: updated }]
                     });
                     ws.send(JSON.stringify({
                       type: 'HISTORY_UPDATE',
                       ...getHistoryState()
                     }));
                     // Automatically send updated tree back
-                    const tree = buildComponentTree(updated, file);
+                    const tree = buildComponentTree(updated, targetFile);
                     ws.send(JSON.stringify({
                       type: 'tree',
-                      file,
+                      file: targetFile,
                       tree,
-                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
+                      generation: this.fileGenerations.get(normalizePathKey(targetFile)) || 0
                     }));
                   } catch (err: any) {
                     ws.send(JSON.stringify({
