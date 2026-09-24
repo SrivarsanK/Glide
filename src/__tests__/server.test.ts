@@ -237,4 +237,55 @@ describe('GlideServer WebSocket Server', () => {
 
     client.close();
   });
+
+  test('should handle resolve_component message and return resolved_component payload', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    // Test missing componentName error
+    client.send(JSON.stringify({
+      type: 'resolve_component',
+      componentName: ''
+    }));
+
+    const response1 = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+
+    const res1 = JSON.parse(response1);
+    expect(res1.type).toBe('resolved_component');
+    expect(res1.success).toBe(false);
+    expect(res1.error).toContain('componentName is required');
+
+    client.close();
+  });
+
+  test('should handle open_component message and return open_component_status', async () => {
+    server = new GlideServer(testPort);
+    await server.start();
+
+    const client = new WebSocket(`ws://localhost:${testPort}`);
+    await new Promise<void>((resolve) => client.on('open', resolve));
+
+    client.send(JSON.stringify({
+      type: 'open_component',
+      file: 'non-existent-component.tsx',
+      line: 10,
+      column: 2
+    }));
+
+    const response = await new Promise<string>((resolve) => {
+      client.once('message', (data) => resolve(data.toString()));
+    });
+
+    const resObj = JSON.parse(response);
+    expect(resObj.type).toBe('open_component_status');
+    expect(resObj.success).toBe(false);
+    expect(resObj.error).toContain('File not found');
+
+    client.close();
+  });
 });
