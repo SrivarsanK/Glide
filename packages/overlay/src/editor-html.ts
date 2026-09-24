@@ -3707,6 +3707,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           function resolveParentAtPoint(x, y) {
+            // ── Try SceneGraph first (deterministic, zoom-aware) ──────────
+            if (!_sg.isEmpty) {
+              const hit = _sg.hitTest(x, y);
+              if (hit) {
+                const parsed = parseSource(hit.id);
+                return {
+                  parentId: hit.id,
+                  file: (parsed && parsed.file) ? parsed.file : (currentFile || null)
+                };
+              }
+            }
+
+            // ── Fallback: elementFromPoint (when SceneGraph is not ready) ─
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return null;
             const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
@@ -4239,6 +4252,48 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           // ═══════════════════════════════════════════════════════════════
           // BRIDGE COMMUNICATION (postMessage from iframe)
           // ═══════════════════════════════════════════════════════════════
+
+          // ── Inline SceneGraph ─────────────────────────────────────────
+          // Lightweight in-memory spatial index — replaces elementFromPoint
+          // for parent-at-point resolution during shape insertion.
+          // Built from glide:scene-nodes messages (rects captured in iframe).
+          const _sg = {
+            _index: new Map(),
+            _roots: [],
+            build(nodes) {
+              const idx = new Map();
+              const hydrate = (data, parent) => {
+                const node = { id: data.id, tag: data.tag, rect: data.rect,
+                  isStamped: !data.id.startsWith('__glide_cst_'),
+                  children: [], parent };
+                idx.set(data.id, node);
+                node.children = (data.children || []).map(c => hydrate(c, node));
+                return node;
+              };
+              this._roots = (nodes || []).map(n => hydrate(n, null));
+              this._index = idx;
+            },
+            hitTest(x, y) {
+              const inside = (r, px, py) =>
+                px >= r.left && px <= r.right && py >= r.top && py <= r.bottom;
+              const search = (nodes) => {
+                for (let i = nodes.length - 1; i >= 0; i--) {
+                  const n = nodes[i];
+                  if (!inside(n.rect, x, y)) continue;
+                  const deeper = search(n.children);
+                  if (deeper !== null) {
+                    if (deeper.isStamped || !n.isStamped) return deeper;
+                    return n;
+                  }
+                  return n;
+                }
+                return null;
+              };
+              return search(this._roots);
+            },
+            get isEmpty() { return this._index.size === 0; }
+          };
+
           window.addEventListener('message', (event) => {
             const data = event.data;
             if (!data || !data.type) return;
@@ -4342,6 +4397,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   }, '*');
                 }
               }
+            }
+
+            // ── SceneGraph update from bridge ─────────────────────────
+            if (data.type === 'glide:scene-nodes') {
+              if (Array.isArray(data.nodes)) {
+                _sg.build(data.nodes);
+              }
+              return;
             }
 
             // ── DOM tree from proxy bridge (CST mode, no AST needed) ──

@@ -8,3 +8,6 @@ export { GlideOverlay } from './overlay.js';
 export { snapToGrid } from './snap.js';
 export { measureTextLayout } from './utils/text-measure.js';
 export { resolveActiveBreakpoint } from './utils/viewport.js';
+export { SceneGraph } from './scene-graph.js';
+export type { SceneNode, SceneNodeData, SceneRect } from './scene-graph.js';
+
