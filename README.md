@@ -44,8 +44,35 @@ flowchart LR
 
 1. Your app runs normally (e.g., `npm run dev` on port 5173)
 2. Glide's server connects to it and opens a visual editor at `localhost:7777`
-3. You click elements on the canvas → Glide highlights them and shows their styles
-4. You change a value → Glide rewrites the source file using AST transformations
+3. You click elements on the canvas → Glide's **In-Memory SceneGraph** hits the node in sub-millisecond time
+4. You change a value → Glide rewrites the source file using AST transformations and property-level LWW
+5. External file changes trigger bidirectional AST synchronization → updating the canvas without reloading the iframe
+
+---
+
+## Architecture: The Figma & v0 Bidirectional Model
+
+Glide combines the spatial responsiveness of **Figma** with the bidirectional AST-coupling of **Vercel v0**:
+
+```
+User edits on Canvas                  External Code Edits
+       │                                       │
+       ▼                                       ▼
+In-Memory SceneGraph (cached bounds)   Chokidar File Watcher
+       │                                       │
+       ▼                                       ▼
+WebSocket AST Codemod Dispatch         AST Coordinate Parser (JSX)
+       │                                       │
+       ▼                                       ▼
+Property-Level Delta Queue (LWW)       Scene Update Event (WS)
+       │                                       │
+       ▼                                       ▼
+Source File Recast / Write-Back        Overlay Patches SceneGraph
+```
+
+- **Spatial Hit Testing**: Rather than fragile DOM lookups, the cached `SceneGraph` indexes bounding rectangles for O(log n) hit tests under arbitrary transforms and zoom levels.
+- **Surgical Codemods**: Direct AST manipulation via `recast` and `babel` updates only targeted tokens, preserving user formatting, comments, and structure.
+- **Conflict Resolution**: The `PropertyDeltaQueue` tracks independent logical timestamps per `(nodeId, propKey)`, preventing simultaneous property adjustments from clobbering each other.
 
 ---
 
@@ -124,8 +151,14 @@ Open **http://localhost:7777** to start editing.
 | Feature | Description |
 |---|---|
 | 🎨 **Visual Canvas** | Figma-like workspace — select, drag, resize, zoom, and pan elements |
+| 🗺️ **In-Memory SceneGraph** | Cached spatial hierarchy with sub-millisecond, zoom/transform-aware hit testing |
+| 🔄 **Bidirectional Sync** | Code-to-Canvas AST synchronization updating the scene on external edits without iframe reload |
 | 📐 **Smart Snapping** | Snaps to sibling edges, centers, and pixel grid with live guide lines |
 | ✍️ **Universal Live Code Write-back** | Real-time direct source editing across React (JSX/TSX), Vue (SFC), Svelte, Astro, and HTML — for Tailwind classes, inline styles, and text content |
+| ✂️ **Surgical Tailwind Rewriter** | AST-level surgical replacement of Tailwind tokens (`bg-*`, `text-*`, `w-*`, `h-*`, `p-*`, `m-*`, arbitrary `[...]`) |
+| 🔀 **Canvas Cross-Parent Drop** | Reparent and reorder elements across parent container boundaries directly on canvas |
+| 🔍 **Component Definition Jump** | One-click navigation from instantiated sub-components directly to their definition source file |
+| ⏱️ **Property Delta Queue & LWW** | Property-level Last-Writer-Wins conflict resolution preventing simultaneous edit clobbering |
 | 🚀 **Astro Framework Support** | Native support for `.astro` SFCs with server frontmatter preservation |
 | ⚡ **Zero-Flicker Drag** | Positions written to `glide-positions.json` — no HMR reload on drag |
 | 🗂️ **Layers Panel** | Hierarchical tree view of all elements with Figma-style hover controls |
