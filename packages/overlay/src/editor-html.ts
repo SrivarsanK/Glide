@@ -3706,8 +3706,66 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             dispatchShapeInsert(currentTool, left, top, width, height);
           }
 
+          function resolveParentAtPoint(x, y) {
+            const iframe = document.getElementById('app-iframe');
+            if (!iframe) return null;
+            const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+            if (!iDoc) return null;
+
+            const maxW = iframe.clientWidth || 800;
+            const maxH = iframe.clientHeight || 600;
+            const hitX = Math.max(0, Math.min(x, maxW));
+            const hitY = Math.max(0, Math.min(y, maxH));
+
+            let targetEl = iDoc.elementFromPoint(hitX, hitY);
+            let stampedEl = targetEl ? targetEl.closest('[data-gl-source]') : null;
+
+            if (!stampedEl) {
+              stampedEl = iDoc.querySelector('[data-gl-source]');
+            }
+
+            if (!stampedEl) return null;
+
+            const sourceAttr = stampedEl.getAttribute('data-gl-source') || '';
+            const parsed = parseSource(sourceAttr);
+            return {
+              parentId: sourceAttr,
+              file: (parsed && parsed.file) ? parsed.file : (currentFile || null)
+            };
+          }
+
           function dispatchShapeInsert(tool, x, y, width, height) {
-            // Placeholder: wired in Commit 5
+            const centerX = x + Math.round(width / 2);
+            const centerY = y + Math.round(height / 2);
+            const resolved = resolveParentAtPoint(centerX, centerY) || resolveParentAtPoint(x, y);
+
+            const targetFile = (resolved && resolved.file) ? resolved.file : currentFile;
+            const parentId = (resolved && resolved.parentId) ? resolved.parentId : 'root';
+
+            const elemTypeMap = {
+              rect: 'rectangle',
+              ellipse: 'ellipse',
+              frame: 'frame',
+              text: 'text'
+            };
+            const elementType = elemTypeMap[tool] || 'rectangle';
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: 'insert',
+                file: targetFile,
+                parentId: parentId,
+                elementType: elementType,
+                width: Math.round(width),
+                height: Math.round(height)
+              }));
+              const displayFile = targetFile ? (targetFile.split('/').pop() || targetFile) : 'file';
+              showToast('info', 'Created ' + elementType + ' in ' + displayFile);
+            } else {
+              showToast('error', 'Server connection not ready');
+            }
+
+            setTool('select');
           }
 
           // Spacebar = temp hand tool
