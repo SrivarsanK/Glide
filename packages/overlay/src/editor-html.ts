@@ -1981,6 +1981,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           <div class="context-menu-item" id="menu-back">Send to Back <span class="shortcut">[</span></div>
           <div class="context-menu-item" id="menu-forward">Bring Forward <span class="shortcut">Ctrl+]</span></div>
           <div class="context-menu-item" id="menu-backward">Send Backward <span class="shortcut">Ctrl+[</span></div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" id="menu-export">Export Selection… <span class="shortcut">Ctrl+E</span></div>
         </div>
 
         <!-- STATUS BAR -->
@@ -3144,10 +3146,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (key === 'ArrowLeft')  { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '-=' + nudge + 'px' }); return; }
             if (key === 'ArrowRight') { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '+=' + nudge + 'px' }); return; }
 
-            // Copy / Duplicate / Delete
+            // Copy / Duplicate / Delete / Export
             if (ctrl && (key === 'c' || key === 'C') && !e.shiftKey) { e.preventDefault(); triggerCopy(); return; }
             if (ctrl && (key === 'v' || key === 'V') && !e.shiftKey) { e.preventDefault(); triggerPaste(); return; }
             if (ctrl && (key === 'd' || key === 'D') && !e.shiftKey) { e.preventDefault(); triggerDuplicate(); return; }
+            if (ctrl && (key === 'e' || key === 'E') && !e.shiftKey) { e.preventDefault(); triggerExport(); return; }
             if ((key === 'Delete' || key === 'Backspace') && !ctrl) { e.preventDefault(); triggerDelete(); return; }
           });
 
@@ -6094,6 +6097,172 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (menu) menu.style.display = 'none';
           }
 
+          function triggerExport(formatOverride, scaleOverride) {
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+
+            const iframe = document.getElementById('app-iframe');
+            if (!iframe) {
+              showToast('error', 'No app preview loaded to export');
+              return;
+            }
+            const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+            if (!iDoc) {
+              showToast('error', 'Cannot access canvas document');
+              return;
+            }
+
+            const formatSelect = document.getElementById('export-format');
+            const scaleSelect = document.getElementById('export-scale');
+            const format = (formatOverride || (formatSelect ? formatSelect.value : 'PNG')).toUpperCase();
+            const scaleStr = scaleOverride || (scaleSelect ? scaleSelect.value : '1x');
+            const scale = parseInt(scaleStr, 10) || 1;
+
+            let targetEl = null;
+            let label = 'canvas';
+            if (selectedElement && selectedElement.source) {
+              targetEl = iDoc.querySelector('[data-glide-selected]') ||
+                         iDoc.querySelector('[data-gl-source="' + selectedElement.source + '"]');
+              if (targetEl) {
+                label = targetEl.tagName.toLowerCase();
+              }
+            }
+            if (!targetEl) {
+              targetEl = iDoc.body;
+              label = 'canvas';
+            }
+
+            showToast('info', 'Exporting ' + label + ' as ' + format + ' (' + scale + 'x)...');
+
+            if (format === 'PDF') {
+              try {
+                if (iframe.contentWindow) {
+                  iframe.contentWindow.focus();
+                  iframe.contentWindow.print();
+                  showToast('success', '✓ Print/PDF dialog triggered for ' + label);
+                }
+              } catch (err) {
+                showToast('error', 'PDF export failed: ' + err.message);
+              }
+              return;
+            }
+
+            try {
+              const rect = targetEl.getBoundingClientRect();
+              const width = Math.max(1, Math.round(rect.width));
+              const height = Math.max(1, Math.round(rect.height));
+
+              if (format === 'SVG' && targetEl.tagName.toLowerCase() === 'svg') {
+                const svgString = new XMLSerializer().serializeToString(targetEl);
+                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                downloadExportBlob(blob, 'glide-' + label + '-' + Date.now() + '.svg');
+                showToast('success', '✓ Exported ' + label + ' as SVG');
+                return;
+              }
+
+              let cssRules = '';
+              try {
+                for (let s = 0; s < iDoc.styleSheets.length; s++) {
+                  const sheet = iDoc.styleSheets[s];
+                  try {
+                    const rules = sheet.cssRules || sheet.rules;
+                    if (rules) {
+                      for (let r = 0; r < rules.length; r++) {
+                        cssRules += rules[r].cssText + '\\n';
+                      }
+                    }
+                  } catch (e) {}
+                }
+              } catch (e) {}
+
+              const clone = targetEl.cloneNode(true);
+              clone.removeAttribute('data-glide-selected');
+              clone.removeAttribute('data-glide-hover');
+              if (clone.querySelectorAll) {
+                clone.querySelectorAll('*').forEach(el => {
+                  el.removeAttribute('data-glide-selected');
+                  el.removeAttribute('data-glide-hover');
+                });
+              }
+
+              let bg = 'transparent';
+              if (iframe.contentWindow) {
+                const computed = iframe.contentWindow.getComputedStyle(targetEl);
+                if (computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)' && computed.backgroundColor !== 'transparent') {
+                  bg = computed.backgroundColor;
+                } else if (format === 'JPG') {
+                  bg = '#ffffff';
+                }
+              }
+
+              const svgXml = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+                '<style>' + cssRules + '</style>' +
+                '<foreignObject width="100%" height="100%">' +
+                '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;background:' + bg + ';overflow:hidden;margin:0;padding:0;">' +
+                clone.outerHTML +
+                '</div></foreignObject></svg>';
+
+              if (format === 'SVG') {
+                const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+                downloadExportBlob(blob, 'glide-' + label + '-' + Date.now() + '.svg');
+                showToast('success', '✓ Exported ' + label + ' as SVG');
+                return;
+              }
+
+              const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => {
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = width * scale;
+                  canvas.height = height * scale;
+                  const ctx = canvas.getContext('2d');
+                  if (format === 'JPG') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  }
+                  ctx.scale(scale, scale);
+                  ctx.drawImage(img, 0, 0);
+                  URL.revokeObjectURL(url);
+
+                  const mime = format === 'JPG' ? 'image/jpeg' : 'image/png';
+                  canvas.toBlob((b) => {
+                    if (b) {
+                      downloadExportBlob(b, 'glide-' + label + '-' + scale + 'x-' + Date.now() + '.' + format.toLowerCase());
+                      showToast('success', '✓ Exported ' + label + ' as ' + format + ' (' + scale + 'x)');
+                    } else {
+                      showToast('error', 'Failed to generate image blob');
+                    }
+                  }, mime, 0.95);
+                } catch (err) {
+                  URL.revokeObjectURL(url);
+                  showToast('error', 'Canvas rasterize error: ' + err.message);
+                }
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                showToast('error', 'Export rendering error: browser security or asset restriction');
+              };
+              img.src = url;
+            } catch (err) {
+              showToast('error', 'Export error: ' + err.message);
+            }
+          }
+
+          function downloadExportBlob(blob, filename) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              URL.revokeObjectURL(a.href);
+              a.remove();
+            }, 100);
+          }
+
           // ═══════════════════════════════════════════════════════════════
           // INIT
           // ═══════════════════════════════════════════════════════════════
@@ -6132,6 +6301,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           const mDeleteItem = document.getElementById('menu-delete');
           if (mDeleteItem) mDeleteItem.addEventListener('click', triggerDelete);
+
+          const mExport = document.getElementById('menu-export');
+          if (mExport) mExport.addEventListener('click', () => triggerExport());
 
           const mGroup = document.getElementById('menu-group');
           if (mGroup) mGroup.addEventListener('click', triggerGroup);
@@ -6682,6 +6854,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             chkShowExports.addEventListener('change', (e) => {
               showToast('success', 'Export visibility settings updated');
             });
+          }
+
+          const btnExportElem = document.getElementById('btn-export-element');
+          if (btnExportElem) {
+            btnExportElem.addEventListener('click', () => triggerExport());
           }
 
 
