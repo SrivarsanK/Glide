@@ -920,6 +920,34 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             to { transform: translateY(0); opacity: 1; }
           }
 
+          /* ── SAVE FLASH RING ── */
+          @keyframes glide-save-ring {
+            0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.92); }
+            60%  { opacity: 0.4; transform: translate(-50%, -50%) scale(1.04); }
+            100% { opacity: 0;   transform: translate(-50%, -50%) scale(1.1); }
+          }
+          .glide-save-flash {
+            position: fixed;
+            left: 50%;
+            bottom: 32px;
+            transform: translate(-50%, -50%);
+            width: 52px;
+            height: 20px;
+            border-radius: 99px;
+            background: rgba(52,211,153,0.18);
+            border: 1.5px solid rgba(52,211,153,0.7);
+            pointer-events: none;
+            z-index: 9999;
+            animation: glide-save-ring 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: rgba(52,211,153,0.9);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+          }
+
           /* ── WRITEBACK MODE SEGMENTED TOGGLE (INSTANT vs STAGED) ── */
           .writeback-mode-pill {
             display: inline-flex;
@@ -1941,6 +1969,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
         <!-- CONTEXT MENU -->
         <div id="glide-context-menu" class="context-menu" style="display:none; position:fixed; z-index:10000;">
+          <div class="context-menu-item" id="menu-copy">Copy <span class="shortcut">Ctrl+C</span></div>
+          <div class="context-menu-item" id="menu-paste" style="opacity:0.4;">Paste <span class="shortcut">Ctrl+V</span></div>
+          <div class="context-menu-item" id="menu-duplicate">Duplicate <span class="shortcut">Ctrl+D</span></div>
+          <div class="context-menu-item" id="menu-delete" style="color:#f87171;">Delete <span class="shortcut">Del</span></div>
+          <div class="context-menu-separator"></div>
           <div class="context-menu-item" id="menu-group">Group Selection <span class="shortcut">Ctrl+G</span></div>
           <div class="context-menu-item" id="menu-ungroup">Ungroup Selection <span class="shortcut">Ctrl+Shift+G</span></div>
           <div class="context-menu-separator"></div>
@@ -1995,6 +2028,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           let isAspectLocked = false;
           let isFlippedH = false;
           let isFlippedV = false;
+
+          // Clipboard state
+          let glideClipboard = null; // { source: string }
 
           function findNodeBySource(nodes, source) {
             for (const node of nodes) {
@@ -2194,6 +2230,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                     }
                     if (message.action === 'undo' || message.action === 'redo') {
                       showToast('success', message.message || 'Action completed');
+                    } else {
+                      // Save feedback: subtle pulse on canvas border
+                      showSaveFlash();
                     }
                   } else {
                     console.error('[Glide] Server error:', message.error);
@@ -3104,6 +3143,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (key === 'ArrowDown')  { e.preventDefault(); sendEdit({ type: 'class', property: 'marginTop', value: '+=' + nudge + 'px' }); return; }
             if (key === 'ArrowLeft')  { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '-=' + nudge + 'px' }); return; }
             if (key === 'ArrowRight') { e.preventDefault(); sendEdit({ type: 'class', property: 'marginLeft', value: '+=' + nudge + 'px' }); return; }
+
+            // Copy / Duplicate / Delete
+            if (ctrl && (key === 'c' || key === 'C') && !e.shiftKey) { e.preventDefault(); triggerCopy(); return; }
+            if (ctrl && (key === 'v' || key === 'V') && !e.shiftKey) { e.preventDefault(); triggerPaste(); return; }
+            if (ctrl && (key === 'd' || key === 'D') && !e.shiftKey) { e.preventDefault(); triggerDuplicate(); return; }
+            if ((key === 'Delete' || key === 'Backspace') && !ctrl) { e.preventDefault(); triggerDelete(); return; }
           });
 
           // ═══════════════════════════════════════════════════════════════
@@ -5908,6 +5953,80 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           document.getElementById('btn-bake-position')?.addEventListener('click', bakePosition);
 
+          function triggerCopy() {
+            if (!selectedElement || !selectedElement.source) return;
+            glideClipboard = { source: selectedElement.source };
+            const mPaste = document.getElementById('menu-paste');
+            if (mPaste) mPaste.style.opacity = '1';
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+            showToast('info', 'Copied element');
+          }
+
+          function triggerDuplicate() {
+            const target = selectedElement || (selectedSources.length > 0 ? { source: selectedSources[0] } : null);
+            if (!target || !target.source) return;
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(target.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'duplicate', source: target.source }
+            }));
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+            showToast('info', 'Duplicating element...');
+          }
+
+          function triggerDelete() {
+            const target = selectedElement || (selectedSources.length > 0 ? { source: selectedSources[0] } : null);
+            if (!target || !target.source) return;
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(target.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'delete', source: target.source }
+            }));
+            selectedElement = null;
+            selectedSources = [];
+            selectedRects = [];
+            clearOverlay();
+            showNoSelection();
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+            showToast('info', 'Deleting element...');
+          }
+
+          function triggerPaste() {
+            if (!glideClipboard || !glideClipboard.source) return;
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            const parsed = parseSource(glideClipboard.source);
+            if (!parsed) return;
+            socket.send(JSON.stringify({
+              type: 'edit',
+              file: parsed.file,
+              line: parsed.line,
+              column: parsed.column,
+              generation: currentGeneration,
+              viewportWidth: iframeWidth.current,
+              change: { type: 'duplicate', source: glideClipboard.source }
+            }));
+            const menu = document.getElementById('glide-context-menu');
+            if (menu) menu.style.display = 'none';
+            showToast('info', 'Pasting element...');
+          }
+
           function triggerGroup() {
             if (selectedSources.length < 2) {
               alert('Select 2 or more elements to group');
@@ -6001,6 +6120,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           if (btnLeft) btnLeft.addEventListener('click', toggleLeft);
           if (btnRight) btnRight.addEventListener('click', toggleRight);
+
+          const mCopy = document.getElementById('menu-copy');
+          if (mCopy) mCopy.addEventListener('click', triggerCopy);
+
+          const mPasteItem = document.getElementById('menu-paste');
+          if (mPasteItem) mPasteItem.addEventListener('click', triggerPaste);
+
+          const mDuplicate = document.getElementById('menu-duplicate');
+          if (mDuplicate) mDuplicate.addEventListener('click', triggerDuplicate);
+
+          const mDeleteItem = document.getElementById('menu-delete');
+          if (mDeleteItem) mDeleteItem.addEventListener('click', triggerDelete);
 
           const mGroup = document.getElementById('menu-group');
           if (mGroup) mGroup.addEventListener('click', triggerGroup);
@@ -6161,6 +6292,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               toast.style.animation = 'slideUp 0.2s ease-in reverse';
               setTimeout(() => toast.remove(), 200);
             }, 3000);
+          }
+
+          let _lastSaveFlash = 0;
+          function showSaveFlash() {
+            const now = Date.now();
+            // Throttle: no more than one flash per 800ms
+            if (now - _lastSaveFlash < 800) return;
+            _lastSaveFlash = now;
+            const el = document.createElement('div');
+            el.className = 'glide-save-flash';
+            el.textContent = 'SAVED';
+            document.body.appendChild(el);
+            el.addEventListener('animationend', () => el.remove());
           }
 
           window.triggerUndo = function() {
