@@ -4314,6 +4314,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               };
               return search(this._roots);
             },
+            getById(id) {
+              return this._index.get(id) || null;
+            },
             get isEmpty() { return this._index.size === 0; }
           };
 
@@ -4600,11 +4603,49 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 isPendingPositionUpdate = false;
               }, 1000);
 
-              sendPositionChange(data.source, {
-                position: 'relative',
-                left: data.dx + 'px',
-                top: data.dy + 'px'
-              });
+              // Cross-parent canvas drop detection (reparenting)
+              let didReparent = false;
+              if (data.rect && data.source && !_sg.isEmpty) {
+                const dropCenterX = data.rect.x + (data.rect.width || 0) / 2;
+                const dropCenterY = data.rect.y + (data.rect.height || 0) / 2;
+                const currentSceneNode = _sg.getById(data.source);
+                const originalParentId = currentSceneNode ? (currentSceneNode.parent ? currentSceneNode.parent.id : null) : null;
+
+                function isDescendant(node, ancestorId) {
+                  let p = node ? node.parent : null;
+                  while (p) {
+                    if (p.id === ancestorId) return true;
+                    p = p.parent;
+                  }
+                  return false;
+                }
+
+                let candidate = _sg.hitTest(dropCenterX, dropCenterY);
+                while (candidate && (candidate.id === data.source || isDescendant(candidate, data.source))) {
+                  candidate = candidate.parent;
+                }
+
+                if (candidate && candidate.id && originalParentId && candidate.id !== originalParentId && candidate.isStamped) {
+                  didReparent = true;
+                  if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                      type: 'reparent',
+                      file: currentFile,
+                      sourceId: data.source,
+                      newParentId: candidate.id,
+                      newIndex: candidate.children ? candidate.children.length : 0
+                    }));
+                  }
+                }
+              }
+
+              if (!didReparent) {
+                sendPositionChange(data.source, {
+                  position: 'relative',
+                  left: data.dx + 'px',
+                  top: data.dy + 'px'
+                });
+              }
               
               if (data.rect) {
                 selectedRect = data.rect;

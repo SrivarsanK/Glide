@@ -128,4 +128,10 @@ describe('GlideOverlay Canvas Layer', () => {
     expect(html).toContain("message.type === 'scene_update'");
     expect(html).toContain("glide:request-scene-nodes");
   });
+
+  test('should include cross-parent canvas drop reparenting in getEditorHTML', () => {
+    const html = getEditorHTML();
+    expect(html).toContain("type: 'reparent'");
+    expect(html).toContain("newParentId");
+  });
 });
