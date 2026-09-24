@@ -134,4 +134,12 @@ describe('GlideOverlay Canvas Layer', () => {
     expect(html).toContain("type: 'reparent'");
     expect(html).toContain("newParentId");
   });
+
+  test('should include component definition jump button and resolution handling in getEditorHTML', () => {
+    const html = getEditorHTML();
+    expect(html).toContain('id="btn-jump-definition"');
+    expect(html).toContain("type: 'resolve_component'");
+    expect(html).toContain("message.type === 'resolved_component'");
+    expect(html).toContain('jump-btn');
+  });
 });
