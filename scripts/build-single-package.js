@@ -65,10 +65,10 @@ const internalPackages = [
   'adapters/astro',
   'adapters/html',
   'adapters/react',
-  'server',
   'overlay',
-  'vite-plugin',
+  'server',
   'babel-plugin',
+  'vite-plugin',
 ];
 
 async function runBuild() {
