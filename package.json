@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.0.47",
+  "version": "1.1.0",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
   "license": "Apache-2.0",
   "author": "Srivarsan Kannan <srivarsankannan@gmail.com> (https://github.com/SrivarsanK)",
