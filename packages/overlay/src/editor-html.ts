@@ -2372,8 +2372,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   const headerFileName = document.getElementById('header-file-name');
                   if (headerFileName) headerFileName.textContent = baseName;
 
-                  // Pre-expand all nodes recursively on first load so full tree displays immediately
-                  if (expandedNodeIds.size === 0 && layerTree) {
+                  // Always expand all nodes when loading a (possibly new) file tree
+                  if (layerTree) {
+                    expandedNodeIds.clear();
                     function expandAll(nodes) {
                       if (!nodes || !Array.isArray(nodes)) return;
                       nodes.forEach(n => {
@@ -4769,16 +4770,25 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function updateLayersPanel(data) {
             if (!data.source) return;
             const parsed = parseSource(data.source);
-            if (parsed && parsed.file && !parsed.cstSelector) {
-              currentFile = parsed.file;
-            }
-            // Only request get-tree if layerTree is completely empty and file is valid non-CST
-            if ((!layerTree || layerTree.length === 0) && socket && socket.readyState === WebSocket.OPEN) {
-              if (parsed && parsed.file && !parsed.cstSelector && parsed.file !== lastRequestedTreeFile) {
-                lastRequestedTreeFile = parsed.file;
-                socket.send(JSON.stringify({ type: 'get-tree', file: parsed.file }));
+            const newFile = (parsed && parsed.file && !parsed.cstSelector) ? parsed.file : null;
+
+            // Request get-tree when tree is empty OR when the selected element lives in a different file
+            if (socket && socket.readyState === WebSocket.OPEN && newFile) {
+              const fileChanged = newFile !== currentFile;
+              if (fileChanged || !layerTree || layerTree.length === 0) {
+                if (newFile !== lastRequestedTreeFile) {
+                  lastRequestedTreeFile = newFile;
+                  socket.send(JSON.stringify({ type: 'get-tree', file: newFile }));
+                  // currentFile updated in the tree response handler
+                  return; // wait for tree response which will re-render and highlight
+                }
+              } else {
+                currentFile = newFile;
               }
+            } else if (newFile) {
+              currentFile = newFile;
             }
+
             // Highlight active layer node in current tree
             const targetSrc = data.source;
             const targetNorm = normalizePathSlash(targetSrc).toLowerCase();
