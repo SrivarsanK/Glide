@@ -5,12 +5,6 @@ export interface ElementRect {
   height: number;
 }
 
-const HOVER_STYLE = [
-  'outline: 2px solid #38bdf8',
-  'outline-offset: 2px',
-  'transition: outline 0.1s',
-].join(';');
-
 export class GlideBridge {
   private targetWindow: Window;
   private activeHoverElement: HTMLElement | null = null;
@@ -171,8 +165,8 @@ export class GlideBridge {
   private sendTelemetry(type: string, el: HTMLElement): void {
     const source = el.getAttribute(this.sourceAttribute) || el.closest(`[${this.sourceAttribute}]`)?.getAttribute(this.sourceAttribute) || '';
     const rect = el.getBoundingClientRect();
-    const getCS = (this.targetWindow as any).getComputedStyle;
-    const cs = typeof getCS === 'function' ? getCS(el) : {} as CSSStyleDeclaration;
+    const getCS = this.targetWindow.getComputedStyle;
+    const cs = typeof getCS === 'function' ? getCS.call(this.targetWindow, el) : {} as CSSStyleDeclaration;
 
     const computedStyles = {
       tagName: el.tagName.toLowerCase(),
