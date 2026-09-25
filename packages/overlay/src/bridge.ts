@@ -13,6 +13,7 @@ export class GlideBridge {
   private sourceAttribute: string;
   private hoverAttribute: string;
   private selectedAttribute: string;
+  private selectedElements: Set<HTMLElement> = new Set();
 
   constructor(targetWindow: Window = window, options?: { sourceAttribute?: string; hoverAttribute?: string; selectedAttribute?: string }) {
     this.targetWindow = targetWindow;
@@ -25,6 +26,8 @@ export class GlideBridge {
     this.injectStyles();
     this.targetWindow.document.addEventListener('mousemove', this.handleMouseMove);
     this.targetWindow.document.addEventListener('click', this.handleClick, true);
+    this.targetWindow.document.addEventListener('dblclick', this.handleDblClick, true);
+    this.targetWindow.document.addEventListener('contextmenu', this.handleContextMenu, true);
     if (typeof this.targetWindow.addEventListener === 'function') {
       this.targetWindow.addEventListener('scroll', this.handleScrollOrResize, { passive: true, capture: true });
       this.targetWindow.addEventListener('resize', this.handleScrollOrResize, { passive: true });
@@ -38,11 +41,30 @@ export class GlideBridge {
     this.styleSheet?.remove();
     this.targetWindow.document.removeEventListener('mousemove', this.handleMouseMove);
     this.targetWindow.document.removeEventListener('click', this.handleClick, true);
+    this.targetWindow.document.removeEventListener('dblclick', this.handleDblClick, true);
+    this.targetWindow.document.removeEventListener('contextmenu', this.handleContextMenu, true);
     if (typeof this.targetWindow.removeEventListener === 'function') {
       this.targetWindow.removeEventListener('scroll', this.handleScrollOrResize, true);
       this.targetWindow.removeEventListener('resize', this.handleScrollOrResize);
       this.targetWindow.removeEventListener('message', this.handleMessage);
     }
+  }
+
+  public getSelectedElements(): HTMLElement[] {
+    return Array.from(this.selectedElements);
+  }
+
+  private findTopStampedContainer(leaf: HTMLElement): HTMLElement {
+    let top: HTMLElement = leaf;
+    let curr: HTMLElement | null = leaf.parentElement;
+    while (curr && curr !== this.targetWindow.document?.body) {
+      const hasAttr = typeof curr.hasAttribute === 'function' ? curr.hasAttribute(this.sourceAttribute) : !!curr.getAttribute?.(this.sourceAttribute);
+      if (hasAttr) {
+        top = curr;
+      }
+      curr = curr.parentElement;
+    }
+    return top;
   }
 
   private handleScrollOrResize = (): void => {
@@ -74,14 +96,24 @@ export class GlideBridge {
 
   private clearHover(): void {
     if (this.activeHoverElement) {
-      this.activeHoverElement.removeAttribute(this.hoverAttribute);
+      if (typeof this.activeHoverElement.removeAttribute === 'function') {
+        this.activeHoverElement.removeAttribute(this.hoverAttribute);
+      }
       this.activeHoverElement = null;
     }
   }
 
   private clearSelection(): void {
+    for (const el of this.selectedElements) {
+      if (typeof el.removeAttribute === 'function') {
+        el.removeAttribute(this.selectedAttribute);
+      }
+    }
+    this.selectedElements.clear();
     if (this.selectedElement) {
-      this.selectedElement.removeAttribute(this.selectedAttribute);
+      if (typeof this.selectedElement.removeAttribute === 'function') {
+        this.selectedElement.removeAttribute(this.selectedAttribute);
+      }
       this.selectedElement = null;
     }
   }
@@ -97,11 +129,26 @@ export class GlideBridge {
       if (el) {
         this.clearSelection();
         this.selectedElement = el;
-        el.setAttribute(this.selectedAttribute, '');
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        this.selectedElements.add(el);
+        if (typeof el.setAttribute === 'function') {
+          el.setAttribute(this.selectedAttribute, '');
+        }
+        if (typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
         // Send telemetry so the editor gets glide:overlay with rect + computedStyles
         // This drives the canvas overlay highlight and properties panel population.
         this.sendTelemetry('glide:element-selected', el);
+      }
+    }
+
+    if (data.type === 'glide:clear-selection') {
+      this.clearSelection();
+    }
+
+    if (data.type === 'glide:refresh-selection' || data.type === 'glide:refresh-rects') {
+      if (this.selectedElement) {
+        this.sendTelemetry('glide:element-selected', this.selectedElement);
       }
     }
 
@@ -111,20 +158,28 @@ export class GlideBridge {
       ) as HTMLElement | null;
       if (el) {
         if (this.activeHoverElement && this.activeHoverElement !== el) {
-          this.activeHoverElement.removeAttribute(this.hoverAttribute);
+          if (typeof this.activeHoverElement.removeAttribute === 'function') {
+            this.activeHoverElement.removeAttribute(this.hoverAttribute);
+          }
         }
         this.activeHoverElement = el;
-        el.setAttribute(this.hoverAttribute, '');
+        if (typeof el.setAttribute === 'function') {
+          el.setAttribute(this.hoverAttribute, '');
+        }
         this.sendTelemetry('glide:element-hovered', el);
       }
     }
 
     if (data.type === 'glide:hover-element-exit') {
       if (this.activeHoverElement) {
-        this.activeHoverElement.removeAttribute(this.hoverAttribute);
+        if (typeof this.activeHoverElement.removeAttribute === 'function') {
+          this.activeHoverElement.removeAttribute(this.hoverAttribute);
+        }
         this.activeHoverElement = null;
       }
-      this.targetWindow.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      if (this.targetWindow !== this.targetWindow.parent) {
+        this.targetWindow.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      }
     }
   };
 
@@ -132,18 +187,22 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest(`[${this.sourceAttribute}]`) as HTMLElement | null;
+    const sourceEl = (typeof target.closest === 'function' ? target.closest(`[${this.sourceAttribute}]`) : null) as HTMLElement | null;
 
     if (sourceEl) {
       if (this.activeHoverElement !== sourceEl) {
         this.clearHover();
         this.activeHoverElement = sourceEl;
-        sourceEl.setAttribute(this.hoverAttribute, '');
+        if (typeof sourceEl.setAttribute === 'function') {
+          sourceEl.setAttribute(this.hoverAttribute, '');
+        }
         this.sendTelemetry('glide:element-hovered', sourceEl);
       }
     } else if (this.activeHoverElement) {
       this.clearHover();
-      this.targetWindow.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      if (this.targetWindow !== this.targetWindow.parent) {
+        this.targetWindow.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+      }
     }
   };
 
@@ -151,25 +210,132 @@ export class GlideBridge {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const sourceEl = target.closest(`[${this.sourceAttribute}]`) as HTMLElement | null;
-    if (sourceEl) {
-      event.preventDefault();
-      event.stopPropagation();
+    const leaf = (typeof target.closest === 'function' ? target.closest(`[${this.sourceAttribute}]`) : null) as HTMLElement | null;
+    if (!leaf) {
+      if (this.selectedElement || this.selectedElements.size > 0) {
+        this.clearSelection();
+        if (this.targetWindow !== this.targetWindow.parent) {
+          this.targetWindow.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+        }
+      }
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const isDeep = !!(event.metaKey || event.ctrlKey);
+    const isShift = !!event.shiftKey;
+    const targetEl = isDeep ? leaf : this.findTopStampedContainer(leaf);
+
+    if (isShift) {
+      // Rule 3: Multi-selection toggle
+      if (this.selectedElements.has(targetEl)) {
+        this.selectedElements.delete(targetEl);
+        if (typeof targetEl.removeAttribute === 'function') {
+          targetEl.removeAttribute(this.selectedAttribute);
+        }
+        const remaining = Array.from(this.selectedElements);
+        this.selectedElement = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+        const source = targetEl.getAttribute?.(this.sourceAttribute) || '';
+        if (this.targetWindow !== this.targetWindow.parent) {
+          this.targetWindow.parent.postMessage({ type: 'glide:element-deselected', source }, '*');
+        }
+      } else {
+        this.selectedElements.add(targetEl);
+        this.selectedElement = targetEl;
+        if (typeof targetEl.setAttribute === 'function') {
+          targetEl.setAttribute(this.selectedAttribute, '');
+        }
+        this.sendTelemetry('glide:element-selected', targetEl, { isShift: true, isDeep });
+      }
+    } else {
+      // Single selection: replace current selection (Rule 1 top container, or Rule 2 deep leaf)
       this.clearSelection();
-      this.selectedElement = sourceEl;
-      sourceEl.setAttribute(this.selectedAttribute, '');
-      this.sendTelemetry('glide:element-selected', sourceEl);
+      this.selectedElements.add(targetEl);
+      this.selectedElement = targetEl;
+      if (typeof targetEl.setAttribute === 'function') {
+        targetEl.setAttribute(this.selectedAttribute, '');
+      }
+      this.sendTelemetry('glide:element-selected', targetEl, { isShift: false, isDeep });
     }
   };
 
-  private sendTelemetry(type: string, el: HTMLElement): void {
-    const source = el.getAttribute(this.sourceAttribute) || el.closest(`[${this.sourceAttribute}]`)?.getAttribute(this.sourceAttribute) || '';
-    const rect = el.getBoundingClientRect();
+  private handleDblClick = (event: MouseEvent): void => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    const leaf = (typeof target.closest === 'function' ? target.closest(`[${this.sourceAttribute}]`) : null) as HTMLElement | null;
+    if (!leaf) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Rule 1: Double-click drill-down
+    // If an element is already selected and contains the clicked leaf (but is not the leaf itself), drill down 1 level
+    if (this.selectedElement && typeof this.selectedElement.contains === 'function' && this.selectedElement.contains(leaf) && this.selectedElement !== leaf) {
+      let stampedUnder: HTMLElement = leaf;
+      let curr: HTMLElement | null = leaf;
+      while (curr && curr !== this.selectedElement) {
+        const hasAttr = typeof curr.hasAttribute === 'function' ? curr.hasAttribute(this.sourceAttribute) : !!curr.getAttribute?.(this.sourceAttribute);
+        if (hasAttr) {
+          stampedUnder = curr;
+        }
+        curr = curr.parentElement;
+      }
+      this.clearSelection();
+      this.selectedElements.add(stampedUnder);
+      this.selectedElement = stampedUnder;
+      if (typeof stampedUnder.setAttribute === 'function') {
+        stampedUnder.setAttribute(this.selectedAttribute, '');
+      }
+      this.sendTelemetry('glide:element-selected', stampedUnder, { isDrillDown: true });
+    }
+  };
+
+  private handleContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const clientX = event.clientX;
+    const clientY = event.clientY;
+
+    // Rule 4: Depth-stacked layer raycast along z-axis (innermost child first)
+    const layerStack: Array<{ source: string; tagName: string; name: string }> = [];
+    let curr = event.target as HTMLElement | null;
+    while (curr && curr !== this.targetWindow.document?.body) {
+      const hasAttr = typeof curr.hasAttribute === 'function' ? curr.hasAttribute(this.sourceAttribute) : !!curr.getAttribute?.(this.sourceAttribute);
+      if (hasAttr) {
+        const source = curr.getAttribute?.(this.sourceAttribute) || '';
+        const tagName = (curr.tagName || '').toLowerCase();
+        const name = curr.getAttribute?.('data-gl-name') || tagName;
+        layerStack.push({ source, tagName, name });
+      }
+      curr = curr.parentElement;
+    }
+
+    if (this.targetWindow !== this.targetWindow.parent) {
+      this.targetWindow.parent.postMessage({
+        type: 'glide:contextmenu',
+        clientX,
+        clientY,
+        layerStack,
+      }, '*');
+    }
+  };
+
+  private sendTelemetry(
+    type: string,
+    el: HTMLElement,
+    options?: { isShift?: boolean; isDeep?: boolean; isDrillDown?: boolean }
+  ): void {
+    const source = (el.getAttribute && el.getAttribute(this.sourceAttribute)) || el.closest?.(`[${this.sourceAttribute}]`)?.getAttribute(this.sourceAttribute) || '';
+    const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
     const getCS = this.targetWindow.getComputedStyle;
     const cs = typeof getCS === 'function' ? getCS.call(this.targetWindow, el) : {} as CSSStyleDeclaration;
 
     const computedStyles = {
-      tagName: el.tagName.toLowerCase(),
+      tagName: (el.tagName || '').toLowerCase(),
       // Layout
       display: cs.display,
       flexDirection: cs.flexDirection,
@@ -223,13 +389,13 @@ export class GlideBridge {
     const normalized = {
       type,
       source,
-      tagName: el.tagName.toLowerCase(),
-      classNames: el.className,
+      tagName: (el.tagName || '').toLowerCase(),
+      classNames: el.className || '',
       rect: {
-        left: rect.left + this.targetWindow.scrollX,
-        top: rect.top + this.targetWindow.scrollY,
-        width: rect.width,
-        height: rect.height,
+        left: rect.left + (this.targetWindow.scrollX || 0),
+        top: rect.top + (this.targetWindow.scrollY || 0),
+        width: rect.width || 0,
+        height: rect.height || 0,
       },
     };
 
@@ -240,11 +406,14 @@ export class GlideBridge {
       this.targetWindow.parent.postMessage({
         type: 'glide:overlay',
         source,
+        isShift: options?.isShift ?? false,
+        isDeep: options?.isDeep ?? false,
+        isDrillDown: options?.isDrillDown ?? false,
         rect: {
-          x: rect.left + this.targetWindow.scrollX,
-          y: rect.top + this.targetWindow.scrollY,
-          width: rect.width,
-          height: rect.height,
+          x: rect.left + (this.targetWindow.scrollX || 0),
+          y: rect.top + (this.targetWindow.scrollY || 0),
+          width: rect.width || 0,
+          height: rect.height || 0,
         },
         isHover: type === 'glide:element-hovered',
         computedStyles,
