@@ -88,18 +88,14 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
 
           let text = '';
           if (node.children) {
+            const parts: string[] = [];
             for (const child of node.children) {
               if (child.type === 'text') {
-                const val = child.data.trim();
-                if (val) {
-                  text = val;
-                  break;
-                }
+                const val = child.data?.trim();
+                if (val) parts.push(val);
               }
             }
-          }
-          if (text && text.length > 25) {
-            text = text.substring(0, 22) + '...';
+            text = parts.join(' ');
           }
 
           let alt = '';
@@ -218,17 +214,22 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
 
     let text = '';
     if (path.node.children) {
+      const parts: string[] = [];
       path.node.children.forEach((child: any) => {
         if (child.type === 'JSXText') {
           const val = child.value.trim();
-          if (val) text = val;
-        } else if (child.type === 'JSXExpressionContainer' && child.expression.type === 'StringLiteral') {
-          text = child.expression.value;
+          if (val) parts.push(val);
+        } else if (child.type === 'JSXExpressionContainer') {
+          if (child.expression && child.expression.type === 'StringLiteral') {
+            const val = child.expression.value.trim();
+            if (val) parts.push(val);
+          } else if (child.expression && child.expression.type === 'TemplateLiteral' && child.expression.quasis) {
+            const val = child.expression.quasis.map((q: any) => q.value.raw).join('').trim();
+            if (val) parts.push(val);
+          }
         }
       });
-    }
-    if (text && text.length > 25) {
-      text = text.substring(0, 22) + '...';
+      text = parts.join(' ');
     }
 
     let alt = '';
