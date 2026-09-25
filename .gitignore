@@ -133,3 +133,14 @@ opencode.json
 .cursor/
 glide-components.json
 
+# Dev-only internal artifacts (not part of npm package or skills)
+.planning/
+.firecrawl/
+.agent-grid/
+.claude/
+docs/
+fix/
+ui/
+logo/
+test-site/
+figma-v0-architectural-framework.md
