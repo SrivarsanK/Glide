@@ -216,7 +216,7 @@ export function buildBridgeScript(
       if (src) {
         try {
           var cleanSrc = src.split('?')[0].split('#')[0];
-          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf('\\'));
+          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf(String.fromCharCode(92)));
           imgName = (lastSlash >= 0) ? cleanSrc.substring(lastSlash + 1) : cleanSrc;
         } catch(e) {}
       }
@@ -931,8 +931,8 @@ export function buildBridgeScript(
       el = resolveElementAtPoint(e.clientX, e.clientY, false);
       if (el && (el === document.body || el === document.documentElement)) el = null;
     }
-    var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
-    var isCmdClick = e.metaKey || e.ctrlKey;
+    var isShift = !!e.shiftKey;
+    var isCmdClick = !!(e.metaKey || e.ctrlKey);
 
     if (el) {
       // Clear hover when starting a drag
@@ -1181,11 +1181,23 @@ export function buildBridgeScript(
     }
     if (srcEl) {
       e.preventDefault();
+      var layerStack = [];
+      var curr = srcEl;
+      while (curr && curr !== document.body && curr !== document.documentElement) {
+        if (curr.hasAttribute && curr.hasAttribute('${sourceAttr}')) {
+          var src = curr.getAttribute('${sourceAttr}') || '';
+          var tagName = (curr.tagName || '').toLowerCase();
+          var name = curr.getAttribute('data-gl-name') || tagName;
+          layerStack.push({ source: src, tagName: tagName, name: name });
+        }
+        curr = curr.parentElement;
+      }
       window.parent.postMessage({
         type: 'glide:contextmenu',
         source: getElId(srcEl),
         clientX: e.clientX,
-        clientY: e.clientY
+        clientY: e.clientY,
+        layerStack: layerStack
       }, '*');
     }
   }, true);

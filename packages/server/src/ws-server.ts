@@ -99,7 +99,7 @@ function findProjectEntryFile(projectDir: string): string | null {
 // ── Glide Bridge Script (injected into proxied HTML) ──────────────────────
 // Self-contained IIFE with full CST detection. Injected into user's app HTML
 // by the proxy route so no Vite plugin install is required.
-function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
+export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   const sourceAttr = cfg.sourceAttribute || 'data-gl-source';
   const hoverAttr  = cfg.hoverAttribute  || 'data-glide-hover';
   const selectedAttr = cfg.selectedAttribute || 'data-glide-selected';
@@ -168,6 +168,18 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       cur = cur.parentNode;
     }
     return direct;
+  }
+
+  function findTopStampedContainer(leaf) {
+    var top = leaf;
+    var curr = leaf.parentElement;
+    while (curr && curr !== document.body && curr !== document.documentElement) {
+      if (curr.hasAttribute && curr.hasAttribute('${sourceAttr}')) {
+        top = curr;
+      }
+      curr = curr.parentElement;
+    }
+    return top;
   }
 
   function sendMsgForAny(type, el, isShift) {
@@ -240,7 +252,7 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       if (src) {
         try {
           var cleanSrc = src.split('?')[0].split('#')[0];
-          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf('\\'));
+          var lastSlash = Math.max(cleanSrc.lastIndexOf('/'), cleanSrc.lastIndexOf(String.fromCharCode(92)));
           imgName = (lastSlash >= 0) ? cleanSrc.substring(lastSlash + 1) : cleanSrc;
         } catch(e) {}
       }
@@ -472,40 +484,78 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
 
   document.addEventListener('pointerdown', function(e) {
     if (e.target.isContentEditable || (e.target.closest && e.target.closest('[contenteditable="true"]'))) return;
-    var el = resolveElementAtPoint(e.clientX, e.clientY);
-    if (el && (el === document.body || el === document.documentElement)) el = null;
-    if (!el) return;
-    var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
-    var old = document.querySelectorAll('[${selectedAttr}]');
-    if (!isShift) { for (var i = 0; i < old.length; i++) old[i].removeAttribute('${selectedAttr}'); }
-    selected = el;
-    el.setAttribute('${selectedAttr}', '');
-    sendMsgForAny('glide:element-selected', el, isShift);
+    var leaf = resolveElementAtPoint(e.clientX, e.clientY);
+    if (leaf && (leaf === document.body || leaf === document.documentElement)) leaf = null;
+    if (!leaf) return;
+
+    var isDeep = !!(e.metaKey || e.ctrlKey);
+    var isShift = !!e.shiftKey;
+    var targetEl = (isDeep || !leaf.hasAttribute('${sourceAttr}')) ? leaf : findTopStampedContainer(leaf);
+
+    if (isShift) {
+      if (targetEl.hasAttribute('${selectedAttr}')) {
+        targetEl.removeAttribute('${selectedAttr}');
+        var src = getElId(targetEl);
+        window.parent.postMessage({ type: 'glide:element-deselected', source: src }, '*');
+        selected = document.querySelector('[${selectedAttr}]');
+      } else {
+        selected = targetEl;
+        targetEl.setAttribute('${selectedAttr}', '');
+        sendMsgForAny('glide:element-selected', targetEl, true);
+      }
+    } else {
+      var old = document.querySelectorAll('[${selectedAttr}]');
+      for (var i = 0; i < old.length; i++) old[i].removeAttribute('${selectedAttr}');
+      selected = targetEl;
+      targetEl.setAttribute('${selectedAttr}', '');
+      sendMsgForAny('glide:element-selected', targetEl, false);
+    }
     e.preventDefault();
     e.stopPropagation();
   }, true);
 
   document.addEventListener('dblclick', function(e) {
-    var el = resolveElementAtPoint(e.clientX, e.clientY);
-    if (!el || el === document.body || el === document.documentElement) return;
+    var leaf = resolveElementAtPoint(e.clientX, e.clientY);
+    if (!leaf || leaf === document.body || leaf === document.documentElement) return;
+
+    // Rule 1: Double-click drill down if an ancestor container is already selected
+    if (selected && selected !== leaf && selected.contains(leaf)) {
+      var stampedUnder = leaf;
+      var curr = leaf;
+      while (curr && curr !== selected) {
+        if (curr.hasAttribute && curr.hasAttribute('${sourceAttr}')) {
+          stampedUnder = curr;
+        }
+        curr = curr.parentElement;
+      }
+      var old = document.querySelectorAll('[${selectedAttr}]');
+      for (var i = 0; i < old.length; i++) old[i].removeAttribute('${selectedAttr}');
+      selected = stampedUnder;
+      stampedUnder.setAttribute('${selectedAttr}', '');
+      sendMsgForAny('glide:element-selected', stampedUnder, false);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     // Enable inline text editing for canvas elements
-    el.contentEditable = 'true';
-    el.focus();
+    leaf.contentEditable = 'true';
+    leaf.focus();
     try {
       var range = document.createRange();
-      range.selectNodeContents(el);
+      range.selectNodeContents(leaf);
       var sel = window.getSelection();
       if (sel) { sel.removeAllRanges(); sel.addRange(range); }
     } catch(err) {}
 
     function onBlur() {
-      el.contentEditable = 'false';
-      var text = el.textContent ? el.textContent.trim() : '';
-      var src = getElId(el);
+      leaf.contentEditable = 'false';
+      var text = leaf.textContent ? leaf.textContent.trim() : '';
+      var src = getElId(leaf);
       window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
-      el.removeEventListener('blur', onBlur);
+      leaf.removeEventListener('blur', onBlur);
     }
-    el.addEventListener('blur', onBlur);
+    leaf.addEventListener('blur', onBlur);
   }, true);
 
   document.addEventListener('click', function(e) {
@@ -520,10 +570,30 @@ function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }, true);
 
   document.addEventListener('contextmenu', function(e) {
-    var el = resolveElementAtPoint(e.clientX, e.clientY);
-    if (el && el !== document.body && el !== document.documentElement) {
+    var leaf = resolveElementAtPoint(e.clientX, e.clientY);
+    if (leaf && leaf !== document.body && leaf !== document.documentElement) {
       e.preventDefault();
-      window.parent.postMessage({ type: 'glide:contextmenu', source: getElId(el), clientX: e.clientX, clientY: e.clientY }, '*');
+      e.stopPropagation();
+
+      var layerStack = [];
+      var curr = leaf;
+      while (curr && curr !== document.body && curr !== document.documentElement) {
+        if (curr.hasAttribute && curr.hasAttribute('${sourceAttr}')) {
+          var src = curr.getAttribute('${sourceAttr}') || '';
+          var tagName = (curr.tagName || '').toLowerCase();
+          var name = curr.getAttribute('data-gl-name') || tagName;
+          layerStack.push({ source: src, tagName: tagName, name: name });
+        }
+        curr = curr.parentElement;
+      }
+
+      window.parent.postMessage({
+        type: 'glide:contextmenu',
+        source: getElId(leaf),
+        clientX: e.clientX,
+        clientY: e.clientY,
+        layerStack: layerStack
+      }, '*');
     }
   }, true);
 
