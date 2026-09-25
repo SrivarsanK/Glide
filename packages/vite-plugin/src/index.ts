@@ -197,6 +197,7 @@ export function buildBridgeScript(
     if (el.id === '__glide_styles__') return null;
     var id = getElId(el);
     var tag = el.tagName.toLowerCase();
+    var cls = (typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '')).trim();
     // Gather direct text content
     var text = '';
     el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
@@ -1693,6 +1694,21 @@ export function buildBridgeScript(
         sendMsg('glide:element-hovered', hovered);
       }
 
+      // Re-observe after mutations are complete
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true
+      });
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true
+    });
+  }
 
   // Post document height back to parent on load, resize, and DOM mutations
   var lastHeight = 0;
@@ -1716,22 +1732,6 @@ export function buildBridgeScript(
     sendReadyState();
   } else {
     window.addEventListener('DOMContentLoaded', sendReadyState);
-  }
-
-  // Re-observe after mutations are complete
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        characterData: true
-      });
-    });
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      characterData: true
-    });
   }
 })();
 `;

@@ -233,6 +233,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     if (el.id === '__glide_styles__') return null;
     var id = getElId(el);
     var tag = el.tagName.toLowerCase();
+    var cls = (typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '')).trim();
     // Gather direct text content
     var text = '';
     el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
