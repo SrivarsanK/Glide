@@ -2223,7 +2223,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function findNodeBySource(nodes, source) {
             for (const node of nodes) {
               const nodeSource = convertNodeIdToSource(node.id, currentFile);
-              if (nodeSource === source) return node;
+              if (isSourceMatch(nodeSource, source)) return node;
               if (node.children) {
                 const found = findNodeBySource(node.children, source);
                 if (found) return found;
@@ -2358,6 +2358,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               try {
                 const message = JSON.parse(event.data);
                 if (message.type === 'tree') {
+                  lastRequestedTreeFile = null;
                   if (!message.tree) {
                     console.warn('[Glide] Tree not available for file:', message.file, message.error);
                     return;
@@ -2808,6 +2809,57 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               hash: null,
               cstSelector: selectorStr
             };
+          }
+
+          function isSourceMatch(a, b) {
+            if (!a || !b) return false;
+            if (a === b) return true;
+            const normA = normalizePathSlash(String(a)).trim().toLowerCase();
+            const normB = normalizePathSlash(String(b)).trim().toLowerCase();
+            if (normA === normB) return true;
+
+            const parsedA = parseSource(a);
+            const parsedB = parseSource(b);
+            if (parsedA && parsedB && parsedA.line && parsedB.line) {
+              if (parsedA.line === parsedB.line && parsedA.column === parsedB.column) {
+                if (!parsedA.file || !parsedB.file) return true;
+                const fileA = normalizePathSlash(parsedA.file).toLowerCase();
+                const fileB = normalizePathSlash(parsedB.file).toLowerCase();
+                if (fileA === fileB || fileA.endsWith(fileB) || fileB.endsWith(fileA)) return true;
+              }
+            }
+
+            const partsA = normA.split(':');
+            const partsB = normB.split(':');
+            if (partsA.length >= 3 && partsB.length >= 3) {
+              const lineA = partsA[partsA.length - 2];
+              const colA = partsA[partsA.length - 1];
+              const lineB = partsB[partsB.length - 2];
+              const colB = partsB[partsB.length - 1];
+              if (lineA === lineB && colA === colB) {
+                const fileA = partsA.slice(0, -2).join(':');
+                const fileB = partsB.slice(0, -2).join(':');
+                if (!fileA || !fileB || fileA === fileB || fileA.endsWith(fileB) || fileB.endsWith(fileA)) {
+                  return true;
+                }
+              }
+            } else if (partsA.length >= 2 && partsB.length >= 2) {
+              const suffixA = ':' + partsA.slice(-2).join(':');
+              const suffixB = ':' + partsB.slice(-2).join(':');
+              if (suffixA === suffixB) {
+                const fileA = partsA.slice(0, -2).join(':');
+                const fileB = partsB.slice(0, -2).join(':');
+                if (!fileA || !fileB || fileA === fileB || fileA.endsWith(fileB) || fileB.endsWith(fileA)) {
+                  return true;
+                }
+              }
+            }
+            return false;
+          }
+
+          function isSourceSelected(src, sources) {
+            if (!src || !sources || !sources.length) return false;
+            return sources.some(s => isSourceMatch(src, s));
           }
 
           function convertNodeIdToSource(nodeId, file) {
@@ -4127,7 +4179,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               if (selectedRects.length === 1) {
                 if (selectedRects[0]) {
                   drawSelectionBox(selectedRects[0], false);
-                  if (altPressed && hoveredRect && hoveredElement && !selectedSources.includes(hoveredElement.source)) {
+                  if (altPressed && hoveredRect && hoveredElement && !isSourceSelected(hoveredElement.source, selectedSources)) {
                     drawDistanceIndicators(selectedRects[0], hoveredRect);
                   }
                 }
@@ -4158,7 +4210,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 }
               }
             }
-            if (hoveredRect && (!hoveredElement || !selectedSources.includes(hoveredElement.source))) {
+            if (hoveredRect && (!hoveredElement || !isSourceSelected(hoveredElement.source, selectedSources))) {
               drawSelectionBox(hoveredRect, true);
             }
             drawGuides();
@@ -4522,8 +4574,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
                 document.querySelectorAll('.layer-item.hovered').forEach(el => el.classList.remove('hovered'));
-                const targetLayer = document.querySelector('.layer-item[data-source="' + data.source + '"]');
-                if (targetLayer) targetLayer.classList.add('hovered');
+                document.querySelectorAll('.layer-item').forEach(el => {
+                  if (isSourceMatch(el.dataset.source, data.source)) {
+                    el.classList.add('hovered');
+                  }
+                });
               } else {
                 const isShift = data.isShift;
                 const source = data.source;
@@ -4540,7 +4595,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   selectedSources = [source];
                   selectedRects = [rect];
                 } else {
-                  if (!selectedSources.includes(source)) {
+                  if (!isSourceSelected(source, selectedSources)) {
                     selectedSources.push(source);
                     selectedRects.push(rect);
                   }
@@ -4553,7 +4608,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
                 // Highlight selected items in layers tree
                 document.querySelectorAll('.layer-item').forEach(item => {
-                  if (selectedSources.includes(item.dataset.source)) {
+                  if (isSourceSelected(item.dataset.source, selectedSources)) {
                     item.classList.add('active');
                   } else {
                     item.classList.remove('active');
@@ -4565,7 +4620,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (data.type === 'glide:element-deselected') {
               isPendingPositionUpdate = false;
               const source = data.source;
-              const idx = selectedSources.indexOf(source);
+              const idx = selectedSources.findIndex(s => isSourceMatch(s, source));
               if (idx !== -1) {
                 selectedSources.splice(idx, 1);
                 selectedRects.splice(idx, 1);
@@ -4582,7 +4637,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
               // Update highlights in layers tree
               document.querySelectorAll('.layer-item').forEach(item => {
-                if (selectedSources.includes(item.dataset.source)) {
+                if (isSourceSelected(item.dataset.source, selectedSources)) {
                   item.classList.add('active');
                 } else {
                   item.classList.remove('active');
@@ -4605,7 +4660,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               document.querySelectorAll('.layer-item.hovered').forEach(el => el.classList.remove('hovered'));
               drawOverlay();
             }
-            if (data.type === 'glide:inline-text-edit') {
+            if (data.type === 'glide:inline-text-edit' || data.type === 'glide:text-edited') {
               if (data.source && data.value !== undefined) {
                 selectedElement = { source: data.source };
                 sendEdit({ type: 'text', value: data.value });
@@ -4774,9 +4829,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             // Request get-tree when tree is empty OR when the selected element lives in a different file
             if (socket && socket.readyState === WebSocket.OPEN && newFile) {
-              const fileChanged = newFile !== currentFile;
+              const fileChanged = !currentFile || (normalizePathSlash(newFile).toLowerCase() !== normalizePathSlash(currentFile).toLowerCase());
               if (fileChanged || !layerTree || layerTree.length === 0) {
-                if (newFile !== lastRequestedTreeFile) {
+                const normLast = lastRequestedTreeFile ? normalizePathSlash(lastRequestedTreeFile).toLowerCase() : null;
+                const normNew = normalizePathSlash(newFile).toLowerCase();
+                if (normNew !== normLast) {
                   lastRequestedTreeFile = newFile;
                   socket.send(JSON.stringify({ type: 'get-tree', file: newFile }));
                   // currentFile updated in the tree response handler
@@ -4791,21 +4848,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             // Highlight active layer node in current tree
             const targetSrc = data.source;
-            const targetNorm = normalizePathSlash(targetSrc).toLowerCase();
-            const targetParts = targetSrc.split(':');
-            const targetSuffix = targetParts.length >= 2 ? ':' + targetParts.slice(-2).join(':') : '';
             document.querySelectorAll('.layer-item').forEach(item => {
               const itemSrc = item.dataset.source || item.dataset.nodeSource || '';
-              const itemNorm = normalizePathSlash(itemSrc).toLowerCase();
-              const itemParts = itemSrc.split(':');
-              const itemSuffix = itemParts.length >= 2 ? ':' + itemParts.slice(-2).join(':') : '';
-              const matches = (itemSrc === targetSrc) ||
-                              (itemNorm && itemNorm === targetNorm) ||
-                              (targetSuffix && itemSuffix && targetSuffix === itemSuffix);
+              const matches = isSourceMatch(itemSrc, targetSrc);
               if (matches) {
                 item.classList.add('active');
                 item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-              } else if (!selectedSources.includes(itemSrc)) {
+              } else if (!isSourceSelected(itemSrc, selectedSources)) {
                 item.classList.remove('active');
               }
             });
@@ -4838,7 +4887,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (n === 'a') return LAYER_ICONS.link;
             if (n === 'button') return LAYER_ICONS.button;
             if (['input','textarea','select'].includes(n)) return LAYER_ICONS.input;
-            if (['p','span','h1','h2','h3','h4','h5','h6','label','em','strong','small','b','i'].includes(n)) return LAYER_ICONS.text;
+            if (['p','span','h1','h2','h3','h4','h5','h6','label','em','strong','small','b','i','code','pre','blockquote','kbd','samp','q','cite','abbr','time','sub','sup','mark','del','s','ins'].includes(n)) return LAYER_ICONS.text;
             if (['ul','ol','li'].includes(n)) return LAYER_ICONS.list;
             if (n === 'nav') return LAYER_ICONS.nav;
             if (['section','article','header','footer','main','aside'].includes(n)) return LAYER_ICONS.section;
@@ -4990,7 +5039,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               }
 
               // Active state
-              if (selectedSources.includes(nodeSource)) {
+              if (isSourceSelected(nodeSource, selectedSources)) {
                 item.classList.add('active');
               }
 
@@ -5002,7 +5051,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               // Determine element category
               const nodeNameLower = (node.name || '').toLowerCase();
               const isImage = nodeNameLower === 'img' || nodeNameLower === 'image';
-              const textTags = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'a', 'label', 'strong', 'em', 'b', 'i', 'small', 'sub', 'sup', 'caption', 'li'];
+              const textTags = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'a', 'label', 'strong', 'em', 'b', 'i', 'small', 'sub', 'sup', 'caption', 'li', 'code', 'pre', 'blockquote', 'kbd', 'samp', 'q', 'cite', 'abbr', 'time', 'mark', 'del', 's', 'ins'];
               const isTextTag = textTags.includes(nodeNameLower);
               const hasText = typeof node.text === 'string' && node.text.trim().length > 0;
               const isText = hasText || isTextTag;
@@ -5041,10 +5090,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
               const isExpanded = expandedNodeIds.has(node.id);
               const caretSVG = hasChildren
-                ? '<span class="layer-caret" style="' + (isExpanded ? 'transform:rotate(90deg)' : '') + '">' +
-                    '<i data-lucide="chevron-down" style="width: 8px; height: 8px;"></i>' +
+                ? '<span class="layer-caret">' +
+                    '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:' + (isExpanded ? 'rotate(90deg)' : 'none') + ';transition:transform 0.15s ease"><polyline points="9 18 15 12 9 6"></polyline></svg>' +
                   '</span>'
-                : '<span class="layer-caret" style="visibility:hidden"><i data-lucide="chevron-down" style="width: 8px; height: 8px;"></i></span>';
+                : '<span class="layer-caret" style="visibility:hidden"><svg width="9" height="9" viewBox="0 0 24 24"></svg></span>';
 
               // Eye icon SVG
               const eyeSVG = isHidden
@@ -5112,6 +5161,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               item.addEventListener('click', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
                 const isShift = e.shiftKey || e.ctrlKey || e.metaKey;
+                if (!isShift) {
+                  document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+                  item.classList.add('active');
+                } else {
+                  item.classList.toggle('active');
+                }
                 const iframe = document.getElementById('app-iframe');
                 if (iframe && iframe.contentWindow) {
                   iframe.contentWindow.postMessage({
