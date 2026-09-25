@@ -182,6 +182,42 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     return top;
   }
 
+  function getElementTextContent(el) {
+    if (!el || el.nodeType !== 1) return undefined;
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return el.value;
+    if (tag === 'svg' || tag === 'img' || tag === 'canvas' || tag === 'video') return undefined;
+
+    // Direct text node children
+    var directText = '';
+    el.childNodes.forEach(function(n) {
+      if (n.nodeType === 3) directText += n.textContent;
+    });
+    directText = directText.trim();
+
+    if (!el.children || el.children.length === 0) {
+      return (directText || el.textContent || '').trim();
+    }
+
+    if (directText.length > 0) {
+      return directText;
+    }
+
+    var inlineTags = { span:1, b:1, strong:1, em:1, i:1, code:1, a:1, small:1, sub:1, sup:1, mark:1, u:1, s:1, abbr:1, label:1 };
+    var isInlineOnly = true;
+    for (var i = 0; i < el.children.length; i++) {
+      if (!inlineTags[el.children[i].tagName.toLowerCase()]) {
+        isInlineOnly = false;
+        break;
+      }
+    }
+    if (isInlineOnly) {
+      return (el.innerText || el.textContent || '').trim();
+    }
+
+    return undefined;
+  }
+
   function sendMsgForAny(type, el, isShift) {
     if (!el) return;
     var src = getElId(el);
@@ -212,10 +248,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     window.parent.postMessage({ type: 'glide:overlay', source: src, isShift: !!isShift,
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
       isHover: type === 'glide:element-hovered', computedStyles: styles,
-      textContent: (function() {
-        if (el.children && el.children.length > 0) return undefined;
-        var t = ''; el.childNodes.forEach(function(n) { if (n.nodeType === 3) t += n.textContent; }); return t.trim();
-      })()
+      textContent: getElementTextContent(el)
     }, '*');
   }
 

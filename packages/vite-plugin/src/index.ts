@@ -131,6 +131,42 @@ export function buildBridgeScript(
     return direct;
   }
 
+  function getElementTextContent(el) {
+    if (!el || el.nodeType !== 1) return undefined;
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return el.value;
+    if (tag === 'svg' || tag === 'img' || tag === 'canvas' || tag === 'video') return undefined;
+
+    // Direct text node children
+    var directText = '';
+    el.childNodes.forEach(function(n) {
+      if (n.nodeType === 3) directText += n.textContent;
+    });
+    directText = directText.trim();
+
+    if (!el.children || el.children.length === 0) {
+      return (directText || el.textContent || '').trim();
+    }
+
+    if (directText.length > 0) {
+      return directText;
+    }
+
+    var inlineTags = { span:1, b:1, strong:1, em:1, i:1, code:1, a:1, small:1, sub:1, sup:1, mark:1, u:1, s:1, abbr:1, label:1 };
+    var isInlineOnly = true;
+    for (var i = 0; i < el.children.length; i++) {
+      if (!inlineTags[el.children[i].tagName.toLowerCase()]) {
+        isInlineOnly = false;
+        break;
+      }
+    }
+    if (isInlineOnly) {
+      return (el.innerText || el.textContent || '').trim();
+    }
+
+    return undefined;
+  }
+
   // Like sendMsg() but works for ANY element — with or without sourceAttr.
   function sendMsgForAny(type, el, isShift) {
     var src = getElId(el);
@@ -174,14 +210,7 @@ export function buildBridgeScript(
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
       isHover: type === 'glide:element-hovered',
       computedStyles: computedStyles,
-      textContent: (function() {
-        if (el.children && el.children.length > 0) return undefined;
-        var directText = '';
-        el.childNodes.forEach(function(n) {
-          if (n.nodeType === 3) directText += n.textContent;
-        });
-        return directText.trim();
-      })()
+      textContent: getElementTextContent(el)
     }, '*');
   }
 
@@ -416,18 +445,7 @@ export function buildBridgeScript(
       },
       isHover: type === 'glide:element-hovered',
       computedStyles: computedStyles,
-      textContent: (function() {
-        // Only allow text editing for leaf text nodes (no child element nodes)
-        if (el.children && el.children.length > 0) return undefined;
-        // Collect only direct JSXText children (not text from nested elements)
-        var directText = '';
-        el.childNodes.forEach(function(n) {
-          if (n.nodeType === 3) {
-            directText += n.textContent;
-          }
-        });
-        return directText.trim();
-      })()
+      textContent: getElementTextContent(el)
     }, '*');
   }
 
@@ -1260,15 +1278,8 @@ export function buildBridgeScript(
       el.setAttribute('${selectedAttr}', '');
       sendMsg('glide:element-selected', el, false);
 
-      // Check if this element has direct text node children
-      var hasText = false;
-      el.childNodes.forEach(function(n) {
-        if (n.nodeType === 3 && n.textContent.trim().length > 0) {
-          hasText = true;
-        }
-      });
-
-      if (hasText && (!el.children || el.children.length === 0)) {
+      var textVal = getElementTextContent(el);
+      if (typeof textVal === 'string' && textVal.length > 0) {
         var originalText = el.textContent;
         el.contentEditable = "true";
         el.focus();
@@ -1297,11 +1308,17 @@ export function buildBridgeScript(
           el.style.outline = prevOutline;
           window.__glide_inline_editing__ = null;
 
-          var newText = el.textContent;
-          if (newText !== originalText) {
+          var newText = el.textContent ? el.textContent.trim() : '';
+          var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) || el.getAttribute('data-gl-source') || getElId(el);
+          if (newText !== (originalText ? originalText.trim() : '')) {
+            window.parent.postMessage({
+              type: 'glide:inline-text-edit',
+              source: src,
+              value: newText
+            }, '*');
             window.parent.postMessage({
               type: 'glide:text-edited',
-              source: el.getAttribute('data-gl-source'),
+              source: src,
               value: newText
             }, '*');
           }
