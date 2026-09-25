@@ -461,13 +461,35 @@ export function updateJSXText(
   });
 
   const children: any[] = targetPath.node.children || [];
-  const textChildIdx = children.findIndex((c: any) => c.type === 'JSXText');
-  if (textChildIdx !== -1) {
-    const existingRaw = children[textChildIdx].value;
+  const hasComplexChildren = children.some((c: any) => {
+    if (c.type !== 'JSXElement') return false;
+    const nameNode = c.openingElement?.name;
+    const tagName = nameNode?.type === 'JSXIdentifier' ? nameNode.name.toLowerCase() : '';
+    return ['svg', 'img', 'input', 'canvas', 'video'].includes(tagName);
+  });
+
+  if (hasComplexChildren) {
+    // Preserve icon/complex elements and update the primary text child
+    const textIdx = children.findIndex((c: any) => c.type === 'JSXText');
+    if (textIdx !== -1) {
+      const existingRaw = children[textIdx].value;
+      const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
+      const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
+      children[textIdx] = t.jsxText(leadingWs + newText + trailingWs);
+    } else {
+      children.push(t.jsxText(' ' + newText));
+    }
+  } else if (children.length === 1 && children[0].type === 'JSXText') {
+    // Single text child: preserve exact leading/trailing whitespace
+    const existingRaw = children[0].value;
     const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
     const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
-    children[textChildIdx] = t.jsxText(leadingWs + newText + trailingWs);
+    children[0] = t.jsxText(leadingWs + newText + trailingWs);
+  } else if (children.length === 1 && children[0].type === 'JSXExpressionContainer' && children[0].expression?.type === 'StringLiteral') {
+    // Single string literal in expression: {'text'}
+    children[0].expression.value = newText;
   } else {
+    // Full content replacement for multi-text or mixed inline elements
     targetPath.node.children = [t.jsxText(newText)];
   }
 
@@ -480,6 +502,11 @@ export function updateJSXText(
   let hasExpectedValue = false;
   traverse(confirmAst, {
     JSXText(path: any) {
+      if (path.node.value.trim() === newText.trim()) {
+        hasExpectedValue = true;
+      }
+    },
+    StringLiteral(path: any) {
       if (path.node.value.trim() === newText.trim()) {
         hasExpectedValue = true;
       }
