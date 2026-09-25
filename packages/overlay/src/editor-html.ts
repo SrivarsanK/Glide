@@ -7419,7 +7419,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             el.textContent = 'SAVED';
             document.body.appendChild(el);
             el.addEventListener('animationend', () => el.remove());
-            triggerFlyingReaction('⚡', window.innerWidth / 2, window.innerHeight - 80);
           }
 
           window.triggerUndo = function() {
