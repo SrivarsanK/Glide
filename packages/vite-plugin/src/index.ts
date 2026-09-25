@@ -432,6 +432,8 @@ export function buildBridgeScript(
   }
 
   var isDragging = false;
+  var dragCandidate = null;
+  var dragPointerId = null;
   var startX = 0;
   var startY = 0;
   var dragEl = null;
@@ -945,8 +947,10 @@ export function buildBridgeScript(
 
       // Use resolveSelectTarget only for source-attributed elements
       var selectTarget = el.hasAttribute('${sourceAttr}') ? resolveSelectTarget(el, isCmdClick) : el;
-      isDragging = true;
-      dragEl = selectTarget;
+      dragCandidate = selectTarget;
+      dragEl = null;
+      isDragging = false;
+      dragPointerId = e.pointerId;
       startX = e.clientX;
       startY = e.clientY;
       currentDx = 0;
@@ -977,31 +981,10 @@ export function buildBridgeScript(
       initialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft) || 0);
       initialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop) || 0);
 
-      selectTarget.style.setProperty('transition', 'none', 'important');
-      selectTarget.style.setProperty('transition-property', 'none', 'important');
-      // Capture fresh drag rect and sibling rects on drag start — never reused across drags.
       var r = selectTarget.getBoundingClientRect();
       dragStartRect = { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
       siblingRects  = collectSiblingRects(selectTarget);
       snapDisabledForDrag = false; // reset; Ctrl/Cmd on pointermove will set this
-      selectTarget.setPointerCapture(e.pointerId);
-
-      if (!rafId) rafId = requestAnimationFrame(rafDragLoop);
-
-      window.parent.postMessage({
-        type: 'glide:element-drag-start',
-        source: selectTarget.getAttribute('${sourceAttr}'),
-        initialMarginLeft: initialMarginLeft,
-        initialMarginTop: initialMarginTop,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        rect: {
-          x: r.left,
-          y: r.top,
-          width: r.width,
-          height: r.height
-        }
-      }, '*');
 
       e.preventDefault();
       e.stopPropagation();
@@ -1027,6 +1010,35 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('pointermove', function(e) {
+    if (dragCandidate && !isDragging) {
+      var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY);
+      if (moveDist >= 3) {
+        isDragging = true;
+        dragEl = dragCandidate;
+        dragEl.style.setProperty('transition', 'none', 'important');
+        dragEl.style.setProperty('transition-property', 'none', 'important');
+        try { dragEl.setPointerCapture(dragPointerId); } catch(err) {}
+
+        var r = dragStartRect;
+        window.parent.postMessage({
+          type: 'glide:element-drag-start',
+          source: dragEl.getAttribute('${sourceAttr}'),
+          initialMarginLeft: initialMarginLeft,
+          initialMarginTop: initialMarginTop,
+          clientX: startX,
+          clientY: startY,
+          rect: {
+            x: r.left,
+            y: r.top,
+            width: r.width,
+            height: r.height
+          }
+        }, '*');
+
+        if (!rafId) rafId = requestAnimationFrame(rafDragLoop);
+      }
+    }
+
     if (isDragging && dragEl) {
       // Ctrl/Cmd held during drag disables object-snap dynamically
       // (mirrors Figma's documented Ctrl/Cmd override behavior).
@@ -1085,7 +1097,7 @@ export function buildBridgeScript(
     if (isDragging && dragEl) {
       isDragging = false;
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-      dragEl.releasePointerCapture(e.pointerId);
+      try { dragEl.releasePointerCapture(e.pointerId); } catch(err) {}
 
       // Apply snap to get the final snapped deltas.
       var snapResult = resolveObjectSnap(dragStartRect, currentDx, currentDy, siblingRects);
@@ -1148,6 +1160,7 @@ export function buildBridgeScript(
       }, '*');
 
       dragEl = null;
+      dragCandidate = null;
       e.preventDefault();
       e.stopPropagation();
     } else if (isMarqueeing) {
@@ -1166,6 +1179,15 @@ export function buildBridgeScript(
       }, '*');
       e.preventDefault();
       e.stopPropagation();
+    } else {
+      if (dragCandidate) {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        dragCandidate.style.transform = '';
+        dragCandidate.style.zIndex = '';
+        dragCandidate = null;
+      }
+      dragEl = null;
+      isDragging = false;
     }
   }, true);
 
