@@ -2153,6 +2153,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
         <!-- CONTEXT MENU -->
         <div id="glide-context-menu" class="context-menu" style="display:none; position:fixed; z-index:10000;">
+          <div id="glide-context-menu-layers"></div>
           <div class="context-menu-item" id="menu-copy">Copy <span class="shortcut">Ctrl+C</span></div>
           <div class="context-menu-item" id="menu-paste" style="opacity:0.4;">Paste <span class="shortcut">Ctrl+V</span></div>
           <div class="context-menu-item" id="menu-duplicate">Duplicate <span class="shortcut">Ctrl+D</span></div>
@@ -3894,11 +3895,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function drawSelectionBox(rect, isHover) {
             const container = isHover ? svg : (document.getElementById('selection-group') || createSelectionGroup());
 
+            const rx = rect.x !== undefined ? rect.x : (rect.left !== undefined ? rect.left : 0);
+            const ry = rect.y !== undefined ? rect.y : (rect.top !== undefined ? rect.top : 0);
+            const rw = rect.width || 0;
+            const rh = rect.height || 0;
+
             const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
-            r.setAttribute('x', rect.x);
-            r.setAttribute('y', rect.y);
-            r.setAttribute('width', rect.width);
-            r.setAttribute('height', rect.height);
+            r.setAttribute('x', rx);
+            r.setAttribute('y', ry);
+            r.setAttribute('width', rw);
+            r.setAttribute('height', rh);
             r.setAttribute('fill', 'none');
             r.setAttribute('stroke', '#0d99ff');
             r.setAttribute('stroke-width', '1');
@@ -3912,14 +3918,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!isHover) {
               // Add corners resize handles
               const handles = [
-                { x: rect.x, y: rect.y, cursor: 'nwse-resize', dir: 'tl' },
-                { x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize', dir: 'tr' },
-                { x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize', dir: 'br' },
-                { x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize', dir: 'bl' },
-                { x: rect.x + rect.width/2, y: rect.y, cursor: 'ns-resize', dir: 'tc' },
-                { x: rect.x + rect.width, y: rect.y + rect.height/2, cursor: 'ew-resize', dir: 'mr' },
-                { x: rect.x + rect.width/2, y: rect.y + rect.height, cursor: 'ns-resize', dir: 'bc' },
-                { x: rect.x, y: rect.y + rect.height/2, cursor: 'ew-resize', dir: 'ml' },
+                { x: rx, y: ry, cursor: 'nwse-resize', dir: 'tl' },
+                { x: rx + rw, y: ry, cursor: 'nesw-resize', dir: 'tr' },
+                { x: rx + rw, y: ry + rh, cursor: 'nwse-resize', dir: 'br' },
+                { x: rx, y: ry + rh, cursor: 'nesw-resize', dir: 'bl' },
+                { x: rx + rw/2, y: ry, cursor: 'ns-resize', dir: 'tc' },
+                { x: rx + rw, y: ry + rh/2, cursor: 'ew-resize', dir: 'mr' },
+                { x: rx + rw/2, y: ry + rh, cursor: 'ns-resize', dir: 'bc' },
+                { x: rx, y: ry + rh/2, cursor: 'ew-resize', dir: 'ml' },
               ];
               handles.forEach((pos) => {
                 const h = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -4131,10 +4137,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 let maxY = -Infinity;
                 selectedRects.forEach(r => {
                   if (r) {
-                    minX = Math.min(minX, r.x);
-                    minY = Math.min(minY, r.y);
-                    maxX = Math.max(maxX, r.x + r.width);
-                    maxY = Math.max(maxY, r.y + r.height);
+                    const rx = r.x !== undefined ? r.x : (r.left !== undefined ? r.left : 0);
+                    const ry = r.y !== undefined ? r.y : (r.top !== undefined ? r.top : 0);
+                    const rw = r.width || 0;
+                    const rh = r.height || 0;
+                    minX = Math.min(minX, rx);
+                    minY = Math.min(minY, ry);
+                    maxX = Math.max(maxX, rx + rw);
+                    maxY = Math.max(maxY, ry + rh);
                   }
                 });
                 if (minX !== Infinity) {
@@ -4695,6 +4705,40 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const rect = iframe.getBoundingClientRect();
               const menu = document.getElementById('glide-context-menu');
               if (menu) {
+                const layersContainer = document.getElementById('glide-context-menu-layers');
+                if (layersContainer) {
+                  layersContainer.innerHTML = '';
+                  if (data.layerStack && data.layerStack.length > 0) {
+                    const header = document.createElement('div');
+                    header.style.cssText = 'font-size:10px; font-weight:600; text-transform:uppercase; color:var(--text-secondary); padding:6px 12px 2px; letter-spacing:0.05em;';
+                    header.textContent = 'Select Layer';
+                    layersContainer.appendChild(header);
+
+                    data.layerStack.forEach((layer) => {
+                      const item = document.createElement('div');
+                      item.className = 'context-menu-item';
+                      item.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 12px;';
+                      item.innerHTML = '<span style="opacity:0.6; font-family:monospace; font-size:10px;">&lt;' + layer.tagName + '&gt;</span><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">' + (layer.name || layer.source) + '</span>';
+                      item.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        menu.style.display = 'none';
+                        const iframeEl = document.getElementById('app-iframe');
+                        if (iframeEl && iframeEl.contentWindow) {
+                          iframeEl.contentWindow.postMessage({
+                            type: 'glide:select-element-by-id',
+                            id: layer.source,
+                          }, '*');
+                        }
+                      });
+                      layersContainer.appendChild(item);
+                    });
+
+                    const sep = document.createElement('div');
+                    sep.className = 'context-menu-separator';
+                    layersContainer.appendChild(sep);
+                  }
+                }
+
                 const mGroup = document.getElementById('menu-group');
                 const mUngroup = document.getElementById('menu-ungroup');
 
