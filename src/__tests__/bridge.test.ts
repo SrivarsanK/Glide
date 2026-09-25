@@ -156,4 +156,135 @@ describe('GlideBridge Client Bridge', () => {
       '*'
     );
   });
+
+  test('should toggle multi-selection on shift-click', () => {
+    const bridge = new GlideBridge(mockWindow);
+    bridge.init();
+
+    const mockEl1: any = {
+      getAttribute: (attr: string) => (attr === 'data-gl-source' ? 'src/App.tsx:10:5' : null),
+      getBoundingClientRect: () => ({ left: 50, top: 100, width: 200, height: 80 }),
+      closest: (sel: string) => (sel === '[data-gl-source]' ? mockEl1 : null),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'BUTTON',
+      className: 'btn-1',
+    };
+
+    const clickHandler = eventListeners['click'][0];
+    // 1st shift-click: select
+    clickHandler({
+      target: mockEl1,
+      shiftKey: true,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as any);
+
+    expect(mockEl1.setAttribute).toHaveBeenCalledWith('data-glide-selected', '');
+    expect(bridge.getSelectedElements()).toEqual([mockEl1]);
+
+    // 2nd shift-click: toggle off
+    clickHandler({
+      target: mockEl1,
+      shiftKey: true,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as any);
+
+    expect(mockEl1.removeAttribute).toHaveBeenCalledWith('data-glide-selected');
+    expect(bridge.getSelectedElements()).toEqual([]);
+    expect(mockParent.postMessage).toHaveBeenCalledWith(
+      { type: 'glide:element-deselected', source: 'src/App.tsx:10:5' },
+      '*'
+    );
+  });
+
+  test('should select deep leaf on meta/ctrl click', () => {
+    const bridge = new GlideBridge(mockWindow);
+    bridge.init();
+
+    const parentEl: any = {
+      getAttribute: (attr: string) => (attr === 'data-gl-source' ? 'src/App.tsx:5:1' : null),
+      parentElement: null,
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'DIV',
+      className: 'container',
+    };
+
+    const leafEl: any = {
+      getAttribute: (attr: string) => (attr === 'data-gl-source' ? 'src/App.tsx:12:3' : null),
+      parentElement: parentEl,
+      closest: (sel: string) => (sel === '[data-gl-source]' ? leafEl : null),
+      getBoundingClientRect: () => ({ left: 60, top: 110, width: 100, height: 40 }),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      tagName: 'SPAN',
+      className: 'title',
+    };
+
+    const clickHandler = eventListeners['click'][0];
+
+    // Meta+click: selects leaf directly
+    clickHandler({
+      target: leafEl,
+      metaKey: true,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as any);
+
+    expect(leafEl.setAttribute).toHaveBeenCalledWith('data-glide-selected', '');
+    expect(bridge.getSelectedElements()).toEqual([leafEl]);
+  });
+
+  test('should dispatch depth-stacked layerStack on contextmenu', () => {
+    const bridge = new GlideBridge(mockWindow);
+    bridge.init();
+
+    const parentEl: any = {
+      getAttribute: (attr: string) => {
+        if (attr === 'data-gl-source') return 'src/App.tsx:5:1';
+        if (attr === 'data-gl-name') return 'Section';
+        return null;
+      },
+      parentElement: null,
+      tagName: 'SECTION',
+    };
+
+    const childEl: any = {
+      getAttribute: (attr: string) => {
+        if (attr === 'data-gl-source') return 'src/App.tsx:10:5';
+        if (attr === 'data-gl-name') return 'Button';
+        return null;
+      },
+      parentElement: parentEl,
+      tagName: 'BUTTON',
+    };
+
+    const contextmenuHandler = eventListeners['contextmenu'][0];
+    const mockEvent = {
+      target: childEl,
+      clientX: 150,
+      clientY: 220,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+
+    contextmenuHandler(mockEvent as any);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(mockEvent.stopPropagation).toHaveBeenCalled();
+    expect(mockParent.postMessage).toHaveBeenCalledWith(
+      {
+        type: 'glide:contextmenu',
+        clientX: 150,
+        clientY: 220,
+        layerStack: [
+          { source: 'src/App.tsx:10:5', tagName: 'button', name: 'Button' },
+          { source: 'src/App.tsx:5:1', tagName: 'section', name: 'Section' },
+        ],
+      },
+      '*'
+    );
+  });
 });

@@ -282,3 +282,114 @@ describe('SceneGraph.nodesAtDepth', () => {
     expect(depth1.map(n => n.id).sort()).toEqual(['C1', 'C2']);
   });
 });
+
+// ── SceneGraph.raycastAll ─────────────────────────────────────────────────────
+
+describe('SceneGraph.raycastAll', () => {
+  let sg: SceneGraph;
+
+  beforeEach(() => {
+    sg = new SceneGraph();
+    sg.build([
+      node('PARENT', rect(0, 0, 300, 300), [
+        node('CHILD_A', rect(10, 10, 100, 100)),
+        node('CHILD_B', rect(150, 10, 100, 100), [
+          node('GRANDCHILD', rect(160, 20, 80, 80)),
+        ]),
+      ]),
+    ]);
+  });
+
+  test('returns all overlapping nodes in z-stack order (child before parent)', () => {
+    // (200, 60) hits GRANDCHILD, CHILD_B, and PARENT
+    const hits = sg.raycastAll(200, 60);
+    expect(hits.map(h => h.id)).toEqual(['GRANDCHILD', 'CHILD_B', 'PARENT']);
+  });
+
+  test('returns later sibling first when siblings overlap', () => {
+    const sgOverlap = new SceneGraph();
+    sgOverlap.build([
+      node('CONTAINER', rect(0, 0, 200, 200), [
+        node('SIB_1', rect(10, 10, 100, 100)),
+        node('SIB_2', rect(50, 50, 100, 100)),
+      ]),
+    ]);
+    // Point (60, 60) is inside SIB_1, SIB_2, and CONTAINER
+    const hits = sgOverlap.raycastAll(60, 60);
+    expect(hits.map(h => h.id)).toEqual(['SIB_2', 'SIB_1', 'CONTAINER']);
+  });
+
+  test('returns empty array when point hits nothing', () => {
+    expect(sg.raycastAll(500, 500)).toEqual([]);
+  });
+});
+
+// ── SceneGraph.hitTopContainer ────────────────────────────────────────────────
+
+describe('SceneGraph.hitTopContainer', () => {
+  let sg: SceneGraph;
+
+  beforeEach(() => {
+    sg = new SceneGraph();
+    sg.build([
+      node('ROOT_1', rect(0, 0, 200, 200), [
+        node('CHILD_1', rect(10, 10, 80, 80)),
+      ]),
+      node('ROOT_2', rect(300, 0, 200, 200), [
+        node('CHILD_2', rect(310, 10, 80, 80)),
+      ]),
+    ]);
+  });
+
+  test('returns outermost root container when clicking inside child', () => {
+    const hit = sg.hitTopContainer(20, 20);
+    expect(hit?.id).toBe('ROOT_1');
+  });
+
+  test('returns second root container when clicking inside its child', () => {
+    const hit = sg.hitTopContainer(320, 20);
+    expect(hit?.id).toBe('ROOT_2');
+  });
+
+  test('returns null when clicking outside all roots', () => {
+    expect(sg.hitTopContainer(250, 50)).toBeNull();
+  });
+});
+
+// ── SceneGraph.drillDown ──────────────────────────────────────────────────────
+
+describe('SceneGraph.drillDown', () => {
+  let sg: SceneGraph;
+
+  beforeEach(() => {
+    sg = new SceneGraph();
+    sg.build([
+      node('PARENT', rect(0, 0, 300, 300), [
+        node('CHILD_A', rect(10, 10, 100, 100)),
+        node('CHILD_B', rect(150, 10, 100, 100), [
+          node('GRANDCHILD', rect(160, 20, 80, 80)),
+        ]),
+      ]),
+    ]);
+  });
+
+  test('drills down from PARENT to CHILD_B under pointer', () => {
+    const next = sg.drillDown(200, 60, 'PARENT');
+    expect(next?.id).toBe('CHILD_B');
+  });
+
+  test('drills down from CHILD_B to GRANDCHILD under pointer', () => {
+    const next = sg.drillDown(200, 60, 'CHILD_B');
+    expect(next?.id).toBe('GRANDCHILD');
+  });
+
+  test('returns current node when already at leaf', () => {
+    const next = sg.drillDown(200, 60, 'GRANDCHILD');
+    expect(next?.id).toBe('GRANDCHILD');
+  });
+
+  test('falls back to top container when currentSelectedId not found', () => {
+    const next = sg.drillDown(200, 60, 'NON_EXISTENT');
+    expect(next?.id).toBe('PARENT');
+  });
+});
