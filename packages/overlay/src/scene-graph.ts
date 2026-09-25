@@ -143,6 +143,60 @@ export class SceneGraph {
   }
 
   /**
+   * Return all SceneNodes whose rect contains (x, y), ordered along the z-stack
+   * from topmost visual element (deepest stamped child / topmost sibling) down
+   * to the root container.
+   */
+  raycastAll(x: number, y: number): SceneNode[] {
+    const hits: SceneNode[] = [];
+    const traverse = (nodes: SceneNode[]) => {
+      // Traverse reverse sibling order (later siblings render on top)
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const node = nodes[i];
+        if (!containsPoint(node.rect, x, y)) continue;
+        // Search children first (children render on top of parents)
+        traverse(node.children);
+        hits.push(node);
+      }
+    };
+    traverse(this.roots);
+    return hits;
+  }
+
+  /**
+   * Figma Rule 1: Single click selects the highest-level stamped container
+   * directly beneath the root or canvas layer containing (x, y).
+   */
+  hitTopContainer(x: number, y: number): SceneNode | null {
+    for (let i = this.roots.length - 1; i >= 0; i--) {
+      const root = this.roots[i];
+      if (containsPoint(root.rect, x, y)) {
+        return root;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Figma Rule 1: Double-click drill-down.
+   * If a parent node is already selected, navigate 1 level deeper into its
+   * child hierarchy under (x, y). If already at leaf or no child hit, returns current node.
+   */
+  drillDown(x: number, y: number, currentSelectedId: string): SceneNode | null {
+    const current = this.getById(currentSelectedId);
+    if (!current) return this.hitTopContainer(x, y);
+
+    for (let i = current.children.length - 1; i >= 0; i--) {
+      const child = current.children[i];
+      if (containsPoint(child.rect, x, y)) {
+        return child;
+      }
+    }
+
+    return current;
+  }
+
+  /**
    * Find a node by exact id.
    */
   getById(id: string): SceneNode | null {
