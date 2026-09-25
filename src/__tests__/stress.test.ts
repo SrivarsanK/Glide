@@ -253,35 +253,37 @@ describe('[Security] Path traversal blocked in server', () => {
 
   test('../../etc/passwd path traversal payload does NOT write and returns error', async () => {
     const ws = await openClient(port);
+    try {
+      const resp = await sendAndAwait(ws, {
+        type: 'edit',
+        file: '../../etc/passwd',
+        line: 1,
+        column: 1,
+        change: { type: 'class', property: 'className', value: 'evil' },
+      });
 
-    const resp = await sendAndAwait(ws, {
-      type: 'edit',
-      file: '../../etc/passwd',
-      line: 1,
-      column: 1,
-      change: { type: 'class', property: 'className', value: 'evil' },
-    });
-
-    // Must NOT succeed — path traversal must be blocked
-    expect(resp.success).toBe(false);
-
-    ws.close();
+      // Must NOT succeed — path traversal must be blocked
+      expect(resp.success).toBe(false);
+    } finally {
+      ws.close();
+    }
   });
 
   test('Windows UNC path traversal blocked', async () => {
     const ws = await openClient(port);
+    try {
+      const resp = await sendAndAwait(ws, {
+        type: 'edit',
+        file: '..\\..\\Windows\\System32\\calc.exe',
+        line: 1,
+        column: 1,
+        change: { type: 'class', property: 'className', value: 'evil' },
+      });
 
-    const resp = await sendAndAwait(ws, {
-      type: 'edit',
-      file: '..\\..\\Windows\\System32\\calc.exe',
-      line: 1,
-      column: 1,
-      change: { type: 'class', property: 'className', value: 'evil' },
-    });
-
-    expect(resp.success).toBe(false);
-
-    ws.close();
+      expect(resp.success).toBe(false);
+    } finally {
+      ws.close();
+    }
   });
 });
 
