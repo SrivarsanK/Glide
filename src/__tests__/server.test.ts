@@ -30,7 +30,7 @@ describe('GlideServer WebSocket Server', () => {
     });
 
     const client = new WebSocket(`ws://localhost:${testPort}`);
-    
+
     await new Promise<void>((resolve) => {
       client.on('open', resolve);
     });

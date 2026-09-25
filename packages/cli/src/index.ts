@@ -156,7 +156,7 @@ server.onEdit((file: string, line: number, column: number, change: any, hash?: s
     const afterContent = JSON.stringify(positions, null, 2);
     fs.writeFileSync(positionsFile, afterContent, 'utf-8');
     server.recordSelfWrite(positionsFile);
-    
+
     pushHistory({
       description: `Moved element in ${path.basename(realFile)}`,
       diffs: [{ file: positionsFile, before: beforeContent, after: afterContent }]

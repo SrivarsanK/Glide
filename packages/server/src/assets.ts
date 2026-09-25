@@ -7,7 +7,7 @@ export function saveUploadedAsset(
   fileName: string
 ): string {
   const assetsDir = path.join(projectRoot, 'public', 'assets');
-  
+
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
   }

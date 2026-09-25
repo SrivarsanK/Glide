@@ -33,7 +33,7 @@ describe('AST Write-back Engine', () => {
 
     // Coordinates for <div ...> (line 5, column 11)
     const result = updateClassName(code, 5, 11, 'className', 'card shadow rounded');
-    
+
     expect(result).toContain('className="card shadow rounded"');
     // Ensure comment and indentation are preserved
     expect(result).toContain('// Important container');
@@ -53,7 +53,7 @@ describe('AST Write-back Engine', () => {
 
     // Coordinates for <span> (line 4, column 11)
     const result = updateClassName(code, 4, 11, 'className', 'text-red');
-    
+
     expect(result).toContain('<span className="text-red">');
   });
 
@@ -70,7 +70,7 @@ describe('AST Write-back Engine', () => {
 
     // Coordinates for <div ...> (line 4, column 11)
     const result = updateClassName(code, 4, 11, 'marginLeft', 16);
-    
+
     // ml-2 should be replaced by ml-4
     expect(result).toContain('className="bg-white ml-4"');
   });
@@ -197,7 +197,7 @@ describe('AST Write-back Engine', () => {
 
     // Target the first card (line 5, column 13)
     const result = updateClassName(code, 5, 13, 'padding', 32); // p-6 (24px) -> p-8 (32px)
-    
+
     // Check that ALL three cards were updated!
     const matches = result.match(/className="card bg-gray-800 p-8"/g);
     expect(matches).not.toBeNull();

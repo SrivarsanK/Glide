@@ -22,12 +22,12 @@ export function serializeDOM(nodes: any[]): string {
       const attribs = Object.entries(node.attribs || {})
         .map(([key, val]) => ` ${key}="${val}"`)
         .join('');
-      
+
       const selfClosing = ['img', 'br', 'hr', 'input', 'meta', 'link'].includes(node.name);
       if (selfClosing && (!node.children || node.children.length === 0)) {
         return `<${node.name}${attribs}/>`;
       }
-      
+
       const children = serializeDOM(node.children || []);
       return `<${node.name}${attribs}>${children}</${node.name}>`;
     }

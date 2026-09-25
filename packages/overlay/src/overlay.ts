@@ -78,7 +78,7 @@ export class GlideOverlay {
     this.svg.innerHTML = '';
 
     const rect = this.selectionRect;
-    
+
     // Draw boundary box outline
     const outline = this.targetWindow.document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     outline.setAttribute('x', String(rect.left));

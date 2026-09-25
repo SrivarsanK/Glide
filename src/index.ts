@@ -2,11 +2,11 @@ export const VERSION = '0.1.0';
 
 export { detectProjectMeta, generateVSCodeConfig } from '@srivarsank/core';
 export { buildComponentTree, getNestingPath } from '@srivarsank/core';
-export { 
-  updateClassName, 
-  updateJSXText, 
-  updateClassString, 
-  updateJSXStyleProp, 
+export {
+  updateClassName,
+  updateJSXText,
+  updateClassString,
+  updateJSXStyleProp,
   computeNodeHash,
   reorderJSXElement,
   insertJSXElement,

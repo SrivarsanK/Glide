@@ -30,7 +30,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             --danger: #ef4444;
             --success: #22c55e;
           }
-          
+
           /* Lucide Icons Styling */
           .lucide {
             width: 14px;
@@ -1013,7 +1013,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             position: absolute;
             inset: 0;
             pointer-events: none;
-            background-image: 
+            background-image:
               linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
               linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
             background-size: 8px 8px;
@@ -1380,7 +1380,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               <label for="app-url" style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-right: 6px; font-weight: 700; letter-spacing: 0.5px;">URL</label>
               <input type="text" id="app-url" value="${config.targetPort ? `http://localhost:${config.targetPort}` : 'http://localhost:4321'}" style="background: transparent; border: none; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; width: 180px;">
             </div>
-            
+
             <!-- Three-state Connection Status Button -->
             <button class="connection-btn disconnected" id="btn-load">Disconnected</button>
 
@@ -1449,7 +1449,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 <span id="viewport-trigger-text">Desktop (Default)</span>
                 <i data-lucide="chevron-down" style="width: 12px; height: 12px; opacity: 0.6;"></i>
               </button>
-              
+
               <!-- Dropdown Menu Options Panel -->
               <div class="dropdown-menu" id="viewport-dropdown-menu" style="display: none; position: absolute; top: 32px; left: 0; width: 230px; background: #2c2c2c; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); z-index: 1000; padding: 4px 0; overflow-y: auto; max-height: 400px; font-family: inherit;">
               </div>
@@ -1496,7 +1496,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 <i data-lucide="file" style="width: 12px; height: 12px;"></i> <span id="active-page-name">Page 1</span>
               </div>
             </div>
-            
+
             <!-- Search Input Container -->
             <div id="search-container" style="display: none; padding: 6px 14px; border-bottom: 1px solid var(--border-color);">
               <input type="text" id="layer-search-input" placeholder="Search layers..." style="width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--text-primary); font-size: 11px; outline: none;" />
@@ -1531,7 +1531,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
           <!-- CANVAS -->
           <div class="canvas-container" id="canvas-container" style="position: relative;">
-            
+
             <!-- RULERS -->
             <div id="glide-rulers-corner" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; z-index: 10;"></div>
             <div id="glide-ruler-h" style="position: absolute; top: 0; left: 20px; right: 0; height: 20px; z-index: 9; overflow: hidden;">
@@ -1545,7 +1545,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               <div class="preview-frame-wrapper" id="frame-wrapper">
                 <!-- GRID OVERLAY -->
                 <div id="grid-overlay" class="grid-overlay" style="display: none;"></div>
-                
+
                 <div class="canvas-loading" id="canvas-loading">
                   <div class="spinner"></div>
                   <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
@@ -1636,9 +1636,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               <button class="tool-btn" id="tool-hand" data-tool="hand" title="Hand (H)">
                 <i data-lucide="hand" style="width: 16px; height: 16px;"></i>
               </button>
-              
+
               <div class="tool-btn-sep" style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
-              
+
               <button class="tool-btn" id="tool-frame" data-tool="frame" title="Frame (F)">
                 <i data-lucide="frame" style="width: 16px; height: 16px;"></i>
               </button>
@@ -2204,7 +2204,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           const componentRootSources = new Set();
           let currentGeneration = 0;
           const expandedNodeIds = new Set();
-          
+
           // Phase 2 state
           let gridVisible = false;
           let guidesVisible = true;
@@ -2370,7 +2370,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   if (activePageName) activePageName.textContent = baseName;
                   const headerFileName = document.getElementById('header-file-name');
                   if (headerFileName) headerFileName.textContent = baseName;
-                  
+
                   // Pre-expand all nodes recursively on first load so full tree displays immediately
                   if (expandedNodeIds.size === 0 && layerTree) {
                     function expandAll(nodes) {
@@ -2395,7 +2395,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                       }
                     });
                   }
-                  
+
                   renderLayersTree(layerTree);
 
                   // Auto-scroll selected element into view
@@ -2965,7 +2965,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const dpr = window.devicePixelRatio || 1;
             const width = canvas.parentElement.clientWidth;
             const height = canvas.parentElement.clientHeight;
-            
+
             canvas.width = width * dpr;
             canvas.height = height * dpr;
             ctx.scale(dpr, dpr);
@@ -2977,13 +2977,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             ctx.fillStyle = '#888888';
             ctx.font = '9px monospace';
             ctx.lineWidth = 1;
-            
+
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return;
             const fw = iframe.clientWidth;
             const container = document.getElementById('canvas-container');
             const cw = container.clientWidth;
-            
+
             const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
 
             const startX = Math.floor(-originX / zoomLevel);
@@ -3007,7 +3007,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               ctx.stroke();
 
               ctx.fillText(x.toString(), rx + 2, height - 10);
-              
+
               const subStep = step / 10;
               for (let j = 1; j < 10; j++) {
                 const sx = rx + j * subStep * zoomLevel;
@@ -3028,7 +3028,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const dpr = window.devicePixelRatio || 1;
             const width = canvas.parentElement.clientWidth;
             const height = canvas.parentElement.clientHeight;
-            
+
             canvas.width = width * dpr;
             canvas.height = height * dpr;
             ctx.scale(dpr, dpr);
@@ -3040,13 +3040,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             ctx.fillStyle = '#888888';
             ctx.font = '9px monospace';
             ctx.lineWidth = 1;
-            
+
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return;
             const fh = iframe.clientHeight;
             const container = document.getElementById('canvas-container');
             const ch = container.clientHeight;
-            
+
             const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
 
             const startY = Math.floor(-originY / zoomLevel);
@@ -3074,7 +3074,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               ctx.rotate(-Math.PI / 2);
               ctx.fillText(y.toString(), 2, 0);
               ctx.restore();
-              
+
               const subStep = step / 10;
               for (let j = 1; j < 10; j++) {
                 const sy = ry + j * subStep * zoomLevel;
@@ -3539,7 +3539,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const fh = iframe.clientHeight;
                 const cw = container.clientWidth;
                 const ch = container.clientHeight;
-                
+
                 const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
                 const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
 
@@ -3844,7 +3844,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const isHeader = e.target.closest('header');
             const isToolbar = e.target.closest('#figma-toolbar');
             const isIframe = e.target.closest('#app-iframe');
-            
+
             if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
               selectedSources = [];
               selectedRects = [];
@@ -3853,7 +3853,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               clearOverlay();
               showNoSelection();
               document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
-              
+
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
@@ -3874,7 +3874,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
             const hoverRects = Array.from(svg.querySelectorAll('.glide-hover-rect'));
             hoverRects.forEach(r => svg.removeChild(r));
-            
+
             const gGroup = document.getElementById('snap-guides-group');
             if (gGroup) {
               gGroup.innerHTML = '';
@@ -4021,9 +4021,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             if (!selRect || !refRect) return;
             const svgEl = document.getElementById('overlay-svg');
             if (!svgEl) return;
-            
+
             let lines = [];
-            
+
             // horizontal distance
             if (selRect.x + selRect.width <= refRect.x) {
               const y = selRect.y + selRect.height / 2;
@@ -4079,7 +4079,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
               line.classList.add('glide-guide-line');
               line.dataset.index = idx;
-              
+
               if (g.axis === 'x') {
                 line.setAttribute('x1', g.position);
                 line.setAttribute('y1', -5000);
@@ -4161,7 +4161,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               svg.appendChild(gGroup);
             }
             gGroup.innerHTML = '';
-            
+
             guides.forEach(guide => {
               if (guide.type === 'distance-indicator') {
                 // Distance indicator line
@@ -4517,7 +4517,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const isShift = data.isShift;
                 const source = data.source;
                 const rect = data.rect;
-                
+
                 if (source) {
                   const parsed = parseSource(source);
                   if (parsed && parsed.file && !parsed.cstSelector) {
@@ -4534,12 +4534,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                     selectedRects.push(rect);
                   }
                 }
-                
+
                 selectedElement = { source: source };
                 selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
                 populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
-                
+
                 // Highlight selected items in layers tree
                 document.querySelectorAll('.layer-item').forEach(item => {
                   if (selectedSources.includes(item.dataset.source)) {
@@ -4568,7 +4568,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 showNoSelection();
               }
               drawOverlay();
-              
+
               // Update highlights in layers tree
               document.querySelectorAll('.layer-item').forEach(item => {
                 if (selectedSources.includes(item.dataset.source)) {
@@ -4663,14 +4663,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                   top: data.dy + 'px'
                 });
               }
-              
+
               if (data.rect) {
                 selectedRect = data.rect;
                 if (selectedRects && selectedRects.length > 0) {
                   selectedRects[0] = data.rect;
                 }
               }
-              
+
               const g = document.getElementById('selection-group');
               if (g) {
                 g.removeAttribute('transform');
@@ -4745,7 +4745,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const itemNorm = normalizePathSlash(itemSrc).toLowerCase();
               const itemParts = itemSrc.split(':');
               const itemSuffix = itemParts.length >= 2 ? ':' + itemParts.slice(-2).join(':') : '';
-              const matches = (itemSrc === targetSrc) || 
+              const matches = (itemSrc === targetSrc) ||
                               (itemNorm && itemNorm === targetNorm) ||
                               (targetSuffix && itemSuffix && targetSuffix === itemSuffix);
               if (matches) {
@@ -4806,7 +4806,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const toggleBtn = document.getElementById('btn-toggle-history');
             if (historyEl) historyEl.style.display = historyPanelVisible ? 'flex' : 'none';
             if (toggleBtn) toggleBtn.classList.toggle('active', historyPanelVisible);
-            
+
             // If opening, request the latest history
             if (historyPanelVisible && socket && socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
@@ -4816,20 +4816,20 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function updateHistoryUI(stack, currentIndex) {
             historyStack = stack;
             historyCurrentIndex = currentIndex;
-            
+
             const panel = document.getElementById('glide-history');
             if (!panel) return;
-            
+
             const list = document.getElementById('history-list');
             if (!list) return;
-            
+
             list.innerHTML = '';
-            
+
             if (stack.length === 0) {
               list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.5;">No edits yet.<br>Make a change on the canvas to start building history.</div>';
               return;
             }
-            
+
             const getRelativeTime = (timestamp) => {
               const diff = Date.now() - timestamp;
               if (diff < 60000) return 'just now';
@@ -4857,19 +4857,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const isCurrent = index === currentIndex;
               const isPast = index < currentIndex;
               const isFuture = index > currentIndex;
-              
+
               const row = document.createElement('div');
               row.className = 'history-row' + (isCurrent ? ' current' : '');
               row.style.cssText = 'padding: 8px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-left: 2px solid ' + (isCurrent ? '#0d99ff' : 'transparent') + '; background: ' + (isCurrent ? 'rgba(13, 153, 255, 0.1)' : 'transparent') + '; opacity: ' + (isFuture ? '0.4' : '1') + '; color: ' + (isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)') + ';';
-              
+
               row.innerHTML = '<div style="display: flex; align-items: center; gap: 8px;"><span style="color: ' + (isCurrent ? '#0d99ff' : '#888') + '">' + (isPast || isCurrent ? '●' : '○') + '</span><span style="font-size: 11px; font-style: ' + (isFuture ? 'italic' : 'normal') + '">' + escapeHtml(entry.description) + '</span></div><span style="font-size: 10px; color: #666">' + getRelativeTime(entry.timestamp) + '</span>';
-              
+
               row.addEventListener('click', () => {
                 if (socket && socket.readyState === WebSocket.OPEN) {
                   socket.send(JSON.stringify({ type: 'JUMP_TO_HISTORY', index: index }));
                 }
               });
-              
+
               list.appendChild(row);
             });
           }
@@ -4884,7 +4884,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             layerTree = tree;
             const list = document.getElementById('layers-list');
             list.innerHTML = '';
-            
+
             componentRootSources.clear();
 
             const filterInput = document.getElementById('layer-search-input');
@@ -5138,11 +5138,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const draggedSource = e.dataTransfer.getData('text/plain');
                 if (!draggedSource || draggedSource === nodeSource) return;
                 const rect = item.getBoundingClientRect();
-                
+
                 // Direct DOM order matching (natural visual order)
                 const mid = (e.clientY - rect.top) < rect.height / 2;
                 const position = mid ? 'before' : 'after';
-                
+
                 const parentNode = findParentNodeInTree(layerTree, node.id);
                 if (parentNode && socket && socket.readyState === WebSocket.OPEN) {
                   const parentSource = convertNodeIdToSource(parentNode.id, currentFile);
@@ -5395,7 +5395,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
-            
+
             const isComponent = tagName && /^[A-Z]/.test(tagName);
             const jumpBtn = document.getElementById('btn-jump-definition');
             if (jumpBtn) {
@@ -5567,14 +5567,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               if (colors && colors.length >= 2) {
                 const startHex = rgbToHex(colors[0]);
                 const endHex = rgbToHex(colors[1]);
-                
+
                 const elStart = document.getElementById('prop-grad-start');
                 if (elStart && activeEl?.id !== 'prop-grad-start') elStart.value = startHex;
                 const elStartHex = document.getElementById('prop-grad-start-hex');
                 if (elStartHex && activeEl?.id !== 'prop-grad-start-hex') elStartHex.value = startHex;
                 const swatchStart = document.getElementById('color-swatch-grad-start');
                 if (swatchStart) swatchStart.style.background = startHex;
-                
+
                 const elEnd = document.getElementById('prop-grad-end');
                 if (elEnd && activeEl?.id !== 'prop-grad-end') elEnd.value = endHex;
                 const elEndHex = document.getElementById('prop-grad-end-hex');
@@ -5666,14 +5666,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const endEl = document.getElementById('prop-grad-end');
             const endHexEl = document.getElementById('prop-grad-end-hex');
             const end = (endEl ? endEl.value : (endHexEl ? endHexEl.value : '#ffffff')) || '#ffffff';
-            
+
             let gradVal = '';
             if (gradType === 'linear') {
               gradVal = 'linear-gradient(' + angle + 'deg, ' + start + ', ' + end + ')';
             } else {
               gradVal = 'radial-gradient(circle, ' + start + ', ' + end + ')';
             }
-            
+
             const previewEl = document.getElementById('grad-preview');
             if (previewEl) previewEl.style.background = gradVal;
             sendMultiClassChange(selectedElement.source, {
@@ -6155,7 +6155,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const colorInput = row.querySelector('.shadow-color-input');
               if (swatch && colorInput) {
                 swatch.addEventListener('click', () => colorInput.click());
-                
+
                 // Throttle shadow color input with rAF to prevent browser crash
                 let _shadowRaf = false;
                 let _shadowLastVal = null;
@@ -6231,18 +6231,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 title.style.cssText = 'display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;';
                 title.appendChild(chevron);
               }
-              
+
               // Set up toggle click handler
               title.addEventListener('click', (e) => {
                 // Find all children siblings except the title, toggle their display
                 const siblings = Array.from(section.children).filter(c => c !== title);
                 const chevron = title.querySelector('i');
                 const isCollapsed = siblings[0] && siblings[0].style.display === 'none';
-                
+
                 siblings.forEach(sib => {
                   sib.style.display = isCollapsed ? '' : 'none';
                 });
-                
+
                 if (chevron) {
                   chevron.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(-90deg)';
                 }
@@ -6899,7 +6899,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 card.onclick = (e) => e.stopPropagation();
 
                 const timeStr = c.timestamp ? new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                card.innerHTML = 
+                card.innerHTML =
                   '<div class="comment-card-header">' +
                     '<span class="comment-card-author">💬 ' + (escapeHtml(c.author) || 'Author') + '</span>' +
                     '<span>' + timeStr + '</span>' +
@@ -6909,7 +6909,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                     '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + c.id + '">✓ Resolve</button>' +
                     '<button class="comment-btn-primary comment-close-btn">Close</button>' +
                   '</div>';
-                
+
                 card.querySelector('.comment-resolve-btn').addEventListener('click', (e) => {
                   e.stopPropagation();
                   resolveComment(c.id);
@@ -7074,7 +7074,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const el = document.createElement('div');
                 el.className = 'flying-reaction';
                 el.textContent = emoji;
-                
+
                 const driftX = (Math.random() - 0.5) * 60;
                 const driftEndX = (Math.random() - 0.5) * 120;
                 const rot = (Math.random() - 0.5) * 30;
@@ -7302,7 +7302,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
               const rawY = (e.clientY - canvasContainerRect.top - originY) / zoomLevel;
               const pageY = Math.round(rawY / 8) * 8;
-              
+
               guides.push({ axis: 'y', position: pageY });
               draggingGuide = { index: guides.length - 1, axis: 'y' };
               drawOverlay();
@@ -7322,7 +7322,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
               const rawX = (e.clientX - canvasContainerRect.left - originX) / zoomLevel;
               const pageX = Math.round(rawX / 8) * 8;
-              
+
               guides.push({ axis: 'x', position: pageX });
               draggingGuide = { index: guides.length - 1, axis: 'x' };
               drawOverlay();
@@ -7341,10 +7341,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 return;
               }
             }
-            
+
             const toast = document.createElement('div');
             toast.className = 'toast ' + type;
-            
+
             let icon = '💡';
             if (type === 'success') icon = '✓';
             if (type === 'error') icon = '❌';
@@ -7357,7 +7357,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;">' + text + '</span>' + undoHTML;
             container.appendChild(toast);
-            
+
             setTimeout(() => {
               toast.style.animation = 'slideUp 0.2s ease-in reverse';
               setTimeout(() => toast.remove(), 200);
@@ -7534,7 +7534,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 const row = document.createElement('div');
                 row.className = 'dropdown-item';
                 row.style.cssText = 'padding: 6px 12px; font-size: 11px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #e0e0e0; transition: background 0.1s, color 0.1s;';
-                
+
                 const isSelected = (iframeWidth.current === item.width && document.getElementById('app-iframe').style.height === item.height + 'px');
                 if (isSelected) {
                   row.style.background = 'rgba(13, 153, 255, 0.15)';
@@ -7580,7 +7580,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             customRow.className = 'dropdown-item';
             customRow.style.cssText = 'padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #e0e0e0; transition: background 0.1s, color 0.1s;';
             customRow.innerHTML = '<i data-lucide="settings" style="width: 12px; height: 12px; opacity: 0.6;"></i> <span style="margin-left:4px;">Custom Mode</span>';
-            
+
             customRow.addEventListener('mouseenter', () => {
               customRow.style.background = '#0d99ff';
               customRow.style.color = '#fff';

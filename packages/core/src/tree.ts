@@ -85,7 +85,7 @@ export function buildComponentTree(code: string, filepath?: string): import('./t
 
           const name = node.name;
           const className = node.attribs?.['class'] || node.attribs?.['className'] || '';
-          
+
           let text = '';
           if (node.children) {
             for (const child of node.children) {

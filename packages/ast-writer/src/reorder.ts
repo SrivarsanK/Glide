@@ -313,7 +313,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
       ])
     )
   );
-  
+
   const idAttr = t.jsxAttribute(
     t.jsxIdentifier('id'),
     t.stringLiteral(`group-${Math.random().toString(36).substring(7)}`)

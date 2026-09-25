@@ -42,12 +42,12 @@ export function buildBridgeScript(
     '[${hoverAttr}]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[${selectedAttr}]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
     'html, body { overflow: auto !important; height: auto !important; -ms-overflow-style: none !important; scrollbar-width: none !important; } html::-webkit-scrollbar, body::-webkit-scrollbar { display: none !important; }',
-    
+
     /* ── Type Classes Standardized Behaviors ── */
     /* Ensure all inline elements with typography type classes flow as inline-block for precise boundaries & dragging */
     'span[${sourceAttr}], strong[${sourceAttr}], em[${sourceAttr}], a[${sourceAttr}], label[${sourceAttr}] { display: inline-block !important; }',
     'span.highlight, span.stat-value, span.stat-label, span.brand-name, span.brand-icon, span.section-label, span.feature-tag, span.member-tag, a.nav-link { display: inline-block !important; }',
-    
+
     /* ── Stacking Context Bug Bypass ── */
     /* Override background clip when gradient text element (or any of its ancestors) is hovered, selected, positioned, dragged, or styled with opacity/filter/mix-blend-mode */
     '.highlight[data-glide-selected], .highlight[data-glide-hover], .highlight[style*="transform"], .highlight[style*="position"], .highlight[style*="opacity"], .highlight[style*="filter"], .highlight[style*="mix-blend-mode"], [data-glide-selected] .highlight, [data-glide-hover] .highlight, [style*="transform"] .highlight, [style*="position"] .highlight, [style*="opacity"] .highlight, [style*="filter"] .highlight, [style*="mix-blend-mode"] .highlight { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
@@ -337,7 +337,7 @@ export function buildBridgeScript(
   function sendMsg(type, el, isShift) {
     var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) || getElId(el);
     var r = el.getBoundingClientRect();
-    
+
     // Extract computed styles
     var cs = window.getComputedStyle(el);
     var computedStyles = {
@@ -580,7 +580,7 @@ export function buildBridgeScript(
     }
     var xr = resolveSnapAxis(dx, dragXAnchors(dragRect, dx), xCands, OUR_SNAP_THRESHOLD_PX);
     var yr = resolveSnapAxis(dy, dragYAnchors(dragRect, dy), yCands, OUR_SNAP_THRESHOLD_PX);
-    
+
     var guides = [];
     var snappedDx = xr.snappedOffset;
     var snappedDy = yr.snappedOffset;
@@ -694,7 +694,7 @@ export function buildBridgeScript(
       var r2 = hGapGuide.rects[2];
       var midY01 = (Math.max(r0.top, r1.top) + Math.min(r0.bottom, r1.bottom))/2;
       var midY12 = (Math.max(r1.top, r2.top) + Math.min(r1.bottom, r2.bottom))/2;
-      
+
       guides.push({
         type: 'distance-indicator',
         x1: r0.right,
@@ -893,7 +893,7 @@ export function buildBridgeScript(
     var snap = resolveObjectSnap(dragStartRect, currentDx, currentDy, siblingRects);
     var snappedDx = snap.dx;
     var snappedDy = snap.dy;
-    
+
     if (!snapDisabledForDrag) {
       if (gridVisible) {
         var rawLeft = initialLeft + snappedDx;
@@ -911,7 +911,7 @@ export function buildBridgeScript(
         snappedDy = snapT - initialTop;
       }
     }
-    
+
     dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)';
     dragEl.style.zIndex = '9999';
     window.parent.postMessage({ type: 'glide:drag-delta', dx: snappedDx, dy: snappedDy, guides: snap.guides }, '*');
@@ -1237,7 +1237,7 @@ export function buildBridgeScript(
         var originalText = el.textContent;
         el.contentEditable = "true";
         el.focus();
-        
+
         // Select all text content
         var range = document.createRange();
         range.selectNodeContents(el);
@@ -1251,7 +1251,7 @@ export function buildBridgeScript(
         var prevOutline = el.style.outline;
         el.style.outline = '2px dashed #38bdf8';
         el.style.outlineOffset = '2px';
-        
+
         window.__glide_inline_editing__ = el;
 
         var finished = false;
@@ -1261,7 +1261,7 @@ export function buildBridgeScript(
           el.contentEditable = "false";
           el.style.outline = prevOutline;
           window.__glide_inline_editing__ = null;
-          
+
           var newText = el.textContent;
           if (newText !== originalText) {
             window.parent.postMessage({
@@ -1681,7 +1681,7 @@ export function buildBridgeScript(
         sendMsg('glide:element-hovered', hovered);
       }
 
-    
+
   // Post document height back to parent on load, resize, and DOM mutations
   var lastHeight = 0;
   function sendHeight() {
@@ -1783,14 +1783,14 @@ export function glideSourceStamping(): Plugin {
 
     while ((match = tagRegex.exec(cleanCode)) !== null) {
       const tagName = match[1];
-      
+
       // Ignore template, script, style tags
       if (['template', 'script', 'style'].includes(tagName.toLowerCase())) {
         continue;
       }
-      
+
       const index = match.index;
-      
+
       // Check if tag already has data-gl-source
       const restOfTag = cleanCode.substring(index, index + 500);
       const tagEnd = restOfTag.indexOf('>');
@@ -1803,15 +1803,15 @@ export function glideSourceStamping(): Plugin {
       const lines = prefix.split('\n');
       const line = lines.length;
       const col = lines[lines.length - 1].length + 1;
-      
+
       const sourceAttrVal = ` ${glideConfig.sourceAttribute}="${filepath}:${line}:${col}"`;
       const insertPos = index + 1 + tagName.length;
       const adjustedPos = insertPos + offset;
-      
+
       result = result.substring(0, adjustedPos) + sourceAttrVal + result.substring(adjustedPos);
       offset += sourceAttrVal.length;
     }
-    
+
     return result;
   }
 
@@ -1907,7 +1907,7 @@ export function glideSourceStamping(): Plugin {
       const posFile = path.join(rootDir, 'glide-positions.json');
       // Use chokidar (available from Vite) to watch the file
       server.watcher.add(posFile);
-      
+
       const handlePositionsChange = (changedFile: string) => {
         const normChanged = changedFile.replace(/\\/g, '/').toLowerCase();
         const normPosFile = posFile.replace(/\\/g, '/').toLowerCase();
@@ -2009,7 +2009,7 @@ if (import.meta.hot && !window.__glide_hmr_registered__) {
   import.meta.hot.on('glide:positions-updated', function(data) {
     var el = document.getElementById('__glide_positions__');
     if (el) el.textContent = data.css;
-    
+
     // Defer clearing inline styles by 2 frames to ensure the browser has parsed the new CSS and rendered it.
     // This eliminates the visual snap-back/flashing caused by removing inline styles before style recalculation completes.
     var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };

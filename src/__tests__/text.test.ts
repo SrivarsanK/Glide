@@ -33,7 +33,7 @@ describe('Pretext Text Measurement', () => {
     const font = '16px Inter';
     const containerWidth = 100; // narrow width to force wrapping
     const lineHeight = 20; // 20px per line
-    
+
     const results = listItems.map(text => {
       // 1. Prepare & measure off-screen (skip DOM reflows)
       const layout = measureTextLayout(text, font, containerWidth);

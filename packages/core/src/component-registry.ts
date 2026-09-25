@@ -404,7 +404,7 @@ function scanSvelteFile(filePath: string): ComponentBucket[] {
 function scanAstroFile(filePath: string): ComponentBucket[] {
   let code: string;
   try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
-  
+
   let templateCode = code;
   const parts = code.split('---');
   if (parts.length >= 3) {

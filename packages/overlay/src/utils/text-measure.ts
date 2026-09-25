@@ -20,7 +20,7 @@ export interface MeasureResult {
 export function measureTextLayout(text: string, font: string, maxWidth: number): MeasureResult {
   const prepared = pretext.prepareWithSegments(text, font, undefined);
   const layoutResult = pretext.layoutWithLines(prepared, maxWidth, 20);
-  
+
   return {
     width: pretext.measureNaturalWidth(prepared),
     lineCount: layoutResult.lineCount,

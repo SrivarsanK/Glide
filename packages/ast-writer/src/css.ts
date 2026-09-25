@@ -13,7 +13,7 @@ export function updateCSSModuleRule(
       .filter(([_, val]) => val !== null && val !== '')
       .map(([key, val]) => `  ${key}: ${val};`)
       .join('\n');
-    
+
     if (!propsStr) return cssCode;
     const separator = cssCode.trim() ? '\n\n' : '';
     return cssCode.trim() + `${separator}.${className} {\n${propsStr}\n}\n`;
@@ -25,7 +25,7 @@ export function updateCSSModuleRule(
   Object.entries(properties).forEach(([key, val]) => {
     // Regex for property inside the braces: e.g. padding: 12px;
     const propRegex = new RegExp(`(${key})\\s*:\\s*([^;]+)\\s*;?`, 'i');
-    
+
     if (propRegex.test(ruleContent)) {
       if (val === null || val === '') {
         // Remove property declaration
