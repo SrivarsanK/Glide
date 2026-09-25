@@ -39,17 +39,24 @@ function extractModifiedProps(change: any): string[] {
 
 function isSafeFilePath(targetPath: string, rootDir?: string): boolean {
   if (!targetPath || typeof targetPath !== 'string') return false;
-  // Block directory traversal tricks (e.g. "../../../Windows/System32")
-  if (targetPath.includes('..')) {
-    const resolved = path.resolve(targetPath);
-    const rootResolved = path.resolve(rootDir || process.cwd());
-    if (process.platform === 'win32') {
-      if (!resolved.toLowerCase().startsWith(rootResolved.toLowerCase())) return false;
-    } else {
-      if (!resolved.startsWith(rootResolved)) return false;
+  if (targetPath.includes('\0')) return false;
+
+  const root = rootDir || process.cwd();
+  const normalized = targetPath.replace(/\\/g, '/');
+
+  if (process.platform === 'win32') {
+    const rootResolved = path.resolve(root).replace(/\\/g, '/').toLowerCase();
+    const resolved = path.resolve(root, targetPath).replace(/\\/g, '/').toLowerCase();
+    return resolved === rootResolved || resolved.startsWith(rootResolved + '/');
+  } else {
+    // On POSIX (Linux/macOS), Windows drive letters or UNC paths escape project root
+    if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//')) {
+      return false;
     }
+    const rootResolved = path.resolve(root);
+    const resolved = path.resolve(rootResolved, normalized);
+    return resolved === rootResolved || resolved.startsWith(rootResolved + '/');
   }
-  return true;
 }
 
 function findProjectEntryFile(projectDir: string): string | null {
@@ -1693,6 +1700,13 @@ export class GlideServer {
     }
     return new Promise((resolve, reject) => {
       if (this.wss) {
+        if (this.wss.clients) {
+          for (const client of this.wss.clients) {
+            try {
+              client.terminate();
+            } catch {}
+          }
+        }
         this.wss.close((err) => {
           if (err) {
             reject(err);
