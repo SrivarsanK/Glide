@@ -1,5 +1,9 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
+import vm from 'vm';
 import { GlideBridge } from '../../packages/overlay/src/bridge.js';
+import { buildBridgeScript } from '../../packages/vite-plugin/src/index.js';
+import { buildGlideBridgeInlineScript } from '../../packages/server/src/ws-server.js';
+import { DEFAULT_CONFIG } from '../../packages/core/src/index.js';
 
 describe('GlideBridge Client Bridge', () => {
   let mockWindow: any;
@@ -286,5 +290,18 @@ describe('GlideBridge Client Bridge', () => {
       },
       '*'
     );
+  });
+});
+
+describe('Bridge Script Syntax & Integrity', () => {
+  test('buildBridgeScript should compile without syntax error in V8', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    expect(() => new vm.Script(scriptCode)).not.toThrow();
+  });
+
+  test('buildGlideBridgeInlineScript should compile without syntax error in V8', () => {
+    const raw = buildGlideBridgeInlineScript(DEFAULT_CONFIG);
+    const cleaned = raw.replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '');
+    expect(() => new vm.Script(cleaned)).not.toThrow();
   });
 });
