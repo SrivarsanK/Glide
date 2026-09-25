@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo/ascii-art.png" alt="Glide" width="500">
+  <img src="./.github/assets/ascii-art.png" alt="Glide" width="500">
 </p>
 
 <p align="center">
@@ -257,7 +257,7 @@ When an AI assistant needs to modify a component visually, it follows these step
 ## Features
 
 <p align="center">
-  <img src="./ui/guide.png" alt="Glide Visual Editor Guide" width="100%"/>
+  <img src="./.github/assets/guide.png" alt="Glide Visual Editor Guide" width="100%"/>
 </p>
 
 | Feature | Description |
@@ -325,8 +325,6 @@ Glide/
 │   ├── glide/
 │   ├── glide-component-segregator/
 │   └── glide-setup/
-├── docs/               # Research notes and specifications
-├── logo/               # Assets
 └── README.md
 ```
 
@@ -338,7 +336,7 @@ Contributions are welcome.
 
 - Review the [Contributing Guide](CONTRIBUTING.md) for local architecture details and testing procedures.
 - We follow conventional commit conventions for atomic commits.
-- Check [docs/research/](docs/research/) for background on AST codemods and spatial scene graph design.
+- Check [skills/glide/references/](skills/glide/references/) for background on AST codemods, framework adapters, and spatial scene graph design.
 
 ---
 

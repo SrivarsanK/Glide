@@ -38,8 +38,7 @@ Glide/
 │   ├── adapters/       # Framework adapters (React, Vue, Svelte runtime connectors)
 │   └── cli/            # Command-line executable (`glide <port>`)
 ├── src/                # Root bundling & unified package entrypoints
-├── docs/               # Technical specs, architecture docs, and research notes
-│   └── research/       # Deep dives on CST parsing, DOM manipulation & Figma bridge
+├── skills/             # Bundled AI agent skills and architectural references
 └── scripts/            # Build and single-package bundler scripts
 ```
 
