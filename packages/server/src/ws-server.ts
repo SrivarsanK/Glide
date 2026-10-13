@@ -18,6 +18,7 @@ import {
   setHistoryLimit
 } from './history-manager.js';
 import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
+import { MutationService, contentDigest } from './mutation-service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -793,6 +794,13 @@ export class GlideServer {
   private targetPort: number;
   private config: GlideConfig;
   private editCallbacks: EditCallback[] = [];
+  private mutations = new MutationService(process.cwd(), {
+    onPersist: diffs => {
+      if (!diffs.length) return;
+      pushHistory({ description: 'Apply source changes', diffs });
+      for (const diff of diffs) this.recordSelfWrite(diff.file);
+    },
+  });
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private lastSelfWrites = new Map<string, number>();
@@ -934,6 +942,7 @@ export class GlideServer {
                 type: 'tree',
                 file: entryFile,
                 tree,
+                digest: contentDigest(code),
                 generation: this.fileGenerations.get(normPath) || 0
               }));
             }
@@ -960,6 +969,7 @@ export class GlideServer {
                     type: 'tree',
                     file,
                     tree,
+                    digest: contentDigest(code),
                     generation: this.fileGenerations.get(normPath) || 0
                   }));
                 } else {
@@ -1577,37 +1587,20 @@ export class GlideServer {
                   ws.send(JSON.stringify({ type: 'status', success: false, error: 'Empty or invalid batch-edit payload' }));
                   return;
                 }
-                const batchSquashKey = batchId || `batch:${Date.now()}`;
-                const batchDescription = `Applied ${edits.length} staged change${edits.length > 1 ? 's' : ''}`;
-                let successCount = 0;
-
-                for (const item of edits) {
-                  let { file, line, column, change, hash } = item;
-                  if (!file) {
-                    file = findProjectEntryFile(process.cwd());
-                  }
-                  if (!file || !isSafeFilePath(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
-                    continue;
-                  }
-                  change.batchSquashKey = batchSquashKey;
-                  change.batchDescription = batchDescription;
-
-                  for (const callback of this.editCallbacks) {
-                    try {
-                      await callback(file, line, column, change, hash);
-                      successCount++;
-                    } catch (err: any) {
-                      console.error(`[Glide] Batch item error (${file}:${line}:${column}):`, err.message);
-                    }
-                  }
-                  this.recordSelfWrite(file);
-                }
-
+                const result = await this.mutations.execute(batchId, edits.map((item: any, index: number) => ({
+                  operationId: item?.operationId || `${batchId}:${index}`,
+                  filePath: item?.file,
+                  expectedDigest: item?.expectedDigest,
+                  line: item?.line,
+                  column: item?.column,
+                  hash: item?.hash,
+                  change: item?.change,
+                })));
                 ws.send(JSON.stringify({
                   type: 'status',
-                  success: true,
                   action: 'batch-edit',
-                  count: successCount,
+                  ...result,
+                  count: result.success ? result.operationResults.length : 0,
                 }));
 
                 ws.send(JSON.stringify({

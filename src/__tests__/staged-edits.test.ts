@@ -71,7 +71,7 @@ describe('Staged Edits & Batch Protocol', () => {
     expect(batchEdits[2].change.property).toBe('fontSize');
   });
 
-  test('server accepts batch-edit payload and executes all edits with shared batchSquashKey', async () => {
+  test('server rejects a batch without file digests before callbacks run', async () => {
     server = new GlideServer(testPort);
     await server.start();
 
@@ -112,13 +112,10 @@ describe('Staged Edits & Batch Protocol', () => {
     });
 
     const statusObj = JSON.parse(statusResponse);
-    expect(statusObj.success).toBe(true);
+    expect(statusObj.success).toBe(false);
     expect(statusObj.action).toBe('batch-edit');
-    expect(statusObj.count).toBe(2);
-
-    expect(receivedEdits).toHaveLength(2);
-    expect(receivedEdits[0].change.batchSquashKey).toBe('batch-test-123');
-    expect(receivedEdits[1].change.batchSquashKey).toBe('batch-test-123');
+    expect(statusObj.count).toBe(0);
+    expect(receivedEdits).toHaveLength(0);
 
     client.close();
   });

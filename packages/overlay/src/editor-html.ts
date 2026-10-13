@@ -2357,6 +2357,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             socket.addEventListener('message', (event) => {
               try {
                 const message = JSON.parse(event.data);
+                if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;
                   if (!message.tree) {
@@ -2426,6 +2427,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
                 } else if (message.type === 'HISTORY_UPDATE') {
                   updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
+                  if (message.action === 'batch-edit' && pendingBatch && message.transactionId === pendingBatch.batchId) {
+                    if (message.success) {
+                      pendingBatch.items.forEach(({ source, key, item }) => {
+                        const props = stagedEdits.get(source);
+                        if (props && props.get(key) === item) props.delete(key);
+                        if (props && props.size === 0) stagedEdits.delete(source);
+                      });
+                      clearPreviewInIframe();
+                      showToast('success', 'Applied ' + message.count + ' source changes');
+                    }
+                    pendingBatch = null;
+                    updateStagingBarUI();
+                  }
                   if (message.success) {
                     if (typeof message.generation === 'number') {
                       currentGeneration = message.generation;
@@ -2529,6 +2543,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             }
           } catch(e) {}
           const stagedEdits = new Map(); // sourceId -> Map<propKey, { change, parsed, timestamp }>
+          const fileDigests = new Map();
+          let pendingBatch = null;
           let previewState = 'after'; // 'after' = previewing staged, 'before' = previewing original
 
           function syncWritebackModeUI() {
@@ -2609,6 +2625,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           function stageEdit(source, change) {
             const parsed = parseSource(source);
             if (!parsed) return;
+            parsed.expectedDigest = fileDigests.get(parsed.file.replaceAll('\\\\', '/'));
+            if (!parsed.expectedDigest) {
+              showToast('error', 'Source mapping is not ready. Select the element again.');
+              return;
+            }
 
             if (!stagedEdits.has(source)) {
               stagedEdits.set(source, new Map());
@@ -2671,6 +2692,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
           }
 
           function discardStagedEdits() {
+            if (pendingBatch) return;
             clearPreviewInIframe();
             stagedEdits.clear();
             previewState = 'after';
@@ -2683,11 +2705,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
               showToast('error', 'WebSocket not connected');
               return;
             }
+            if (pendingBatch) {
+              socket.send(JSON.stringify({ type: 'batch-edit', batchId: pendingBatch.batchId, edits: pendingBatch.edits }));
+              return;
+            }
             const edits = [];
-            stagedEdits.forEach((propMap) => {
-              propMap.forEach((item) => {
+            const items = [];
+            stagedEdits.forEach((propMap, source) => {
+              propMap.forEach((item, key) => {
+                items.push({ source, key, item });
                 edits.push({
                   file: item.parsed.file,
+                  expectedDigest: item.parsed.expectedDigest,
                   line: item.parsed.line,
                   column: item.parsed.column,
                   hash: item.parsed.hash,
@@ -2701,17 +2730,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
 
             if (edits.length === 0) return;
 
+            pendingBatch = { batchId: 'batch:' + crypto.randomUUID(), edits, items };
             socket.send(JSON.stringify({
               type: 'batch-edit',
-              batchId: 'batch:' + Date.now(),
+              batchId: pendingBatch.batchId,
               edits: edits
             }));
 
-            clearPreviewInIframe();
-            stagedEdits.clear();
-            previewState = 'after';
-            updateStagingBarUI();
-            showToast('success', 'Applied ' + edits.length + ' staged change' + (edits.length > 1 ? 's' : ''));
+            showToast('info', 'Waiting for source persistence');
           }
 
           function sendEdit(change) {
