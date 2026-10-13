@@ -1,6 +1,6 @@
 import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
 
-export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
+export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -2332,13 +2332,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             const statusEl = document.getElementById('ws-status');
 
             socket.addEventListener('open', () => {
+              socket.send(JSON.stringify({ type: 'hello', token: ${JSON.stringify(sessionToken)} }));
               updateConnectionState('connected');
               dot.classList.remove('error');
               statusEl.textContent = 'Connected to Glide server';
               setTimeout(() => { statusEl.textContent = 'Ready'; }, 2000);
-              if (!layerTree || layerTree.length === 0) {
-                socket.send(JSON.stringify({ type: 'get-tree' }));
-              }
             });
 
             socket.addEventListener('close', () => {
@@ -2357,6 +2355,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG): string {
             socket.addEventListener('message', (event) => {
               try {
                 const message = JSON.parse(event.data);
+                if (message.type === 'authenticated') {
+                  socket.send(JSON.stringify({ type: 'get-tree' }));
+                  return;
+                }
                 if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;

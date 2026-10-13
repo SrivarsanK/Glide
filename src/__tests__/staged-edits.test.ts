@@ -1,6 +1,7 @@
 import { describe, expect, test, afterEach } from 'vitest';
 import { GlideServer } from '../../packages/server/src/ws-server.js';
 import WebSocket from 'ws';
+import { connectLocal } from './ws-client.js';
 import type { StagedPatch, StagedEditSet, BatchEditMessage } from '../../packages/core/src/staged-edits.js';
 
 describe('Staged Edits & Batch Protocol', () => {
@@ -80,8 +81,7 @@ describe('Staged Edits & Batch Protocol', () => {
       receivedEdits.push({ file, line, column, change });
     });
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     const batchMsg: BatchEditMessage = {
       type: 'batch-edit',
@@ -124,8 +124,7 @@ describe('Staged Edits & Batch Protocol', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     client.send(JSON.stringify({ type: 'batch-edit', edits: [] }));
 

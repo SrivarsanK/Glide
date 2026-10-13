@@ -1,6 +1,7 @@
 import { describe, expect, test, afterEach } from 'vitest';
 import { GlideServer, EditMessage } from '../../packages/server/src/ws-server.js';
 import WebSocket from 'ws';
+import { connectLocal } from './ws-client.js';
 
 describe('GlideServer WebSocket Server', () => {
   let server: GlideServer | null = null;
@@ -29,11 +30,7 @@ describe('GlideServer WebSocket Server', () => {
       receivedEdit = { file, line, column, change };
     });
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-
-    await new Promise<void>((resolve) => {
-      client.on('open', resolve);
-    });
+    const client = await connectLocal(testPort);
 
     const payload: EditMessage = {
       type: 'edit',
@@ -70,8 +67,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     client.send('invalid json');
 
@@ -92,8 +88,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     client.send(JSON.stringify({ type: 'edit', file: '', line: 'not a number' }));
 
@@ -119,8 +114,7 @@ describe('GlideServer WebSocket Server', () => {
       receivedEdit = { file, line, column, change };
     });
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     // 1. Send Group Payload
     const groupPayload = {
@@ -180,8 +174,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     const receivedMessages: any[] = [];
     client.on('message', (data) => {
@@ -213,8 +206,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     const reparentPayload = {
       type: 'reparent',
@@ -242,8 +234,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     // Test missing componentName error
     client.send(JSON.stringify({
@@ -267,8 +258,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     client.send(JSON.stringify({
       type: 'open_component',
@@ -295,8 +285,7 @@ describe('GlideServer WebSocket Server', () => {
 
     server.onEdit(() => {});
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     const targetFile = 'src/App.tsx';
 
@@ -367,8 +356,7 @@ describe('GlideServer WebSocket Server', () => {
     server = new GlideServer(testPort);
     await server.start();
 
-    const client = new WebSocket(`ws://localhost:${testPort}`);
-    await new Promise<void>((resolve) => client.on('open', resolve));
+    const client = await connectLocal(testPort);
 
     // Request pending ops stats
     client.send(JSON.stringify({ type: 'GET_PENDING_OPS' }));

@@ -20,6 +20,7 @@ export interface GlideConfig {
   // Server
   port: number;
   targetPort: number;
+  remoteAccess?: { bindAddress: string; allowedHosts: string[]; allowedOrigins: string[] };
   // Behavior
   historyLimit: number;
   selfWriteDebounceMs: number;

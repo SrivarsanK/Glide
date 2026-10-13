@@ -21,6 +21,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import WebSocket from 'ws';
+import { connectLocal } from './ws-client.js';
 import {
   SceneGraph,
   SceneRect,
@@ -43,8 +44,7 @@ function node(id: string, rect: SceneRect, children: SceneNodeData[] = []): Scen
 
 /** Open a WS client and wait for the 'open' event. */
 async function openClient(port: number): Promise<WebSocket> {
-  const ws = new WebSocket(`ws://localhost:${port}`);
-  await new Promise<void>((res) => ws.on('open', res));
+  const ws = await connectLocal(port);
   return ws;
 }
 

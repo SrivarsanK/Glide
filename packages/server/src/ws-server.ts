@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server, request as httpRequest } from 'http';
 import * as fs from 'fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
 import * as path from 'path';
@@ -18,6 +18,7 @@ import {
 } from './history-manager.js';
 import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
 import { MutationService, contentDigest } from './mutation-service.js';
+import { trustedRequest, validateMessage } from './session-security.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -787,6 +788,8 @@ function normalizePathKey(filePath: string): string {
 }
 
 export class GlideServer {
+  private sessionToken = randomBytes(32).toString('hex');
+  private authenticated = new WeakSet<WebSocket>();
   private wss: WebSocketServer | null = null;
   private server: Server | null = null;
   private port: number;
@@ -814,7 +817,7 @@ export class GlideServer {
     if (!this.wss || !this.wss.clients) return;
     const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client.readyState === WebSocket.OPEN && this.authenticated.has(client)) {
         client.send(data);
       }
     }
@@ -837,13 +840,20 @@ export class GlideServer {
         setHistoryLimit(this.config.historyLimit);
 
         this.server = createServer((req, res) => {
+          const address = this.server?.address();
+          const port = address && typeof address === 'object' ? address.port : this.port;
+          if (!trustedRequest(req, port, this.config.remoteAccess)) {
+            res.writeHead(403);
+            res.end('Request origin or host is not allowed.');
+            return;
+          }
           const url = req.url || '/';
           const pathname = new URL(url, 'http://localhost').pathname;
 
           // ── Editor shell: only served at root '/' or '/index.html' ──
           if (pathname === '/' || pathname === '/index.html') {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(getEditorHTML(this.config));
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store' });
+            res.end(getEditorHTML(this.config, this.sessionToken));
             return;
           }
 
@@ -922,36 +932,41 @@ export class GlideServer {
           console.error('[Glide Watcher] Watcher error:', err);
         });
 
-        this.wss = new WebSocketServer({ server: this.server });
+        this.wss = new WebSocketServer({
+          server: this.server, maxPayload: 256 * 1024,
+          verifyClient: (info: { req: import('node:http').IncomingMessage }) => {
+            const address = this.server?.address();
+            const port = address && typeof address === 'object' ? address.port : this.port;
+            return trustedRequest(info.req, port, this.config.remoteAccess);
+          },
+        });
 
         this.wss.on('connection', (ws: WebSocket) => {
           ws.on('error', (err) => {
             console.error('[Glide WS] Client connection error:', err);
           });
+          const timer = setTimeout(() => { if (!this.authenticated.has(ws)) ws.close(1008, 'Session handshake required.'); }, 5000);
+          timer.unref();
+          ws.on('close', () => clearTimeout(timer));
 
-          // Proactively send entry component tree on client connection
-          try {
-            const entryFile = findProjectEntryFile(process.cwd());
-            if (entryFile && fs.existsSync(entryFile)) {
-              try { activeProjectGitRoot = findGitRoot(entryFile); } catch {}
-              const code = fs.readFileSync(entryFile, 'utf-8');
-              const tree = buildComponentTree(code, entryFile);
-              const normPath = normalizePathKey(entryFile);
-              ws.send(JSON.stringify({
-                type: 'tree',
-                file: entryFile,
-                tree,
-                digest: contentDigest(code),
-                generation: this.fileGenerations.get(normPath) || 0
-              }));
-            }
-          } catch (err) {
-            console.warn('[Glide WS] Failed to send initial component tree:', err);
-          }
 
           ws.on('message', async (data: string) => {
             try {
               const message = JSON.parse(data);
+              validateMessage(message);
+              if (!this.authenticated.has(ws)) {
+                const token = typeof message.token === 'string' ? Buffer.from(message.token) : Buffer.alloc(0);
+                const expected = Buffer.from(this.sessionToken);
+                if (message.type !== 'hello' || token.length !== expected.length || !timingSafeEqual(token, expected)) {
+                  ws.send(JSON.stringify({ type: 'status', success: false, error: 'UNAUTHORIZED: Session handshake required.' }));
+                  ws.close(1008, 'Session handshake required.');
+                  return;
+                }
+                this.authenticated.add(ws);
+                clearTimeout(timer);
+                ws.send(JSON.stringify({ type: 'authenticated', success: true }));
+                return;
+              }
 
               if (message.type === 'get-tree') {
                 const requestedFile = message.file;
@@ -1674,7 +1689,7 @@ export class GlideServer {
           console.error('[Glide HTTP] Server error:', err);
         });
 
-        this.server.listen(this.port, () => {
+        this.server.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
           resolve();
         });
       } catch (err) {
