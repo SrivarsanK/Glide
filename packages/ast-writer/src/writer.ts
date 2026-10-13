@@ -347,43 +347,13 @@ export function updateClassName(
 
   const newVal = updateClassString(existingVal, property, value, breakpoint);
 
-  // 1. Gather all nodes to update: target node + any nodes with matching className
-  const nodesToUpdate: Array<{ node: any; path: any }> = [];
-  nodesToUpdate.push({ node: targetPath.node, path: targetPath });
-
-  if (existingVal) {
-    traverse(ast, {
-      JSXElement(path: any) {
-        if (path.node === targetPath.node) return;
-        const nodeOpeningEl = path.node.openingElement;
-        const nodeClassAttr = nodeOpeningEl.attributes.find(
-          (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
-        );
-        if (nodeClassAttr && nodeClassAttr.value && nodeClassAttr.value.type === 'StringLiteral') {
-          if (nodeClassAttr.value.value === existingVal) {
-            nodesToUpdate.push({ node: path.node, path: path });
-          }
-        }
-      }
-    });
-  }
-
-  // 2. Apply changes
-  for (const { node } of nodesToUpdate) {
-    const itemOpeningEl = node.openingElement;
-    let itemClassAttr = itemOpeningEl.attributes.find(
-      (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
+  // Change only the node selected by its source location.
+  if (classAttr) {
+    classAttr.value = t.stringLiteral(newVal);
+  } else {
+    openingEl.attributes.push(
+      t.jsxAttribute(t.jsxIdentifier('className'), t.stringLiteral(newVal))
     );
-    if (itemClassAttr) {
-      itemClassAttr.value = t.stringLiteral(newVal);
-    } else {
-      itemOpeningEl.attributes.push(
-        t.jsxAttribute(
-          t.jsxIdentifier('className'),
-          t.stringLiteral(newVal)
-        )
-      );
-    }
   }
 
   const updatedSourceCode = recastPrint(ast).code;

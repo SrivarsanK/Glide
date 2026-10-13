@@ -182,7 +182,7 @@ describe('AST Write-back Engine', () => {
     }).toThrow('STALE_NODE: Reference is stale');
   });
 
-  test('should update all elements sharing the exact same className in the file', () => {
+  test('updates only the selected element with a shared className', () => {
     const code = `
       export function Grid() {
         return (
@@ -198,10 +198,19 @@ describe('AST Write-back Engine', () => {
     // Target the first card (line 5, column 13)
     const result = updateClassName(code, 5, 13, 'padding', 32); // p-6 (24px) -> p-8 (32px)
 
-    // Check that ALL three cards were updated!
+    // Keep the other cards unchanged.
     const matches = result.match(/className="card bg-gray-800 p-8"/g);
     expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(3);
+    expect(matches!.length).toBe(1);
+    expect(result).toContain('<div className="card bg-gray-800 p-6">Card 2</div>');
+    expect(result).toContain('<div className="card bg-gray-800 p-6">Card 3</div>');
+  });
+
+  test('keeps separate definitions and same-line siblings unchanged', () => {
+    const code = 'const A = () => <><button className="p-2">A</button><button className="p-2">B</button></>;\r\n'
+      + 'const B = () => <button className="p-2">C</button>;';
+    const result = updateClassName(code, 1, code.indexOf('<button') + 1, 'padding', 16);
+    expect(result).toBe(code.replace('className="p-2"', 'className="p-4"'));
   });
 });
 import { computeNodeHash } from '../../packages/ast-writer/src/writer.js';
