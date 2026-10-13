@@ -302,6 +302,107 @@ function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
   throw new Error('UNSUPPORTED_OPERATION: className must be a static string literal.');
 }
 
+function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string): string {
+  const openingEl = node.openingElement;
+  const classAttr = getStaticAttribute(openingEl, 'className');
+  const literal = classLiteral(classAttr);
+  const existingVal = literal?.value ?? '';
+
+  const newVal = updateClassString(existingVal, property, value, breakpoint);
+
+  // Change only the node selected by its source location.
+  if (literal) {
+    literal.value = newVal;
+  } else {
+    openingEl.attributes.push(
+      t.jsxAttribute(t.jsxIdentifier('className'), t.stringLiteral(newVal))
+    );
+  }
+  return newVal;
+}
+
+function mutateText(node: t.JSXElement, newText: string): void {
+  const children: t.JSXElement['children'] = node.children;
+  const candidates = children.filter(child =>
+    (t.isJSXText(child) && child.value.trim() !== '') ||
+    (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)));
+  if (candidates.length !== 1) {
+    throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment. The element has no unique text target.');
+  }
+  const child = candidates[0];
+  if (t.isJSXText(child)) {
+    const existingRaw = child.value;
+    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
+    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
+    if (/[&<>{}\r\n]/.test(newText) || newText === '') {
+      // A string expression preserves special characters and line breaks.
+      const replacement = [
+        ...(leadingWs ? [t.jsxText(leadingWs)] : []),
+        t.jsxExpressionContainer(t.stringLiteral(newText)),
+        ...(trailingWs ? [t.jsxText(trailingWs)] : []),
+      ];
+      children.splice(children.indexOf(child), 1, ...replacement);
+    } else {
+      child.value = leadingWs + newText + trailingWs;
+    }
+  } else if (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)) {
+    child.expression.value = newText;
+  }
+}
+
+function mutateStyle(node: t.JSXElement, styles: Record<string, string>): void {
+  const openingEl = node.openingElement;
+  const styleAttr = getStaticAttribute(openingEl, 'style');
+  if (styleAttr) {
+    const value = styleAttr.value;
+    if (!t.isJSXExpressionContainer(value) || !t.isObjectExpression(value.expression)) {
+      throw new Error('UNSUPPORTED_OPERATION: style must be a static object literal.');
+    }
+    const keys = new Set<string>();
+    for (const prop of value.expression.properties) {
+      if (!t.isObjectProperty(prop) || prop.computed || prop.shorthand
+        || (!t.isIdentifier(prop.key) && !t.isStringLiteral(prop.key))
+        || (!t.isStringLiteral(prop.value) && !t.isNumericLiteral(prop.value))) {
+        throw new Error('UNSUPPORTED_OPERATION: style has a dynamic property, spread, or computed key.');
+      }
+      const key = t.isIdentifier(prop.key) ? prop.key.name : prop.key.value;
+      if (keys.has(key)) throw new Error('UNSUPPORTED_OPERATION: style has duplicate properties.');
+      keys.add(key);
+    }
+  }
+
+  const newProperties = Object.entries(styles).map(([key, val]) => {
+    return t.objectProperty(t.isValidIdentifier(key) ? t.identifier(key) : t.stringLiteral(key), t.stringLiteral(val));
+  });
+
+  if (styleAttr) {
+    if (styleAttr.value && styleAttr.value.type === 'JSXExpressionContainer' && styleAttr.value.expression.type === 'ObjectExpression') {
+      const existingProperties = styleAttr.value.expression.properties as any[];
+      const mergedProperties = [...existingProperties];
+      newProperties.forEach(newProp => {
+        const keyName = t.isIdentifier(newProp.key) ? newProp.key.name : (newProp.key as t.StringLiteral).value;
+        const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' &&
+          (t.isIdentifier(p.key) ? p.key.name : p.key.value) === keyName);
+        if (idx !== -1) {
+          mergedProperties[idx].value = newProp.value;
+        } else {
+          mergedProperties.push(newProp);
+        }
+      });
+      styleAttr.value.expression.properties = mergedProperties;
+    } else {
+      styleAttr.value = t.jsxExpressionContainer(t.objectExpression(newProperties));
+    }
+  } else {
+    openingEl.attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier('style'),
+        t.jsxExpressionContainer(t.objectExpression(newProperties))
+      )
+    );
+  }
+}
+
 export function updateClassName(
   sourceCode: string,
   line: number,
@@ -354,21 +455,7 @@ export function updateClassName(
     },
   });
 
-  const openingEl = targetPath.node.openingElement;
-  const classAttr = getStaticAttribute(openingEl, 'className');
-  const literal = classLiteral(classAttr);
-  const existingVal = literal?.value ?? '';
-
-  const newVal = updateClassString(existingVal, property, value, breakpoint);
-
-  // Change only the node selected by its source location.
-  if (literal) {
-    literal.value = newVal;
-  } else {
-    openingEl.attributes.push(
-      t.jsxAttribute(t.jsxIdentifier('className'), t.stringLiteral(newVal))
-    );
-  }
+  const newVal = mutateClass(targetPath.node, property, value, breakpoint);
 
   const updatedSourceCode = recastPrint(ast).code;
 
@@ -445,32 +532,7 @@ export function updateJSXText(
     },
   });
 
-  const children: t.JSXElement['children'] = targetPath.node.children;
-  const candidates = children.filter(child =>
-    (t.isJSXText(child) && child.value.trim() !== '') ||
-    (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)));
-  if (candidates.length !== 1) {
-    throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment. The element has no unique text target.');
-  }
-  const child = candidates[0];
-  if (t.isJSXText(child)) {
-    const existingRaw = child.value;
-    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
-    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
-    if (/[&<>{}\r\n]/.test(newText) || newText === '') {
-      // A string expression preserves special characters and line breaks.
-      const replacement = [
-        ...(leadingWs ? [t.jsxText(leadingWs)] : []),
-        t.jsxExpressionContainer(t.stringLiteral(newText)),
-        ...(trailingWs ? [t.jsxText(trailingWs)] : []),
-      ];
-      children.splice(children.indexOf(child), 1, ...replacement);
-    } else {
-      child.value = leadingWs + newText + trailingWs;
-    }
-  } else if (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)) {
-    child.expression.value = newText;
-  }
+  mutateText(targetPath.node, newText);
 
   const updatedSourceCode = recastPrint(ast).code;
 
@@ -548,56 +610,7 @@ export function updateJSXStyleProp(
     },
   });
 
-  const openingEl = targetPath.node.openingElement;
-  const styleAttr = getStaticAttribute(openingEl, 'style');
-  if (styleAttr) {
-    const value = styleAttr.value;
-    if (!t.isJSXExpressionContainer(value) || !t.isObjectExpression(value.expression)) {
-      throw new Error('UNSUPPORTED_OPERATION: style must be a static object literal.');
-    }
-    const keys = new Set<string>();
-    for (const prop of value.expression.properties) {
-      if (!t.isObjectProperty(prop) || prop.computed || prop.shorthand
-        || (!t.isIdentifier(prop.key) && !t.isStringLiteral(prop.key))
-        || (!t.isStringLiteral(prop.value) && !t.isNumericLiteral(prop.value))) {
-        throw new Error('UNSUPPORTED_OPERATION: style has a dynamic property, spread, or computed key.');
-      }
-      const key = t.isIdentifier(prop.key) ? prop.key.name : prop.key.value;
-      if (keys.has(key)) throw new Error('UNSUPPORTED_OPERATION: style has duplicate properties.');
-      keys.add(key);
-    }
-  }
-
-  const newProperties = Object.entries(styles).map(([key, val]) => {
-    return t.objectProperty(t.isValidIdentifier(key) ? t.identifier(key) : t.stringLiteral(key), t.stringLiteral(val));
-  });
-
-  if (styleAttr) {
-    if (styleAttr.value && styleAttr.value.type === 'JSXExpressionContainer' && styleAttr.value.expression.type === 'ObjectExpression') {
-      const existingProperties = styleAttr.value.expression.properties as any[];
-      const mergedProperties = [...existingProperties];
-      newProperties.forEach(newProp => {
-        const keyName = t.isIdentifier(newProp.key) ? newProp.key.name : (newProp.key as t.StringLiteral).value;
-        const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' &&
-          (t.isIdentifier(p.key) ? p.key.name : p.key.value) === keyName);
-        if (idx !== -1) {
-          mergedProperties[idx].value = newProp.value;
-        } else {
-          mergedProperties.push(newProp);
-        }
-      });
-      styleAttr.value.expression.properties = mergedProperties;
-    } else {
-      styleAttr.value = t.jsxExpressionContainer(t.objectExpression(newProperties));
-    }
-  } else {
-    openingEl.attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier('style'),
-        t.jsxExpressionContainer(t.objectExpression(newProperties))
-      )
-    );
-  }
+  mutateStyle(targetPath.node, styles);
 
   const updatedSourceCode = recastPrint(ast).code;
 
