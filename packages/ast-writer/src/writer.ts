@@ -281,6 +281,27 @@ export function updateClassString(
   }
 }
 
+function getStaticAttribute(opening: t.JSXOpeningElement, name: string): t.JSXAttribute | undefined {
+  if (opening.attributes.some(attr => t.isJSXSpreadAttribute(attr))) {
+    throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
+  }
+  const attributes = opening.attributes.filter((attr): attr is t.JSXAttribute =>
+    t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name, { name }));
+  if (attributes.length > 1) {
+    throw new Error(`UNSUPPORTED_OPERATION: ${name} has duplicate attributes.`);
+  }
+  return attributes[0];
+}
+
+function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
+  if (!attr) return undefined;
+  if (t.isStringLiteral(attr.value)) return attr.value;
+  if (t.isJSXExpressionContainer(attr.value) && t.isStringLiteral(attr.value.expression)) {
+    return attr.value.expression;
+  }
+  throw new Error('UNSUPPORTED_OPERATION: className must be a static string literal.');
+}
+
 export function updateClassName(
   sourceCode: string,
   line: number,
@@ -334,22 +355,15 @@ export function updateClassName(
   });
 
   const openingEl = targetPath.node.openingElement;
-  let classAttr = openingEl.attributes.find(
-    (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'className'
-  );
-
-  let existingVal = '';
-  if (classAttr) {
-    if (classAttr.value && classAttr.value.type === 'StringLiteral') {
-      existingVal = classAttr.value.value;
-    }
-  }
+  const classAttr = getStaticAttribute(openingEl, 'className');
+  const literal = classLiteral(classAttr);
+  const existingVal = literal?.value ?? '';
 
   const newVal = updateClassString(existingVal, property, value, breakpoint);
 
   // Change only the node selected by its source location.
-  if (classAttr) {
-    classAttr.value = t.stringLiteral(newVal);
+  if (literal) {
+    literal.value = newVal;
   } else {
     openingEl.attributes.push(
       t.jsxAttribute(t.jsxIdentifier('className'), t.stringLiteral(newVal))
@@ -368,8 +382,9 @@ export function updateClassName(
       const attr = path.node.attributes.find(
         (a: any) => a.type === 'JSXAttribute' && a.name.name === 'className'
       );
-      if (attr && attr.value && attr.value.type === 'StringLiteral' && attr.value.value === newVal) {
+      if (attr && classLiteral(attr)?.value === newVal) {
         hasExpectedValue = true;
+        path.stop();
       }
     }
   });
@@ -540,12 +555,27 @@ export function updateJSXStyleProp(
   });
 
   const openingEl = targetPath.node.openingElement;
-  let styleAttr = openingEl.attributes.find(
-    (attr: any) => attr.type === 'JSXAttribute' && attr.name.name === 'style'
-  );
+  const styleAttr = getStaticAttribute(openingEl, 'style');
+  if (styleAttr) {
+    const value = styleAttr.value;
+    if (!t.isJSXExpressionContainer(value) || !t.isObjectExpression(value.expression)) {
+      throw new Error('UNSUPPORTED_OPERATION: style must be a static object literal.');
+    }
+    const keys = new Set<string>();
+    for (const prop of value.expression.properties) {
+      if (!t.isObjectProperty(prop) || prop.computed || prop.shorthand
+        || (!t.isIdentifier(prop.key) && !t.isStringLiteral(prop.key))
+        || (!t.isStringLiteral(prop.value) && !t.isNumericLiteral(prop.value))) {
+        throw new Error('UNSUPPORTED_OPERATION: style has a dynamic property, spread, or computed key.');
+      }
+      const key = t.isIdentifier(prop.key) ? prop.key.name : prop.key.value;
+      if (keys.has(key)) throw new Error('UNSUPPORTED_OPERATION: style has duplicate properties.');
+      keys.add(key);
+    }
+  }
 
   const newProperties = Object.entries(styles).map(([key, val]) => {
-    return t.objectProperty(t.identifier(key), t.stringLiteral(val));
+    return t.objectProperty(t.isValidIdentifier(key) ? t.identifier(key) : t.stringLiteral(key), t.stringLiteral(val));
   });
 
   if (styleAttr) {
@@ -553,10 +583,11 @@ export function updateJSXStyleProp(
       const existingProperties = styleAttr.value.expression.properties as any[];
       const mergedProperties = [...existingProperties];
       newProperties.forEach(newProp => {
-        const keyName = (newProp.key as any).name;
-        const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' && (p.key as any).name === keyName);
+        const keyName = t.isIdentifier(newProp.key) ? newProp.key.name : (newProp.key as t.StringLiteral).value;
+        const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' &&
+          (t.isIdentifier(p.key) ? p.key.name : p.key.value) === keyName);
         if (idx !== -1) {
-          mergedProperties[idx] = newProp;
+          mergedProperties[idx].value = newProp.value;
         } else {
           mergedProperties.push(newProp);
         }
