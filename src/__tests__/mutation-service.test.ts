@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { MutationService, contentDigest, type MutationOperation } from '../../packages/server/src/mutation-service.js';
+import { HistoryStore } from '../../packages/server/src/history-manager.js';
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
@@ -22,6 +23,29 @@ function fixture(rename?: typeof fs.renameSync) {
 }
 
 describe('Mutation transactions', () => {
+  test.each(['external', 'write-failure', 'success'])('restores history safely: %s', async mode => {
+    const f = fixture();
+    const store = new HistoryStore();
+    let calls = 0;
+    const service = new MutationService(f.root, {
+      onPersist: diffs => store.push({ description: 'Edit two files', diffs }),
+      rename: (from, to) => {
+        if (mode === 'write-failure' && ++calls === 4) throw new Error('Injected undo failure.');
+        fs.renameSync(from, to);
+      },
+    });
+    const result = await service.execute('edit', [f.operation('A.tsx', 'one'), f.operation('B.tsx', 'two')]);
+    expect(result.success).toBe(true);
+    const after = f.read('A.tsx');
+    if (mode === 'external') fs.writeFileSync(path.join(f.root, 'B.tsx'), '// External edit.\n' + after);
+    const expectedB = f.read('B.tsx');
+    const restored = await service.restoreHistory('undo', store, 'undo');
+    expect(restored.success).toBe(mode === 'success');
+    expect(store.getState().currentIndex).toBe(mode === 'success' ? -1 : 0);
+    expect(f.read('A.tsx')).toBe(mode === 'success' ? f.source : after);
+    expect(f.read('B.tsx')).toBe(mode === 'success' ? f.source : expectedB);
+  });
+
   test('resolves same-line targets before a style insertion changes coordinates', async () => {
     const f = fixture();
     const source = 'const A = () => <><button>A</button><button>B</button></>;';

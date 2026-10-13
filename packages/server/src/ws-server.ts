@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server, request as httpRequest } from 'http';
 import * as fs from 'fs';
+import { randomUUID } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
 import * as path from 'path';
@@ -10,9 +11,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
   pushHistory,
-  undo,
-  redo,
-  jumpTo,
+  defaultStore,
   getHistoryState,
   clearHistory,
   setHistoryLimit
@@ -803,11 +802,11 @@ export class GlideServer {
   });
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
-  private lastSelfWrites = new Map<string, number>();
+  private lastSelfWrites = new Map<string, string>();
 
   public recordSelfWrite(filePath: string) {
     const normPath = normalizePathKey(filePath);
-    this.lastSelfWrites.set(normPath, Date.now());
+    if (fs.existsSync(filePath)) this.lastSelfWrites.set(normPath, contentDigest(fs.readFileSync(filePath, 'utf8')));
     this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
   }
 
@@ -881,8 +880,8 @@ export class GlideServer {
         });
         this.watcher.on('change', (filePath: string) => {
           const normPath = normalizePathKey(filePath);
-          const lastWrite = this.lastSelfWrites.get(normPath) || 0;
-          if (Date.now() - lastWrite < this.config.selfWriteDebounceMs) {
+          const lastWrite = this.lastSelfWrites.get(normPath);
+          if (lastWrite && fs.existsSync(filePath) && contentDigest(fs.readFileSync(filePath, 'utf8')) === lastWrite) {
             console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
             return;
           }
@@ -1456,119 +1455,19 @@ export class GlideServer {
                 return;
               }
 
-              if (message.type === 'undo' || message.type === 'UNDO') {
-                console.log('[Glide] Undo request received');
+              if (['undo', 'UNDO', 'redo', 'REDO', 'JUMP_TO_HISTORY'].includes(message.type)) {
+                const action = message.type === 'JUMP_TO_HISTORY' ? message.index : message.type.toLowerCase();
                 try {
-                  const diffs = undo();
-                  if (diffs && diffs.length > 0) {
-                    for (const diff of diffs) {
-                      this.recordSelfWrite(diff.file);
-                      fs.writeFileSync(diff.file, diff.before, 'utf-8');
-                      // Only push updated tree for code files
-                      if (!diff.file.endsWith('.json')) {
-                        const updatedCode = fs.readFileSync(diff.file, 'utf-8');
-                        const tree = buildComponentTree(updatedCode, diff.file);
-                        ws.send(JSON.stringify({
-                          type: 'tree',
-                          file: diff.file,
-                          tree,
-                          generation: this.fileGenerations.get(normalizePathKey(diff.file)) || 0
-                        }));
-                      }
-                    }
+                  const result = await this.mutations.restoreHistory(
+                    message.transactionId || randomUUID(), defaultStore, action
+                  );
+                  if (result.success) {
+                    for (const file of result.changedFiles) this.recordSelfWrite(file.path);
+                    ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...getHistoryState() }));
                   }
-                  ws.send(JSON.stringify({
-                    type: 'HISTORY_UPDATE',
-                    ...getHistoryState()
-                  }));
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: true,
-                    message: 'Undo successful',
-                    action: 'undo'
-                  }));
-                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
+                  ws.send(JSON.stringify({ type: 'status', action, ...result }));
                 } catch (err: any) {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: err.message
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'redo' || message.type === 'REDO') {
-                console.log('[Glide] Redo request received');
-                try {
-                  const diffs = redo();
-                  if (diffs && diffs.length > 0) {
-                    for (const diff of diffs) {
-                      this.recordSelfWrite(diff.file);
-                      fs.writeFileSync(diff.file, diff.after, 'utf-8');
-                      // Only push updated tree for code files
-                      if (!diff.file.endsWith('.json')) {
-                        const updatedCode = fs.readFileSync(diff.file, 'utf-8');
-                        const tree = buildComponentTree(updatedCode, diff.file);
-                        ws.send(JSON.stringify({
-                          type: 'tree',
-                          file: diff.file,
-                          tree,
-                          generation: this.fileGenerations.get(normalizePathKey(diff.file)) || 0
-                        }));
-                      }
-                    }
-                  }
-                  ws.send(JSON.stringify({
-                    type: 'HISTORY_UPDATE',
-                    ...getHistoryState()
-                  }));
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: true,
-                    message: 'Redo successful',
-                    action: 'redo'
-                  }));
-                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
-                } catch (err: any) {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: err.message
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'JUMP_TO_HISTORY') {
-                console.log('[Glide] Jump to history index:', message.index);
-                try {
-                  const writes = jumpTo(message.index);
-                  for (const w of writes) {
-                    this.recordSelfWrite(w.file);
-                    fs.writeFileSync(w.file, w.content, 'utf-8');
-                    // Only push updated tree for code files
-                    if (!w.file.endsWith('.json')) {
-                      const tree = buildComponentTree(w.content, w.file);
-                      ws.send(JSON.stringify({
-                        type: 'tree',
-                        file: w.file,
-                        tree,
-                        generation: this.fileGenerations.get(normalizePathKey(w.file)) || 0
-                      }));
-                    }
-                  }
-                  ws.send(JSON.stringify({
-                    type: 'HISTORY_UPDATE',
-                    ...getHistoryState()
-                  }));
-                  ws.send(JSON.stringify({ type: 'ACK', success: true }));
-                } catch (err: any) {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: err.message
-                  }));
+                  ws.send(JSON.stringify({ type: 'status', action, success: false, error: err.message }));
                 }
                 return;
               }
@@ -1653,13 +1552,11 @@ export class GlideServer {
                   }
                 }
 
-                // Invalidate on drift check — skip for position edits and recent self-writes
+                // Reject stale source generations.
                 if (change.type !== 'position') {
                   const normPath = normalizePathKey(file);
                   const currentGen = this.fileGenerations.get(normPath) || 0;
-                  const lastWrite = this.lastSelfWrites.get(normPath) || 0;
-                  const isRecentSelfWrite = Date.now() - lastWrite < 5000;
-                  if (!isRecentSelfWrite && generation !== undefined && generation < currentGen) {
+                  if (generation !== undefined && generation !== currentGen) {
                     ws.send(
                       JSON.stringify({
                         type: 'status',

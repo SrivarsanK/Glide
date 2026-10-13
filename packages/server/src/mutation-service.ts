@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { transformJSXBatch } from '@srivarsank/ast-writer';
+import { parse } from '@babel/parser';
+import type { HistoryStore } from './history-manager.js';
 
 export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
@@ -53,6 +55,21 @@ export class MutationService {
     return run;
   }
 
+  restoreHistory(transactionId: string, history: HistoryStore, action: 'undo' | 'redo' | number): Promise<MutationResult> {
+    const run = this.queue.then(() => {
+      const state = history.getState();
+      const target = typeof action === 'number' ? action : action === 'undo' ? state.currentIndex - 1 : state.currentIndex + 1;
+      const plan = history.prepareRestore(target);
+      const operations = plan.writes.map((diff, index): MutationOperation => ({
+        operationId: `${transactionId}:${index}`, filePath: diff.file, expectedDigest: contentDigest(diff.before),
+        line: 1, column: 1, change: { type: 'restore' },
+      }));
+      return this.apply(transactionId, operations, { contents: plan.writes.map(diff => diff.after), confirm: plan.confirm });
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
   private resolveFile(file: string): string {
     if (typeof file !== 'string' || file.includes('\0')) throw new Error('INVALID_PATH: File path is invalid.');
     const resolved = fs.realpathSync(path.resolve(this.projectRoot, file));
@@ -66,7 +83,9 @@ export class MutationService {
     return resolved;
   }
 
-  private apply(transactionId: string, operations: MutationOperation[]): MutationResult {
+  private apply(transactionId: string, operations: MutationOperation[], restoration?: {
+    contents: string[]; confirm: () => void;
+  }): MutationResult {
     const failure = (error: string): MutationResult => ({
       transactionId, success: false, error, changedFiles: [], selectionRemaps: [],
       operationResults: operations.map(op => ({ operationId: op.operationId, ok: false, error })),
@@ -103,6 +122,11 @@ export class MutationService {
       });
       const selectionRemaps: MutationResult['selectionRemaps'] = [];
       for (const buffer of buffers.values()) {
+        if (restoration) {
+          buffer.after = restoration.contents[targets.indexOf(buffer)];
+          parse(buffer.after, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
+          continue;
+        }
         const edits = operations.filter((_, index) => targets[index] === buffer);
         const transformed = transformJSXBatch(buffer.before, edits);
         buffer.after = transformed.code;
@@ -130,7 +154,8 @@ export class MutationService {
         buffer.temporary = undefined;
         written.push(buffer);
       }
-      this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })));
+      if (restoration) restoration.confirm();
+      else this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })));
       const result: MutationResult = {
         transactionId, success: true,
         changedFiles: written.map(buffer => ({ path: buffer.file, newDigest: contentDigest(buffer.after), revisionId: randomUUID() })),

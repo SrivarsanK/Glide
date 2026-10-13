@@ -85,7 +85,37 @@ export class HistoryStore {
   }
 
   public getState(): { stack: HistoryEntry[]; currentIndex: number } {
-    return { stack: [...this.stack], currentIndex: this.currentIndex };
+    return structuredClone({ stack: this.stack, currentIndex: this.currentIndex });
+  }
+
+  public prepareRestore(targetIndex: number) {
+    if (!Number.isInteger(targetIndex) || targetIndex < -1 || targetIndex >= this.stack.length) {
+      throw new Error('INVALID_HISTORY: The history index is outside the available range.');
+    }
+    const fingerprint = JSON.stringify(this.getState());
+    const writes = new Map<string, FileDiff>();
+    const direction = targetIndex > this.currentIndex ? 1 : -1;
+    for (let i = this.currentIndex; i !== targetIndex; i += direction) {
+      const entry = this.stack[direction === 1 ? i + 1 : i];
+      for (const diff of entry.diffs) {
+        const before = direction === 1 ? diff.before : diff.after;
+        const after = direction === 1 ? diff.after : diff.before;
+        const previous = writes.get(diff.file);
+        if (previous && previous.after !== before) {
+          throw new Error('HISTORY_CONFLICT: The snapshots contain an external change.');
+        }
+        writes.set(diff.file, { file: diff.file, before: previous?.before ?? before, after });
+      }
+    }
+    return {
+      writes: [...writes.values()],
+      confirm: () => {
+        if (JSON.stringify(this.getState()) !== fingerprint) {
+          throw new Error('HISTORY_CONFLICT: History changed during restoration.');
+        }
+        this.currentIndex = targetIndex;
+      },
+    };
   }
 
   public clear(): void {
@@ -94,7 +124,7 @@ export class HistoryStore {
   }
 }
 
-const defaultStore = new HistoryStore();
+export const defaultStore = new HistoryStore();
 
 export function setHistoryLimit(limit: number): void {
   defaultStore.setLimit(limit);
