@@ -243,7 +243,7 @@ function collectJsxFromFunction(
         const loc = jsxPath.node.loc;
         if (!loc) return;
         const line = loc.start.line;
-        const column = loc.start.column;
+        const column = loc.start.column + 1;
 
         const nameNode = opening.name;
         let tagName = 'unknown';
@@ -315,10 +315,10 @@ function scanJsxFile(filePath: string): ComponentBucket[] {
         const nameNode = opening.name;
         let tagName = 'unknown';
         if (nameNode.type === 'JSXIdentifier') tagName = nameNode.name;
-        let id = `${filePath}:${loc.start.line}:${loc.start.column}`;
+        let id = `${filePath}:${loc.start.line}:${loc.start.column + 1}`;
         const glAttr = opening.attributes?.find((a: any) => a.type === 'JSXAttribute' && a.name?.name === 'data-gl-source');
         if (glAttr?.value?.type === 'StringLiteral') id = glAttr.value.value;
-        elements.push({ id, tagName, line: loc.start.line, column: loc.start.column, isRoot: false, classNames: [] });
+        elements.push({ id, tagName, line: loc.start.line, column: loc.start.column + 1, isRoot: false, classNames: [] });
       },
     });
     if (elements.length === 0) return [];

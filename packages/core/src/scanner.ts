@@ -416,7 +416,7 @@ function extractJsxElements(code: string, filePath: string): RawElement[] {
       if (!loc) return;
 
       const line = loc.start.line;
-      const column = loc.start.column;
+      const column = loc.start.column + 1;
 
       // tagName
       const nameNode = opening.name;

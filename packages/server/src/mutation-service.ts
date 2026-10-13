@@ -1,8 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { parse } from '@babel/parser';
-import { updateClassName, updateJSXStyleProp, updateJSXText } from '@srivarsank/ast-writer';
+import { transformJSXBatch } from '@srivarsank/ast-writer';
 
 export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
@@ -102,30 +101,17 @@ export class MutationService {
         }
         return buffer;
       });
-      operations.forEach((op, index) => {
-        const buffer = targets[index];
-        const change = op.change;
-        if (!change || change.pseudoState || change.breakpoint) {
-          throw new Error(`UNSUPPORTED_OPERATION: Operation ${op.operationId} has an unsupported style scope.`);
-        }
-        switch (change.type) {
-          case 'class':
-            if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
-            buffer.after = updateClassName(buffer.after, op.line, op.column, change.property, change.value, undefined, op.hash);
-            break;
-          case 'style':
-            buffer.after = updateJSXStyleProp(buffer.after, op.line, op.column, change.value, op.hash);
-            break;
-          case 'text':
-            if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');
-            buffer.after = updateJSXText(buffer.after, op.line, op.column, change.value, op.hash);
-            break;
-          default:
-            throw new Error(`UNSUPPORTED_OPERATION: Operation ${op.operationId} has an unsupported kind.`);
-        }
-      });
+      const selectionRemaps: MutationResult['selectionRemaps'] = [];
       for (const buffer of buffers.values()) {
-        parse(buffer.after, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
+        const edits = operations.filter((_, index) => targets[index] === buffer);
+        const transformed = transformJSXBatch(buffer.before, edits);
+        buffer.after = transformed.code;
+        selectionRemaps.push(...transformed.remaps.map(remap => ({
+          oldSourceId: `${buffer.file.replace(/\\/g, '/')}:${remap.oldLine}:${remap.oldColumn}`,
+          newCoordinates: remap.newCoordinates,
+        })));
+      }
+      for (const buffer of buffers.values()) {
         if (buffer.after !== buffer.before) {
           buffer.temporary = path.join(path.dirname(buffer.file), `.glide-${randomUUID()}.tmp`);
           fs.writeFileSync(buffer.temporary, buffer.after, { encoding: 'utf8', flag: 'wx', mode: buffer.mode });
@@ -149,7 +135,7 @@ export class MutationService {
         transactionId, success: true,
         changedFiles: written.map(buffer => ({ path: buffer.file, newDigest: contentDigest(buffer.after), revisionId: randomUUID() })),
         operationResults: operations.map(op => ({ operationId: op.operationId, ok: true })),
-        selectionRemaps: [],
+        selectionRemaps,
       };
       this.completed.set(transactionId, { signature, result });
       return result;

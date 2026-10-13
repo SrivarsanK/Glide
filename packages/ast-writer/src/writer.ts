@@ -321,6 +321,57 @@ function mutateClass(node: t.JSXElement, property: string, value: any, breakpoin
   return newVal;
 }
 
+export interface JSXMutation {
+  line: number;
+  column: number;
+  hash?: string;
+  change: { type: string; property?: string; value?: any; breakpoint?: string; pseudoState?: string };
+}
+
+/** Resolve all locations from the original source. Public columns start at one. */
+export function transformJSXBatch(source: string, operations: JSXMutation[]) {
+  const ast = recastParse(source, { parser: tsxParser });
+  const nodes: t.JSXElement[] = [];
+  traverse(ast, { JSXElement(p: { node: t.JSXElement }) { nodes.push(p.node); } });
+  const targets = operations.map(op => {
+    const node = nodes.find(n => n.loc?.start.line === op.line && n.loc.start.column === op.column - 1);
+    if (!node) throw new Error(`NODE_NOT_FOUND: No JSX element exists at ${op.line}:${op.column}.`);
+    if (op.hash && op.hash !== 'nohash' && computeNodeHash(source.slice(node.start!, node.end!)) !== op.hash) {
+      throw new Error('STALE_NODE: Reference is stale. Read the file again.');
+    }
+    return node;
+  });
+  operations.forEach((op, index) => {
+    const change = op.change;
+    if (!change || change.pseudoState || (change.breakpoint && change.type !== 'class')) {
+      throw new Error('UNSUPPORTED_OPERATION: This style scope needs an authored stylesheet.');
+    }
+    switch (change.type) {
+      case 'class':
+        if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
+        mutateClass(targets[index], change.property, change.value, change.breakpoint);
+        break;
+      case 'style': mutateStyle(targets[index], change.value); break;
+      case 'text':
+        if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');
+        mutateText(targets[index], change.value);
+        break;
+      default: throw new Error('UNSUPPORTED_OPERATION: This operation kind is not supported.');
+    }
+  });
+  const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n' }).code;
+  const checked = babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
+  const locations: { line: number; column: number }[] = [];
+  traverse(checked, { JSXElement(p: { node: t.JSXElement }) {
+    locations.push({ line: p.node.loc!.start.line, column: p.node.loc!.start.column + 1 });
+  } });
+  if (locations.length !== nodes.length) throw new Error('INVALID_OUTPUT: The edit changed the JSX structure.');
+  return { code, remaps: targets.map((node, index) => ({
+    oldLine: operations[index].line, oldColumn: operations[index].column,
+    newCoordinates: locations[nodes.indexOf(node)],
+  })) };
+}
+
 function mutateText(node: t.JSXElement, newText: string): void {
   const children: t.JSXElement['children'] = node.children;
   const candidates = children.filter(child =>

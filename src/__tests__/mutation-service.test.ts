@@ -22,6 +22,21 @@ function fixture(rename?: typeof fs.renameSync) {
 }
 
 describe('Mutation transactions', () => {
+  test('resolves same-line targets before a style insertion changes coordinates', async () => {
+    const f = fixture();
+    const source = 'const A = () => <><button>A</button><button>B</button></>;';
+    fs.writeFileSync(path.join(f.root, 'A.tsx'), source);
+    const first = { ...f.operation('A.tsx', 'one'), expectedDigest: contentDigest(source),
+      column: source.indexOf('<button') + 1, change: { type: 'style', value: { color: 'red' } } };
+    const second = { ...first, operationId: 'two', column: source.lastIndexOf('<button') + 1,
+      change: { type: 'text', value: 'Second' } };
+    const result = await f.service.execute('same-line', [first, second]);
+    expect(result.success).toBe(true);
+    expect(f.read('A.tsx')).toContain('>A</button>');
+    expect(f.read('A.tsx')).toContain('>Second</button>');
+    expect(result.selectionRemaps).toHaveLength(2);
+  });
+
   test('keeps every file and history unchanged when operation two fails', async () => {
     const f = fixture();
     const second = f.operation('B.tsx', 'two');
