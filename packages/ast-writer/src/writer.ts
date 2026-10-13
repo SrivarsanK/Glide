@@ -445,37 +445,31 @@ export function updateJSXText(
     },
   });
 
-  const children: any[] = targetPath.node.children || [];
-  const hasComplexChildren = children.some((c: any) => {
-    if (c.type !== 'JSXElement') return false;
-    const nameNode = c.openingElement?.name;
-    const tagName = nameNode?.type === 'JSXIdentifier' ? nameNode.name.toLowerCase() : '';
-    return ['svg', 'img', 'input', 'canvas', 'video'].includes(tagName);
-  });
-
-  if (hasComplexChildren) {
-    // Preserve icon/complex elements and update the primary text child
-    const textIdx = children.findIndex((c: any) => c.type === 'JSXText');
-    if (textIdx !== -1) {
-      const existingRaw = children[textIdx].value;
-      const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
-      const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
-      children[textIdx] = t.jsxText(leadingWs + newText + trailingWs);
-    } else {
-      children.push(t.jsxText(' ' + newText));
-    }
-  } else if (children.length === 1 && children[0].type === 'JSXText') {
-    // Single text child: preserve exact leading/trailing whitespace
-    const existingRaw = children[0].value;
+  const children: t.JSXElement['children'] = targetPath.node.children;
+  const candidates = children.filter(child =>
+    (t.isJSXText(child) && child.value.trim() !== '') ||
+    (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)));
+  if (candidates.length !== 1) {
+    throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment. The element has no unique text target.');
+  }
+  const child = candidates[0];
+  if (t.isJSXText(child)) {
+    const existingRaw = child.value;
     const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
     const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
-    children[0] = t.jsxText(leadingWs + newText + trailingWs);
-  } else if (children.length === 1 && children[0].type === 'JSXExpressionContainer' && children[0].expression?.type === 'StringLiteral') {
-    // Single string literal in expression: {'text'}
-    children[0].expression.value = newText;
-  } else {
-    // Full content replacement for multi-text or mixed inline elements
-    targetPath.node.children = [t.jsxText(newText)];
+    if (/[&<>{}\r\n]/.test(newText) || newText === '') {
+      // A string expression preserves special characters and line breaks.
+      const replacement = [
+        ...(leadingWs ? [t.jsxText(leadingWs)] : []),
+        t.jsxExpressionContainer(t.stringLiteral(newText)),
+        ...(trailingWs ? [t.jsxText(trailingWs)] : []),
+      ];
+      children.splice(children.indexOf(child), 1, ...replacement);
+    } else {
+      child.value = leadingWs + newText + trailingWs;
+    }
+  } else if (t.isJSXExpressionContainer(child) && t.isStringLiteral(child.expression)) {
+    child.expression.value = newText;
   }
 
   const updatedSourceCode = recastPrint(ast).code;
