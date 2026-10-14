@@ -18,6 +18,7 @@ import {
 } from './history-manager.js';
 import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
 import { MutationService, contentDigest } from './mutation-service.js';
+import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 
 const execFileAsync = promisify(execFile);
@@ -36,28 +37,6 @@ function extractModifiedProps(change: any): string[] {
   if (change.type === 'text') return ['textContent'];
   if (change.type === 'position') return ['position'];
   return [change.type || 'unknown'];
-}
-
-function isSafeFilePath(targetPath: string, rootDir?: string): boolean {
-  if (!targetPath || typeof targetPath !== 'string') return false;
-  if (targetPath.includes('\0')) return false;
-
-  const root = rootDir || process.cwd();
-  const normalized = targetPath.replace(/\\/g, '/');
-
-  if (process.platform === 'win32') {
-    const rootResolved = path.resolve(root).replace(/\\/g, '/').toLowerCase();
-    const resolved = path.resolve(root, targetPath).replace(/\\/g, '/').toLowerCase();
-    return resolved === rootResolved || resolved.startsWith(rootResolved + '/');
-  } else {
-    // On POSIX (Linux/macOS), Windows drive letters or UNC paths escape project root
-    if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//')) {
-      return false;
-    }
-    const rootResolved = path.resolve(root);
-    const resolved = path.resolve(rootResolved, normalized);
-    return resolved === rootResolved || resolved.startsWith(rootResolved + '/');
-  }
 }
 
 function findProjectEntryFile(projectDir: string): string | null {
@@ -796,7 +775,8 @@ export class GlideServer {
   private targetPort: number;
   private config: GlideConfig;
   private editCallbacks: EditCallback[] = [];
-  private mutations = new MutationService(process.cwd(), {
+  private projectPaths = new ProjectPaths(process.cwd());
+  private mutations = new MutationService(this.projectPaths.root, {
     onPersist: diffs => {
       if (!diffs.length) return;
       pushHistory({ description: 'Apply source changes', diffs });
@@ -968,12 +948,22 @@ export class GlideServer {
                 return;
               }
 
+              // Every server-owned structural write must use a canonical source path.
+              if (['insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange'].includes(message.type)) {
+                try {
+                  message.file = this.projectPaths.sourceFile(message.file || findProjectEntryFile(this.projectPaths.root));
+                } catch (error) {
+                  ws.send(JSON.stringify({ type: 'status', success: false,
+                    error: `File not found or unsafe path: ${error instanceof Error ? error.message : String(error)}` }));
+                  return;
+                }
+              }
+
               if (message.type === 'get-tree') {
                 const requestedFile = message.file;
-                const file = (requestedFile && isSafeFilePath(requestedFile) && fs.existsSync(requestedFile))
-                  ? requestedFile
-                  : findProjectEntryFile(process.cwd());
-                if (file && isSafeFilePath(file) && fs.existsSync(file)) {
+                let file: string | null = null;
+                try { file = this.projectPaths.sourceFile(requestedFile || findProjectEntryFile(this.projectPaths.root)!); } catch {}
+                if (file) {
                   // Track the user's project git root for git commands
                   try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
@@ -1006,7 +996,7 @@ export class GlideServer {
                   ? file
                   : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
 
-                if (targetFile && isSafeFilePath(targetFile)) {
+                if (targetFile && this.projectPaths.contains(targetFile)) {
                   try {
                     const code = fs.readFileSync(targetFile, 'utf-8');
                     const updated = insertJSXElement(code, parentId, elementType, { width, height });
@@ -1091,7 +1081,7 @@ export class GlideServer {
                   ? file
                   : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
 
-                if (targetFile && isSafeFilePath(targetFile)) {
+                if (targetFile && this.projectPaths.contains(targetFile)) {
                   try {
                     const code = fs.readFileSync(targetFile, 'utf-8');
                     const updated = reorderJSXElement(
@@ -1159,7 +1149,7 @@ export class GlideServer {
                   ? file
                   : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
 
-                if (targetFile && isSafeFilePath(targetFile)) {
+                if (targetFile && this.projectPaths.contains(targetFile)) {
                   try {
                     const def = resolveComponentDefinition({
                       filepath: targetFile,
@@ -1249,7 +1239,7 @@ export class GlideServer {
                   ? file
                   : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
 
-                if (targetFile && isSafeFilePath(targetFile)) {
+                if (targetFile && this.projectPaths.contains(targetFile)) {
                   let opened = false;
                   try {
                     await execFileAsync('code', ['-g', `${targetFile}:${line || 1}:${column || 1}`], { timeout: 3000 });
@@ -1411,7 +1401,7 @@ export class GlideServer {
                   }));
                   return;
                 }
-                const cwd = (projectDir && isSafeFilePath(projectDir))
+                const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
                   : activeProjectGitRoot;
                 console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
@@ -1446,7 +1436,7 @@ export class GlideServer {
                   }));
                   return;
                 }
-                const cwd = (projectDir && isSafeFilePath(projectDir))
+                const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
                   : activeProjectGitRoot;
                 console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
@@ -1532,7 +1522,7 @@ export class GlideServer {
                 console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
 
                 // Validate parameters
-                if (!file || !isSafeFilePath(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
+                if (!file || !this.projectPaths.contains(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
                   ws.send(
                     JSON.stringify({
                       type: 'status',

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { transformJSXBatch } from '@srivarsank/ast-writer';
 import { parse } from '@babel/parser';
 import type { HistoryStore } from './history-manager.js';
+import { ProjectPaths } from './project-paths.js';
 
 export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
@@ -41,12 +42,14 @@ export class MutationService {
   private queue: Promise<unknown> = Promise.resolve();
   private completed = new Map<string, { signature: string; result: MutationResult }>();
   readonly projectRoot: string;
+  private paths: ProjectPaths;
 
   constructor(projectRoot: string, private readonly options: {
     rename?: typeof fs.renameSync;
     onPersist?: (diffs: { file: string; before: string; after: string }[]) => void;
   } = {}) {
-    this.projectRoot = fs.realpathSync(projectRoot);
+    this.paths = new ProjectPaths(projectRoot);
+    this.projectRoot = this.paths.root;
   }
 
   execute(transactionId: string, operations: MutationOperation[]): Promise<MutationResult> {
@@ -71,12 +74,7 @@ export class MutationService {
   }
 
   private resolveFile(file: string): string {
-    if (typeof file !== 'string' || file.includes('\0')) throw new Error('INVALID_PATH: File path is invalid.');
-    const resolved = fs.realpathSync(path.resolve(this.projectRoot, file));
-    const relative = path.relative(this.projectRoot, resolved);
-    if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
-      throw new Error('INVALID_PATH: File is outside the project.');
-    }
+    const resolved = this.paths.sourceFile(file);
     if (!/\.(tsx|jsx|ts|js)$/.test(resolved)) {
       throw new Error('UNSUPPORTED_OPERATION: This adapter does not support transactions.');
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { GlideServer, pushHistory } from '@srivarsank/server';
+import { GlideServer, pushHistory, ProjectPaths } from '@srivarsank/server';
 import { updateClassName, updateJSXText, updateClassString, updateJSXStyleProp } from '@srivarsank/ast-writer';
 import { groupJSXElements, ungroupJSXElement } from '@srivarsank/ast-writer';
 import { updateVueSFCClass, updateVueSFCStyle, updateVueSFCText } from '@srivarsank/adapter-vue';
@@ -38,12 +38,13 @@ const server = new GlideServer(port, targetPort, config);
 
 // ── Component Registry ────────────────────────────────────────────────────────
 
-const registryFile = path.join(process.cwd(), 'glide-components.json');
+const projectPaths = new ProjectPaths(process.cwd());
+const registryFile = path.join(projectPaths.root, 'glide-components.json');
 
 function writeRegistryToDisk(): void {
   try {
     const registry = buildRegistry({ projectRoot: process.cwd() });
-    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2), 'utf-8');
+    fs.writeFileSync(projectPaths.metadataFile(registryFile), JSON.stringify(registry, null, 2), 'utf-8');
     console.log(`[Glide] Component registry → ${path.basename(registryFile)} (${registry.buckets.length} buckets)`);
   } catch (e) {
     console.warn('[Glide] Registry build failed:', e);
@@ -56,7 +57,7 @@ writeRegistryToDisk();
 // Watch for source file changes and rebuild incrementally
 watchRegistry(process.cwd(), (registry) => {
   try {
-    fs.writeFileSync(registryFile, JSON.stringify(registry, null, 2), 'utf-8');
+    fs.writeFileSync(projectPaths.metadataFile(registryFile), JSON.stringify(registry, null, 2), 'utf-8');
     console.log(`[Glide] Registry updated → ${registry.buckets.length} buckets`);
   } catch (e) {
     console.warn('[Glide] Registry write failed:', e);
@@ -71,30 +72,18 @@ watchRegistry(process.cwd(), (registry) => {
  */
 function getPositionsFile(file: string): string {
   let dir = path.dirname(file);
-  while (dir !== path.dirname(dir)) {
+  while (projectPaths.contains(dir)) {
     if (fs.existsSync(path.join(dir, 'package.json'))) {
-      return path.join(dir, 'glide-positions.json');
+      return projectPaths.metadataFile(path.join(dir, 'glide-positions.json'));
     }
+    if (dir === projectPaths.root) break;
     dir = path.dirname(dir);
   }
-  return path.join(path.dirname(file), 'glide-positions.json');
+  return projectPaths.metadataFile(path.join(projectPaths.root, 'glide-positions.json'));
 }
 
 function resolveFilePath(file: string): string {
-  if (!file) return file;
-  if (path.isAbsolute(file) && fs.existsSync(file)) return file;
-
-  const candidates = [
-    file,
-    path.resolve(process.cwd(), file),
-    path.resolve(process.cwd(), '..', file)
-  ];
-
-  for (const cand of candidates) {
-    if (fs.existsSync(cand)) return cand;
-  }
-
-  return path.resolve(process.cwd(), file);
+  return projectPaths.sourceFile(file);
 }
 
 server.onEdit((file: string, line: number, column: number, change: any, hash?: string) => {

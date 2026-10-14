@@ -2,10 +2,34 @@ import { afterEach, expect, test } from 'vitest';
 import WebSocket from 'ws';
 import { GlideServer } from '../../packages/server/src/ws-server.js';
 import { connectLocal } from './ws-client.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 let server: GlideServer;
 const port = 7983;
 afterEach(async () => { await server?.stop(); });
+
+test('rejects outside files on every structural mutation route before reading or writing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-outside-'));
+  const file = path.join(root, 'App.tsx');
+  const source = 'const App = () => <div><span>A</span><span>B</span></div>;';
+  fs.writeFileSync(file, source);
+  try {
+    server = new GlideServer(port);
+    await server.start();
+    const client = await connectLocal(port);
+    for (const type of ['insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange']) {
+      const response = new Promise<any>(resolve => client.once('message', data => resolve(JSON.parse(String(data)))));
+      client.send(JSON.stringify({ type, file, targetId: `${file}:1:19`, elementType: 'div', selectedIds: [] }));
+      expect(await response).toMatchObject({ type: 'status', success: false, error: expect.stringContaining('INVALID_PATH') });
+      expect(fs.readFileSync(file, 'utf8')).toBe(source);
+    }
+    client.close();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('binds only to loopback and rejects a foreign Host header', async () => {
   server = new GlideServer(port);
