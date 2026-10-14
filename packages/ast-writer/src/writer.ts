@@ -328,18 +328,27 @@ export interface JSXMutation {
   change: { type: string; property?: string; value?: any; breakpoint?: string; pseudoState?: string };
 }
 
+function jsxNodes(ast: any): t.JSXElement[] {
+  const nodes: t.JSXElement[] = [];
+  traverse(ast, { JSXElement(p: { node: t.JSXElement }) { nodes.push(p.node); } });
+  return nodes;
+}
+
 /** Resolve all locations from the original source. Public columns start at one. */
 export function transformJSXBatch(source: string, operations: JSXMutation[]) {
   const ast = recastParse(source, { parser: tsxParser });
-  const nodes: t.JSXElement[] = [];
-  traverse(ast, { JSXElement(p: { node: t.JSXElement }) { nodes.push(p.node); } });
+  const nodes = jsxNodes(ast);
+  // Recast expands leading tabs and normalizes line endings before parsing.
+  // Resolve public coordinates and hashes against Babel's untouched input,
+  // then pair the structure-identical trees by traversal order.
+  const originalNodes = jsxNodes(babelParse(source, { sourceType: 'module', plugins: ['jsx', 'typescript'] }));
   const targets = operations.map(op => {
-    const node = nodes.find(n => n.loc?.start.line === op.line && n.loc.start.column === op.column - 1);
+    const node = originalNodes.find(n => n.loc?.start.line === op.line && n.loc.start.column === op.column - 1);
     if (!node) throw new Error(`NODE_NOT_FOUND: No JSX element exists at ${op.line}:${op.column}.`);
     if (op.hash && op.hash !== 'nohash' && computeNodeHash(source.slice(node.start!, node.end!)) !== op.hash) {
       throw new Error('STALE_NODE: Reference is stale. Read the file again.');
     }
-    return node;
+    return nodes[originalNodes.indexOf(node)];
   });
   operations.forEach((op, index) => {
     const change = op.change;
@@ -361,14 +370,19 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
   });
   const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n' }).code;
   const checked = babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
-  const locations: { line: number; column: number }[] = [];
+  const locations: { line: number; column: number; hash: string }[] = [];
   traverse(checked, { JSXElement(p: { node: t.JSXElement }) {
-    locations.push({ line: p.node.loc!.start.line, column: p.node.loc!.start.column + 1 });
+    locations.push({ line: p.node.loc!.start.line, column: p.node.loc!.start.column + 1,
+      hash: computeNodeHash(code.slice(p.node.start!, p.node.end!)) });
   } });
   if (locations.length !== nodes.length) throw new Error('INVALID_OUTPUT: The edit changed the JSX structure.');
-  return { code, remaps: targets.map((node, index) => ({
-    oldLine: operations[index].line, oldColumn: operations[index].column,
-    newCoordinates: locations[nodes.indexOf(node)],
+  // Printing a changed node can move every following sibling and descendant.
+  // Structure-preserving edits retain traversal order, so map every source node.
+  return { code, remaps: originalNodes.map((node, index) => ({
+    oldLine: node.loc!.start.line, oldColumn: node.loc!.start.column + 1,
+    oldHash: computeNodeHash(source.slice(node.start!, node.end!)),
+    newHash: locations[index].hash,
+    newCoordinates: { line: locations[index].line, column: locations[index].column },
   })) };
 }
 
@@ -495,24 +509,14 @@ export function updateClassName(
   // Now parse with recast for CST mutation and print
   const ast = recastParse(sourceCode, { parser: tsxParser });
 
-  let targetPath: any = null;
-  traverse(ast, {
-    JSXElement(path: any) {
-      const loc = path.node.openingElement.loc;
-      if (loc && loc.start.line === line && loc.start.column === column - 1) {
-        targetPath = path;
-        path.stop();
-      }
-    },
-  });
-
-  const newVal = mutateClass(targetPath.node, property, value, breakpoint);
+  const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
+  const newVal = mutateClass(target, property, value, breakpoint);
 
   const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const newJSXCode = recastPrint(targetPath.node).code;
+  const newJSXCode = recastPrint(target).code;
   const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
@@ -572,24 +576,14 @@ export function updateJSXText(
   // Now parse with recast for CST mutation and print
   const ast = recastParse(sourceCode, { parser: tsxParser });
 
-  let targetPath: any = null;
-  traverse(ast, {
-    JSXElement(path: any) {
-      const loc = path.node.openingElement.loc;
-      if (loc && loc.start.line === line && loc.start.column === column - 1) {
-        targetPath = path;
-        path.stop();
-      }
-    },
-  });
-
-  mutateText(targetPath.node, newText);
+  const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
+  mutateText(target, newText);
 
   const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const newJSXCode = recastPrint(targetPath.node).code;
+  const newJSXCode = recastPrint(target).code;
   const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {
@@ -650,24 +644,14 @@ export function updateJSXStyleProp(
   // Now parse with recast for CST mutation and print
   const ast = recastParse(sourceCode, { parser: tsxParser });
 
-  let targetPath: any = null;
-  traverse(ast, {
-    JSXElement(path: any) {
-      const loc = path.node.openingElement.loc;
-      if (loc && loc.start.line === line && loc.start.column === column - 1) {
-        targetPath = path;
-        path.stop();
-      }
-    },
-  });
-
-  mutateStyle(targetPath.node, styles);
+  const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
+  mutateStyle(target, styles);
 
   const updatedSourceCode = recastPrint(ast).code;
 
   validateTypeScript(updatedSourceCode);
 
-  const newJSXCode = recastPrint(targetPath.node).code;
+  const newJSXCode = recastPrint(target).code;
   const confirmAst = recastParse(newJSXCode, { parser: tsxParser });
   let hasExpectedValue = false;
   traverse(confirmAst, {

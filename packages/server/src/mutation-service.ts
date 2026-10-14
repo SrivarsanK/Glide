@@ -25,7 +25,8 @@ export interface MutationResult {
   success: boolean;
   changedFiles: { path: string; newDigest: string; revisionId: string }[];
   operationResults: { operationId: string; ok: boolean; error?: string }[];
-  selectionRemaps: { oldSourceId: string; newCoordinates: { line: number; column: number } }[];
+  selectionRemaps: { oldSourceId: string; oldHash: string; newHash: string; newDigest: string;
+    newCoordinates: { line: number; column: number } }[];
   error?: string;
 }
 
@@ -128,10 +129,16 @@ export class MutationService {
         const edits = operations.filter((_, index) => targets[index] === buffer);
         const transformed = transformJSXBatch(buffer.before, edits);
         buffer.after = transformed.code;
-        selectionRemaps.push(...transformed.remaps.map(remap => ({
-          oldSourceId: `${buffer.file.replace(/\\/g, '/')}:${remap.oldLine}:${remap.oldColumn}`,
-          newCoordinates: remap.newCoordinates,
-        })));
+        const newDigest = contentDigest(buffer.after);
+        const aliases = new Set([buffer.file, ...edits.map(edit => edit.filePath)].map(file => file.replace(/\\/g, '/')));
+        for (const file of aliases) {
+          selectionRemaps.push(...transformed.remaps.map(remap => ({
+            oldSourceId: `${file}:${remap.oldLine}:${remap.oldColumn}`,
+            oldHash: remap.oldHash, newHash: remap.newHash,
+            newDigest,
+            newCoordinates: remap.newCoordinates,
+          })));
+        }
       }
       for (const buffer of buffers.values()) {
         if (buffer.after !== buffer.before) {

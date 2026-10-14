@@ -58,7 +58,7 @@ describe('Mutation transactions', () => {
     expect(result.success).toBe(true);
     expect(f.read('A.tsx')).toContain('>A</button>');
     expect(f.read('A.tsx')).toContain('>Second</button>');
-    expect(result.selectionRemaps).toHaveLength(2);
+    expect(result.selectionRemaps.filter(remap => remap.oldSourceId.startsWith('A.tsx:'))).toHaveLength(2);
   });
 
   test('keeps every file and history unchanged when operation two fails', async () => {

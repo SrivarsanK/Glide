@@ -1,4 +1,5 @@
 import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
+import { createSourceMapping } from './source-mapping.js';
 
 export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
@@ -2198,6 +2199,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // STATE
           // ═══════════════════════════════════════════════════════════════
           let socket = null;
+          const sourceMapping = (${createSourceMapping.toString()})();
           let currentFile = null;
           let selectedElement = null;
           let selectedRect = null;
@@ -2443,6 +2445,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     updateStagingBarUI();
                   }
                   if (message.success) {
+                    applyTransactionMappings(message);
                     if (typeof message.generation === 'number') {
                       currentGeneration = message.generation;
                     }
@@ -2625,8 +2628,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function stageEdit(source, change) {
+            if (pendingBatch) {
+              showToast('info', 'Wait for the current source changes to finish.');
+              return;
+            }
             const parsed = parseSource(source);
-            if (!parsed) return;
+            if (!parsed) {
+              showToast('error', 'This element has no editable source mapping.');
+              return;
+            }
             parsed.expectedDigest = fileDigests.get(parsed.file.replaceAll('\\\\', '/'));
             if (!parsed.expectedDigest) {
               showToast('error', 'Source mapping is not ready. Select the element again.');
@@ -2806,37 +2816,25 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function parseSource(source) {
-            if (!source || typeof source !== 'string') return null;
-            const fileLineColMatch = source.match(/^(.*):([0-9]+):([0-9]+)(?::([a-fA-F0-9]+))?$/);
-            if (fileLineColMatch) {
-              return {
-                file: normalizePathSlash(fileLineColMatch[1]),
-                line: parseInt(fileLineColMatch[2], 10),
-                column: parseInt(fileLineColMatch[3], 10),
-                hash: fileLineColMatch[4] || null
-              };
-            }
-            const lineColMatch = source.match(/^line:([0-9]+):col:([0-9]+)(?::([a-fA-F0-9]+))?$/);
-            if (lineColMatch) {
-              const targetFile = currentFile || null;
-              return {
-                file: targetFile,
-                line: parseInt(lineColMatch[1], 10),
-                column: parseInt(lineColMatch[2], 10),
-                hash: lineColMatch[3] || null
-              };
-            }
-            const targetFile = currentFile || null;
-            const selectorStr = source.startsWith('__glide_cst_')
-              ? source.slice('__glide_cst_'.length)
-              : source;
-            return {
-              file: targetFile,
-              line: 1,
-              column: 1,
-              hash: null,
-              cstSelector: selectorStr
-            };
+            return sourceMapping.parse(source, currentFile);
+          }
+
+          function applyTransactionMappings(message) {
+            if (!message.success) return;
+            (message.changedFiles || []).forEach(file => {
+              fileDigests.set(normalizePathSlash(file.path), file.newDigest);
+            });
+            const remaps = message.selectionRemaps || [];
+            if (!remaps.length) return;
+            const remap = source => sourceMapping.remap(source, remaps, currentFile);
+            selectedSources = selectedSources.map(remap);
+            if (selectedElement) selectedElement = { ...selectedElement, source: remap(selectedElement.source) };
+            if (glideClipboard && glideClipboard.source) glideClipboard.source = remap(glideClipboard.source);
+            // Digest aliases use the path spelling carried by the source stamp.
+            remaps.forEach(item => {
+              const target = parseSource(item.oldSourceId);
+              if (target && item.newDigest) fileDigests.set(target.file, item.newDigest);
+            });
           }
 
           function isSourceMatch(a, b) {
