@@ -1,4 +1,4 @@
-import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
+import { GlideConfig, DEFAULT_CONFIG, trustedWindowMessage } from '@srivarsank/core';
 import { createSourceMapping } from './source-mapping.js';
 import { createMutationTransport } from './mutation-transport.js';
 import { createSourceProps } from './source-props.js';
@@ -4484,6 +4484,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           };
 
           window.addEventListener('message', (event) => {
+            const frame = document.getElementById('app-iframe');
+            if (!(${trustedWindowMessage.toString()})(event, frame?.contentWindow, frame?.src, window.location.href)) return;
             const data = event.data;
             if (!data || !data.type) return;
 
@@ -4857,7 +4859,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       const item = document.createElement('div');
                       item.className = 'context-menu-item';
                       item.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 12px;';
-                      item.innerHTML = '<span style="opacity:0.6; font-family:monospace; font-size:10px;">&lt;' + layer.tagName + '&gt;</span><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">' + (layer.name || layer.source) + '</span>';
+                      const tagLabel = document.createElement('span');
+                      tagLabel.textContent = '<' + layer.tagName + '>';
+                      const layerLabel = document.createElement('span');
+                      layerLabel.textContent = layer.name || layer.source;
+                      item.append(tagLabel, layerLabel);
                       item.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         menu.style.display = 'none';

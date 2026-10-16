@@ -3,7 +3,7 @@ import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, DEFAULT_CONFIG, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
@@ -1358,6 +1358,7 @@ export function buildBridgeScript(
   });
 
   window.addEventListener('message', function(e) {
+    if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
     if (!e.data) return;
     if (e.data.type === 'glide:scroll-by') {
       window.scrollBy({

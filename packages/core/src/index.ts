@@ -19,3 +19,4 @@ export * from './staged-edits.js';
 export { resolveComponentDefinition } from './resolve.js';
 export type { ResolveComponentOptions } from './resolve.js';
 
+export { trustedWindowMessage } from './window-messages.js';

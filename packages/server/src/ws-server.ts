@@ -3,7 +3,7 @@ import { createServer, Server, request as httpRequest } from 'http';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { parseJSXElements, inspectJSXProps } from '@srivarsank/ast-writer';
@@ -14,6 +14,7 @@ import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
 import { MutationService, contentDigest, type MutationOperation } from './mutation-service.js';
 import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
+import { finalizeEditorChanges } from './editor-git.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -357,6 +358,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
 
   // Parent can also request a fresh tree at any time (e.g. after iframe reload)
   window.addEventListener('message', function(e) {
+    if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
     if (!e.data || !e.data.type) return;
     if (e.data.type === 'glide:request-dom-tree') { sendDOMTree(); }
     if (e.data.type === 'glide:request-scene-nodes') { sendDOMTree(); }
@@ -1183,8 +1185,11 @@ export class GlideServer {
                   : activeProjectGitRoot;
                 console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
                 try {
-                  await execFileAsync('git', ['add', '-A'], { cwd });
-                  await execFileAsync('git', ['commit', '-m', commitMessage], { cwd });
+                  const state = this.history.getState();
+                  finalizeEditorChanges(this.projectPaths.root,
+                    state.stack.slice(0, state.currentIndex + 1).flatMap(entry => entry.diffs), commitMessage);
+                  this.history.clear();
+                  ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...this.history.getState() }));
                   ws.send(JSON.stringify({
                     type: 'git-status',
                     success: true,

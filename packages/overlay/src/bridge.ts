@@ -1,3 +1,5 @@
+import { trustedWindowMessage } from '@srivarsank/core';
+
 export interface ElementRect {
   left: number;
   top: number;
@@ -119,6 +121,7 @@ export class GlideBridge {
   }
 
   private handleMessage = (event: MessageEvent): void => {
+    if (!trustedWindowMessage(event, this.targetWindow.parent, this.targetWindow.document.referrer)) return;
     const data = event.data;
     if (!data || typeof data !== 'object') return;
 
