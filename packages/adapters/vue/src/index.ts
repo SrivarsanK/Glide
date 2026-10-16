@@ -1,199 +1,53 @@
 import { parse } from '@vue/compiler-sfc';
-import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
+import { mergeInlineStyle } from '@srivarsank/core';
 
-export function updateVueSFCClass(
-  sfcCode: string,
-  targetId: string,
-  updatedClasses: string
-): string {
-  const parsed = parse(sfcCode);
-  const template = parsed.descriptor.template;
-  if (!template) return sfcCode;
-
-  const templateContent = template.content;
-  const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const { line, col } = parseTargetId(targetId);
-  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
-  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
-
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${attrPattern}"[^>]*)>`, 'i');
-  const match = templateContent.match(tagRegex);
-  if (match) {
-    const fullTag = match[0];
-    const tagName = match[1];
-    const attributes = match[2];
-
-    const classRegex = /class=(['"])(.*?)\1/;
-    const classMatch = attributes.match(classRegex);
-    let newFullTag = fullTag;
-
-    if (classMatch) {
-      const quote = classMatch[1];
-      const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
-      newFullTag = `<${tagName} ${newAttributes}>`;
-    } else {
-      const newAttributes = `${attributes} class="${updatedClasses}"`;
-      newFullTag = `<${tagName} ${newAttributes}>`;
+// compiler-sfc 3.5 template AST locations refer to the complete authored SFC.
+function target(code: string, id: string): any {
+  const parsed = parse(code);
+  if (parsed.errors.length || !parsed.descriptor.template?.ast) throw new Error('UNSUPPORTED_OPERATION: A valid HTML Vue template is required.');
+  if (parsed.descriptor.template.lang && parsed.descriptor.template.lang !== 'html') throw new Error('UNSUPPORTED_OPERATION: Template preprocessors are not supported.');
+  const coordinates = id.match(/^.*?:(\d+):(\d+)(?::[a-fA-F0-9]+)?$/);
+  const matches: any[] = [];
+  function walk(node: any) {
+    if (node.type === 1) {
+      const stamped = node.props.some((p: any) => p.type === 6 && p.name === 'data-gl-source' && p.value?.content === id);
+      const located = coordinates && node.loc.start.line === Number(coordinates[1]) && node.loc.start.column === Number(coordinates[2]);
+      if (stamped || located) matches.push(node);
     }
-
-    const newTemplateContent = templateContent.replace(fullTag, newFullTag);
-    const start = template.loc.start.offset;
-    const end = template.loc.end.offset;
-
-    return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
+    for (const child of node.children || []) walk(child);
   }
-
-  // Fallback: line:col search
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(templateContent, line, col);
-    if (tagLoc) {
-      const { tagName, attributes, startIndex, endIndex } = tagLoc;
-      const classRegex = /class=(['"])(.*?)\1/;
-      const classMatch = attributes.match(classRegex);
-      let newFullTag: string;
-      if (classMatch) {
-        const quote = classMatch[1];
-        const newAttributes = attributes.replace(classRegex, `class=${quote}${updatedClasses}${quote}`);
-        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
-      } else {
-        const newAttributes = attributes ? `${attributes} class="${updatedClasses}"` : `class="${updatedClasses}"`;
-        newFullTag = `<${tagName} ${newAttributes}>`;
-      }
-      const newTemplateContent = templateContent.substring(0, startIndex) + newFullTag + templateContent.substring(endIndex);
-      const start = template.loc.start.offset;
-      const end = template.loc.end.offset;
-      return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
-    }
-  }
-
-  return sfcCode;
+  walk(parsed.descriptor.template.ast);
+  if (matches.length !== 1) throw new Error('INVALID_TARGET: Select exactly one authored Vue template node.');
+  return matches[0];
 }
-
-export function updateVueSFCStyle(
-  sfcCode: string,
-  targetId: string,
-  styles: Record<string, string>
-): string {
-  const parsed = parse(sfcCode);
-  const template = parsed.descriptor.template;
-  if (!template) return sfcCode;
-
-  const templateContent = template.content;
-  const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const { line, col } = parseTargetId(targetId);
-  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
-  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
-
-  const tagRegex = new RegExp(`<([\\w-]+)\\s+([^>]*data-gl-source="${attrPattern}"[^>]*)>`, 'i');
-  const match = templateContent.match(tagRegex);
-  if (match) {
-    const fullTag = match[0];
-    const tagName = match[1];
-    const attributes = match[2];
-
-    const styleRegex = /style=(['"])(.*?)\1/;
-    const styleMatch = attributes.match(styleRegex);
-    let newFullTag: string;
-
-    if (styleMatch) {
-      const quote = styleMatch[1];
-      const existing = styleMatch[2];
-      const merged = mergeInlineStyle(existing, styles);
-      const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
-      newFullTag = `<${tagName} ${newAttributes}>`;
-    } else {
-      const merged = mergeInlineStyle('', styles);
-      const newAttributes = `${attributes} style="${merged}"`;
-      newFullTag = `<${tagName} ${newAttributes}>`;
-    }
-
-    const newTemplateContent = templateContent.replace(fullTag, newFullTag);
-    const start = template.loc.start.offset;
-    const end = template.loc.end.offset;
-
-    return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
-  }
-
-  // Fallback: line:col search
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(templateContent, line, col);
-    if (tagLoc) {
-      const { tagName, attributes, startIndex, endIndex } = tagLoc;
-      const styleRegex = /style=(['"])(.*?)\1/;
-      const styleMatch = attributes.match(styleRegex);
-      let newFullTag: string;
-      if (styleMatch) {
-        const quote = styleMatch[1];
-        const existing = styleMatch[2];
-        const merged = mergeInlineStyle(existing, styles);
-        const newAttributes = attributes.replace(styleRegex, `style=${quote}${merged}${quote}`);
-        newFullTag = `<${tagName} ${newAttributes ? ' ' + newAttributes : ''}>`;
-      } else {
-        const merged = mergeInlineStyle('', styles);
-        const newAttributes = attributes ? `${attributes} style="${merged}"` : `style="${merged}"`;
-        newFullTag = `<${tagName} ${newAttributes}>`;
-      }
-      const newTemplateContent = templateContent.substring(0, startIndex) + newFullTag + templateContent.substring(endIndex);
-      const start = template.loc.start.offset;
-      const end = template.loc.end.offset;
-      return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
-    }
-  }
-
-  return sfcCode;
+function escape(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/{/g, '&#123;').replace(/}/g, '&#125;');
 }
-
-export function updateVueSFCText(
-  sfcCode: string,
-  targetId: string,
-  newText: string
-): string {
-  const parsed = parse(sfcCode);
-  const template = parsed.descriptor.template;
-  if (!template) return sfcCode;
-
-  const templateContent = template.content;
-  const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const { line, col } = parseTargetId(targetId);
-  const lineColPattern = line && col ? `[^"]*?:${line}:${col}` : null;
-  const attrPattern = lineColPattern ? `(?:${escapedId}|${lineColPattern})` : escapedId;
-
-  const elementRegex = new RegExp(
-    `(<([\\w-]+)\\s+[^>]*data-gl-source="${attrPattern}"[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
-    'i'
-  );
-
-  const match = templateContent.match(elementRegex);
-  if (match) {
-    const openTag = match[1];
-    const closeTag = match[4];
-    const updatedElement = `${openTag}${newText}${closeTag}`;
-
-    const newTemplateContent = templateContent.replace(elementRegex, updatedElement);
-    const start = template.loc.start.offset;
-    const end = template.loc.end.offset;
-
-    return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
-  }
-
-  // Fallback: line:col search
-  if (line && col) {
-    const tagLoc = findTagAtLineCol(templateContent, line, col);
-    if (tagLoc) {
-      const { tagName, endIndex } = tagLoc;
-      const closeTagStr = `</${tagName}>`;
-      const restOfCode = templateContent.substring(endIndex);
-      const closeIndex = restOfCode.toLowerCase().indexOf(closeTagStr.toLowerCase());
-      if (closeIndex !== -1) {
-        const absoluteCloseIndex = endIndex + closeIndex;
-        const newTemplateContent = templateContent.substring(0, endIndex) + newText + templateContent.substring(absoluteCloseIndex);
-        const start = template.loc.start.offset;
-        const end = template.loc.end.offset;
-        return sfcCode.substring(0, start) + newTemplateContent + sfcCode.substring(end);
-      }
-    }
-  }
-
-  return sfcCode;
+function replace(code: string, start: number, end: number, text: string) {
+  const result = code.slice(0, start) + text + code.slice(end);
+  if (parse(result).errors.length) throw new Error('INVALID_OUTPUT: The edit produced an invalid SFC.');
+  return result;
 }
-
+function attribute(code: string, id: string, name: string, value: string | Record<string, string>) {
+  const node = target(code, id);
+  if (node.props.some((p: any) => p.type === 7 && p.name === 'bind'
+    && (!p.arg || !p.arg.isStatic || p.arg.content === name))) throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Vue binding in source.');
+  const attrs = node.props.filter((p: any) => p.type === 6 && p.name === name);
+  if (attrs.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
+  const attr = attrs[0];
+  const next = typeof value === 'string' ? value : mergeInlineStyle(attr?.value?.content || '', value);
+  if (attr) return replace(code, attr.loc.start.offset, attr.loc.end.offset, `${name}="${escape(next)}"`);
+  const offset = node.props.length ? node.props[node.props.length - 1].loc.end.offset : node.loc.start.offset + node.tag.length + 1;
+  return replace(code, offset, offset, ` ${name}="${escape(next)}"`);
+}
+export function updateVueSFCClass(code: string, id: string, classes: string): string { return attribute(code, id, 'class', classes); }
+export function updateVueSFCStyle(code: string, id: string, styles: Record<string, string>): string { return attribute(code, id, 'style', styles); }
+export function updateVueSFCText(code: string, id: string, text: string): string {
+  const node = target(code, id);
+  if (node.props.some((p: any) => p.type === 7 && ['text', 'html', 'pre'].includes(p.name))) throw new Error('UNSUPPORTED_OPERATION: Text is controlled by a directive.');
+  const literals = node.children.filter((child: any) => child.type === 2 && child.content.trim());
+  if (literals.length !== 1) throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment.');
+  const child = literals[0], raw = child.loc.source;
+  return replace(code, child.loc.start.offset, child.loc.end.offset,
+    (raw.match(/^\s*/)?.[0] || '') + escape(text) + (raw.match(/\s*$/)?.[0] || ''));
+}
