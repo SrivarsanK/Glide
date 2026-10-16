@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { transformJSXBatch } from '@srivarsank/ast-writer';
+import { transformJSXBatch, type JSXMutation } from '@srivarsank/ast-writer';
 import { parse } from '@babel/parser';
 import type { HistoryStore } from './history-manager.js';
 import { ProjectPaths } from './project-paths.js';
@@ -17,7 +17,7 @@ export interface MutationOperation {
   line: number;
   column: number;
   hash?: string;
-  change: { type: string; property?: string; value?: any; breakpoint?: string; pseudoState?: string };
+  change: JSXMutation['change'];
 }
 
 export interface MutationResult {
@@ -28,6 +28,7 @@ export interface MutationResult {
   selectionRemaps: { oldSourceId: string; oldHash: string; newHash: string; newDigest: string;
     newCoordinates: { line: number; column: number } }[];
   error?: string;
+  deletedSourceIds?: string[];
 }
 
 interface BufferState {
@@ -61,6 +62,12 @@ export class MutationService {
 
   restoreHistory(transactionId: string, history: HistoryStore, action: 'undo' | 'redo' | number): Promise<MutationResult> {
     const run = this.queue.then(() => {
+      const signature = `history:${JSON.stringify(action)}`;
+      const previous = this.completed.get(transactionId);
+      if (previous) {
+        if (previous.signature !== signature) throw new Error('TRANSACTION_CONFLICT: This ID belongs to another request.');
+        return previous.result;
+      }
       const state = history.getState();
       const target = typeof action === 'number' ? action : action === 'undo' ? state.currentIndex - 1 : state.currentIndex + 1;
       const plan = history.prepareRestore(target);
@@ -68,7 +75,7 @@ export class MutationService {
         operationId: `${transactionId}:${index}`, filePath: diff.file, expectedDigest: contentDigest(diff.before),
         line: 1, column: 1, change: { type: 'restore' },
       }));
-      return this.apply(transactionId, operations, { contents: plan.writes.map(diff => diff.after), confirm: plan.confirm });
+      return this.apply(transactionId, operations, { contents: plan.writes.map(diff => diff.after), confirm: plan.confirm, signature });
     });
     this.queue = run.catch(() => undefined);
     return run;
@@ -83,7 +90,7 @@ export class MutationService {
   }
 
   private apply(transactionId: string, operations: MutationOperation[], restoration?: {
-    contents: string[]; confirm: () => void;
+    contents: string[]; confirm: () => void; signature: string;
   }): MutationResult {
     const failure = (error: string): MutationResult => ({
       transactionId, success: false, error, changedFiles: [], selectionRemaps: [],
@@ -94,7 +101,7 @@ export class MutationService {
     const rename = this.options.rename ?? fs.renameSync;
     try {
       if (!transactionId || !operations.length) throw new Error('INVALID_TRANSACTION: A transaction needs an ID and operations.');
-      const signature = contentDigest(JSON.stringify(operations));
+      const signature = restoration?.signature || contentDigest(JSON.stringify(operations));
       const previous = this.completed.get(transactionId);
       if (previous) {
         if (previous.signature !== signature) throw new Error('TRANSACTION_CONFLICT: This ID belongs to another request.');
@@ -120,6 +127,7 @@ export class MutationService {
         return buffer;
       });
       const selectionRemaps: MutationResult['selectionRemaps'] = [];
+      const deletedSourceIds: string[] = [];
       for (const buffer of buffers.values()) {
         if (restoration) {
           buffer.after = restoration.contents[targets.indexOf(buffer)];
@@ -127,11 +135,23 @@ export class MutationService {
           continue;
         }
         const edits = operations.filter((_, index) => targets[index] === buffer);
+        for (const edit of edits) {
+          const change = edit.change;
+          if (!change || typeof change.type !== 'string') throw new Error('INVALID_OPERATION: A change kind is required.');
+          const refs = [change.source, change.parentId, change.siblingId, ...(change.sources || [])].filter(Boolean);
+          for (const ref of refs) {
+            if (typeof ref !== 'string') throw new Error('INVALID_TARGET: Invalid source reference.');
+            if (/^line:\d+:col:\d+/.test(ref)) continue;
+            const match = ref.match(/^(.*?):\d+:\d+(?::[a-fA-F0-9]+)?$/);
+            if (!match || this.resolveFile(match[1]) !== buffer.file) throw new Error('INVALID_TARGET: Structural references must belong to the same file.');
+          }
+        }
         const transformed = transformJSXBatch(buffer.before, edits);
         buffer.after = transformed.code;
         const newDigest = contentDigest(buffer.after);
         const aliases = new Set([buffer.file, ...edits.map(edit => edit.filePath)].map(file => file.replace(/\\/g, '/')));
         for (const file of aliases) {
+          deletedSourceIds.push(...transformed.removed.map(node => `${file}:${node.line}:${node.column}`));
           selectionRemaps.push(...transformed.remaps.map(remap => ({
             oldSourceId: `${file}:${remap.oldLine}:${remap.oldColumn}`,
             oldHash: remap.oldHash, newHash: remap.newHash,
@@ -160,12 +180,13 @@ export class MutationService {
         written.push(buffer);
       }
       if (restoration) restoration.confirm();
-      else this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })));
+      else if (written.length) this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })));
       const result: MutationResult = {
         transactionId, success: true,
         changedFiles: written.map(buffer => ({ path: buffer.file, newDigest: contentDigest(buffer.after), revisionId: randomUUID() })),
         operationResults: operations.map(op => ({ operationId: op.operationId, ok: true })),
         selectionRemaps,
+        deletedSourceIds,
       };
       this.completed.set(transactionId, { signature, result });
       return result;

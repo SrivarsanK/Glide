@@ -6,18 +6,12 @@ import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement, parseJSXElements } from '@srivarsank/ast-writer';
+import { parseJSXElements } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import {
-  pushHistory,
-  defaultStore,
-  getHistoryState,
-  clearHistory,
-  setHistoryLimit
-} from './history-manager.js';
+import { HistoryStore } from './history-manager.js';
 import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
-import { MutationService, contentDigest } from './mutation-service.js';
+import { MutationService, contentDigest, type MutationOperation } from './mutation-service.js';
 import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 
@@ -775,14 +769,10 @@ export class GlideServer {
   private targetPort: number;
   private config: GlideConfig;
   private editCallbacks: EditCallback[] = [];
-  private projectPaths = new ProjectPaths(process.cwd());
-  private mutations = new MutationService(this.projectPaths.root, {
-    onPersist: diffs => {
-      if (!diffs.length) return;
-      pushHistory({ description: 'Apply source changes', diffs });
-      for (const diff of diffs) this.recordSelfWrite(diff.file);
-    },
-  });
+  private projectPaths: ProjectPaths;
+  private mutations: MutationService;
+  private history = new HistoryStore();
+  private notifiedTransactions = new Set<string>();
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private lastSelfWrites = new Map<string, string>();
@@ -803,7 +793,13 @@ export class GlideServer {
     }
   }
 
-  constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG) {
+  constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG, projectRoot = process.cwd()) {
+    this.projectPaths = new ProjectPaths(projectRoot);
+    this.mutations = new MutationService(this.projectPaths.root, { onPersist: diffs => {
+      if (!diffs.length) return;
+      this.history.push({ description: 'Apply source changes', diffs });
+      for (const diff of diffs) this.recordSelfWrite(diff.file);
+    } });
     this.port = port;
     this.targetPort = targetPort;
     this.config = {
@@ -816,8 +812,7 @@ export class GlideServer {
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        clearHistory();
-        setHistoryLimit(this.config.historyLimit);
+        this.history.setLimit(this.config.historyLimit);
 
         this.server = createServer((req, res) => {
           const address = this.server?.address();
@@ -853,11 +848,13 @@ export class GlideServer {
 
 
         // Start file watcher for drift detection
-        const srcPath = fs.existsSync(path.resolve(process.cwd(), 'src'))
-          ? path.resolve(process.cwd(), 'src')
-          : process.cwd();
+        const srcPath = this.projectPaths.root;
         this.watcher = chokidar.watch(srcPath, {
           persistent: true,
+          followSymlinks: false,
+          // Native Windows watching can abort Node during atomic source replacement.
+          usePolling: process.platform === 'win32',
+          interval: 200,
           ignored: [
             '**/node_modules/**',
             '**/.git/**',
@@ -948,15 +945,9 @@ export class GlideServer {
                 return;
               }
 
-              // Every server-owned structural write must use a canonical source path.
-              if (['insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange'].includes(message.type)) {
-                try {
-                  message.file = this.projectPaths.sourceFile(message.file || findProjectEntryFile(this.projectPaths.root));
-                } catch (error) {
-                  ws.send(JSON.stringify({ type: 'status', success: false,
-                    error: `File not found or unsafe path: ${error instanceof Error ? error.message : String(error)}` }));
-                  return;
-                }
+              if (['edit', 'batch-edit', 'insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange'].includes(message.type)) {
+                await this.handleSourceMutation(ws, message);
+                return;
               }
 
               if (message.type === 'get-tree') {
@@ -972,6 +963,7 @@ export class GlideServer {
                   ws.send(JSON.stringify({
                     type: 'tree',
                     file,
+                    requestedFile,
                     tree,
                     digest: contentDigest(code),
                     generation: this.fileGenerations.get(normPath) || 0
@@ -982,150 +974,6 @@ export class GlideServer {
                     file: requestedFile || null,
                     tree: null,
                     error: `Invalid or unaccessible file: ${requestedFile}`
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'insert') {
-                let { file, parentId, elementType, width, height } = message;
-                if (!file) {
-                  file = findProjectEntryFile(process.cwd());
-                }
-                const targetFile = file && fs.existsSync(file)
-                  ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
-
-                if (targetFile && this.projectPaths.contains(targetFile)) {
-                  try {
-                    const code = fs.readFileSync(targetFile, 'utf-8');
-                    const updated = insertJSXElement(code, parentId, elementType, { width, height });
-                    this.recordSelfWrite(targetFile);
-                    fs.writeFileSync(targetFile, updated, 'utf-8');
-                    pushHistory({
-                      description: `Inserted ${elementType} in ${path.basename(targetFile)}`,
-                      diffs: [{ file: path.resolve(targetFile), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    // Automatically send updated tree back
-                    const tree = buildComponentTree(updated, targetFile);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file: targetFile,
-                      tree,
-                      generation: this.fileGenerations.get(normalizePathKey(targetFile)) || 0
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'reorder') {
-                const { file, targetId, parentId, siblingId, position } = message;
-                if (fs.existsSync(file)) {
-                  try {
-                    const code = fs.readFileSync(file, 'utf-8');
-                    const updated = reorderJSXElement(code, targetId, parentId, siblingId, position);
-                    this.recordSelfWrite(file);
-                    fs.writeFileSync(file, updated, 'utf-8');
-                    pushHistory({
-                      description: `Reordered elements in ${path.basename(file)}`,
-                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: true
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'reparent') {
-                let { file, sourceId, newParentId, newIndex, siblingId, position } = message;
-                if (!file) {
-                  file = findProjectEntryFile(process.cwd());
-                }
-                const targetFile = file && fs.existsSync(file)
-                  ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
-
-                if (targetFile && this.projectPaths.contains(targetFile)) {
-                  try {
-                    const code = fs.readFileSync(targetFile, 'utf-8');
-                    const updated = reorderJSXElement(
-                      code,
-                      sourceId,
-                      newParentId,
-                      siblingId || null,
-                      position || 'after',
-                      newIndex
-                    );
-                    this.recordSelfWrite(targetFile);
-                    fs.writeFileSync(targetFile, updated, 'utf-8');
-                    pushHistory({
-                      description: `Reparented element in ${path.basename(targetFile)}`,
-                      diffs: [{ file: path.resolve(targetFile), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    const tree = buildComponentTree(updated, targetFile);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file: targetFile,
-                      tree,
-                      generation: this.fileGenerations.get(normalizePathKey(targetFile)) || 0
-                    }));
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: true,
-                      action: 'reparent'
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
                   }));
                 }
                 return;
@@ -1269,127 +1117,6 @@ export class GlideServer {
                 return;
               }
 
-              if (message.type === 'group') {
-                const { file, selectedIds } = message;
-                if (fs.existsSync(file)) {
-                  try {
-                    const code = fs.readFileSync(file, 'utf-8');
-                    const updated = groupJSXElements(code, selectedIds);
-                    this.recordSelfWrite(file);
-                    fs.writeFileSync(file, updated, 'utf-8');
-                    pushHistory({
-                      description: `Grouped elements in ${path.basename(file)}`,
-                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    const tree = buildComponentTree(updated, file);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file,
-                      tree,
-                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'ungroup') {
-                const { file, groupId } = message;
-                if (fs.existsSync(file)) {
-                  try {
-                    const code = fs.readFileSync(file, 'utf-8');
-                    const updated = ungroupJSXElement(code, groupId);
-                    this.recordSelfWrite(file);
-                    fs.writeFileSync(file, updated, 'utf-8');
-                    pushHistory({
-                      description: `Ungrouped element in ${path.basename(file)}`,
-                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    const tree = buildComponentTree(updated, file);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file,
-                      tree,
-                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
-                  }));
-                }
-                return;
-              }
-
-              if (message.type === 'arrange') {
-                const { file, targetId, action } = message;
-                if (fs.existsSync(file)) {
-                  try {
-                    const code = fs.readFileSync(file, 'utf-8');
-                    const updated = arrangeJSXElement(code, targetId, action);
-                    this.recordSelfWrite(file);
-                    fs.writeFileSync(file, updated, 'utf-8');
-                    pushHistory({
-                      description: `Arranged element in ${path.basename(file)}`,
-                      diffs: [{ file: path.resolve(file), before: code, after: updated }]
-                    });
-                    ws.send(JSON.stringify({
-                      type: 'HISTORY_UPDATE',
-                      ...getHistoryState()
-                    }));
-                    const tree = buildComponentTree(updated, file);
-                    ws.send(JSON.stringify({
-                      type: 'tree',
-                      file,
-                      tree,
-                      generation: this.fileGenerations.get(normalizePathKey(file)) || 0
-                    }));
-                  } catch (err: any) {
-                    ws.send(JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: err.message
-                    }));
-                  }
-                } else {
-                  ws.send(JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `File not found: ${file}`
-                  }));
-                }
-                return;
-              }
-
-
               if (message.type === 'git-branch-create') {
                 const { branchName, projectDir } = message;
                 if (!branchName || typeof branchName !== 'string' || !/^[a-zA-Z0-9_/-]+$/.test(branchName)) {
@@ -1462,17 +1189,18 @@ export class GlideServer {
 
               if (['undo', 'UNDO', 'redo', 'REDO', 'JUMP_TO_HISTORY'].includes(message.type)) {
                 const action = message.type === 'JUMP_TO_HISTORY' ? message.index : message.type.toLowerCase();
+                const transactionId = message.transactionId || randomUUID();
                 try {
                   const result = await this.mutations.restoreHistory(
-                    message.transactionId || randomUUID(), defaultStore, action
+                    transactionId, this.history, action
                   );
                   if (result.success) {
                     for (const file of result.changedFiles) this.recordSelfWrite(file.path);
-                    ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...getHistoryState() }));
+                    ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...this.history.getState() }));
                   }
                   ws.send(JSON.stringify({ type: 'status', action, ...result }));
                 } catch (err: any) {
-                  ws.send(JSON.stringify({ type: 'status', action, success: false, error: err.message }));
+                  ws.send(JSON.stringify({ type: 'status', action, transactionId, success: false, error: err.message }));
                 }
                 return;
               }
@@ -1480,147 +1208,7 @@ export class GlideServer {
               if (message.type === 'GET_HISTORY') {
                 ws.send(JSON.stringify({
                   type: 'HISTORY_UPDATE',
-                  ...getHistoryState()
-                }));
-                return;
-              }
-
-              if (message.type === 'batch-edit') {
-                const { edits, batchId } = message as any;
-                if (!Array.isArray(edits) || edits.length === 0) {
-                  ws.send(JSON.stringify({ type: 'status', success: false, error: 'Empty or invalid batch-edit payload' }));
-                  return;
-                }
-                const result = await this.mutations.execute(batchId, edits.map((item: any, index: number) => ({
-                  operationId: item?.operationId || `${batchId}:${index}`,
-                  filePath: item?.file,
-                  expectedDigest: item?.expectedDigest,
-                  line: item?.line,
-                  column: item?.column,
-                  hash: item?.hash,
-                  change: item?.change,
-                })));
-                ws.send(JSON.stringify({
-                  type: 'status',
-                  action: 'batch-edit',
-                  ...result,
-                  count: result.success ? result.operationResults.length : 0,
-                }));
-
-                ws.send(JSON.stringify({
-                  type: 'HISTORY_UPDATE',
-                  ...getHistoryState()
-                }));
-                return;
-              }
-
-              if (message.type === 'edit') {
-                let { file, line, column, change, hash, generation } = message as any;
-                if (!file) {
-                  file = findProjectEntryFile(process.cwd());
-                }
-                console.log(`[Glide] Edit request: ${change?.type} at ${file}:${line}:${column} (hash: ${hash}, gen: ${generation})`);
-
-                // Validate parameters
-                if (!file || !this.projectPaths.contains(file) || typeof line !== 'number' || typeof column !== 'number' || !change) {
-                  ws.send(
-                    JSON.stringify({
-                      type: 'status',
-                      success: false,
-                      error: 'Invalid edit payload or unsafe file path',
-                    })
-                  );
-                  return;
-                }
-
-                const targetNodeId = `${file}:${line}:${column}`;
-                const modifiedProps = extractModifiedProps(change);
-                const opTimestamp = typeof message.timestamp === 'number'
-                  ? message.timestamp
-                  : (typeof change?.timestamp === 'number' ? change.timestamp : Date.now());
-
-                // Property-level LWW check
-                if (typeof message.timestamp === 'number' || typeof change?.timestamp === 'number') {
-                  for (const prop of modifiedProps) {
-                    if (!deltaQueue.canApplyLWW(targetNodeId, prop, opTimestamp)) {
-                      ws.send(
-                        JSON.stringify({
-                          type: 'status',
-                          success: false,
-                          error: `STALE_PROPERTY_WRITE: Edit for ${prop} was superseded by a newer write (LWW)`,
-                          targetId: targetNodeId,
-                          property: prop,
-                        })
-                      );
-                      return;
-                    }
-                  }
-                }
-
-                // Reject stale source generations.
-                if (change.type !== 'position') {
-                  const normPath = normalizePathKey(file);
-                  const currentGen = this.fileGenerations.get(normPath) || 0;
-                  if (generation !== undefined && generation !== currentGen) {
-                    ws.send(
-                      JSON.stringify({
-                        type: 'status',
-                        success: false,
-                        error: `STALE_GENERATION: File has drifted since selection (expected generation ${generation}, current is ${currentGen})`,
-                      })
-                    );
-                    return;
-                  }
-                }
-
-                // Record self-write timestamp for drift protection
-                if (change.type === 'position') {
-                  this.recordSelfWrite(file);
-                }
-
-                // Call registered edit callbacks
-                for (const callback of this.editCallbacks) {
-                  try {
-                    await callback(file, line, column, change, hash);
-                  } catch (err: any) {
-                    console.error(`[Glide] Edit handler error:`, err.message);
-                    ws.send(
-                      JSON.stringify({
-                        type: 'status',
-                        success: false,
-                        error: err.message,
-                      })
-                    );
-                    return;
-                  }
-                }
-
-                // Bump generation for edits that modify source file
-                if (change.type !== 'position') {
-                  this.recordSelfWrite(file);
-                }
-
-                // Record applied properties in PropertyDeltaQueue
-                for (const prop of modifiedProps) {
-                  deltaQueue.recordApplied(targetNodeId, prop, change.value, opTimestamp);
-                }
-
-                const normPath = normalizePathKey(file);
-                const newGen = this.fileGenerations.get(normPath) || 0;
-                ws.send(
-                  JSON.stringify({
-                    type: 'status',
-                    success: true,
-                    generation: newGen,
-                    targetId: targetNodeId,
-                    properties: modifiedProps,
-                    opId: message.opId || change?.opId,
-                  })
-                );
-
-                ws.send(JSON.stringify({
-                  type: 'HISTORY_UPDATE',
-                  ...getHistoryState()
+                  ...this.history.getState()
                 }));
                 return;
               }
@@ -1688,10 +1276,10 @@ export class GlideServer {
     });
   }
 
-  public stop(): Promise<void> {
+  public async stop(): Promise<void> {
     if (this.watcher) {
       try {
-        this.watcher.close();
+        await this.watcher.close();
       } catch (err) {
         console.error('[Glide Watcher] Error closing watcher:', err);
       }
@@ -1735,6 +1323,47 @@ export class GlideServer {
     }
   }
 
+
+  private async handleSourceMutation(ws: WebSocket, message: any): Promise<void> {
+    const transactionId = message.batchId || message.transactionId;
+    let edits: any[];
+    if (message.type === 'batch-edit') {
+      if (!Array.isArray(message.edits) || !message.edits.length) {
+        ws.send(JSON.stringify({ type: 'status', action: message.type, transactionId, success: false, error: 'Empty or invalid batch-edit payload' }));
+        return;
+      }
+      edits = message.edits;
+    } else if (message.type === 'edit') {
+      edits = [message];
+    } else {
+      const target = message.type === 'insert' ? message.parentId
+        : message.type === 'group' ? message.selectedIds?.[0]
+        : message.sourceId || message.targetId || message.groupId;
+      const local = typeof target === 'string' && target.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+      const match = local || (typeof target === 'string' && target.match(/^.*?:(\d+):(\d+)(?::([a-fA-F0-9]+))?$/));
+      edits = [{ ...message, line: match ? Number(match[1]) : 0, column: match ? Number(match[2]) + (local ? 1 : 0) : 0,
+        hash: match ? match[3] : undefined, change: { ...message, source: target, parentId: message.newParentId || message.parentId, sources: message.selectedIds } }];
+    }
+    const operations: MutationOperation[] = edits.map((item, index) => ({
+      operationId: item?.operationId || `${transactionId}:${index}`, filePath: item?.file,
+      expectedDigest: item?.expectedDigest, line: item?.line, column: item?.column,
+      hash: item?.hash, change: item?.change,
+    }));
+    const result = await this.mutations.execute(transactionId, operations);
+    if (result.success && !this.notifiedTransactions.has(transactionId)) {
+      this.notifiedTransactions.add(transactionId);
+      for (const op of operations) for (const callback of this.editCallbacks) {
+        // Observers run after persistence and cannot turn a committed result into a failure.
+        try { await callback(op.filePath, op.line, op.column, op.change as EditChange, op.hash); }
+        catch (error) { console.warn('[Glide] Post-commit observer failed:', error); }
+      }
+    }
+    ws.send(JSON.stringify({ type: 'status', action: message.type, ...result,
+      count: result.success ? result.operationResults.length : 0 }));
+    if (result.success) ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...this.history.getState() }));
+  }
+
+  /** Observe persisted edits. Callbacks must not perform source writes. */
   public onEdit(callback: EditCallback): void {
     this.editCallbacks.push(callback);
   }

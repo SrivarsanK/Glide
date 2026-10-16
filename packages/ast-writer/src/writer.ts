@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
+import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -325,7 +326,7 @@ export interface JSXMutation {
   line: number;
   column: number;
   hash?: string;
-  change: { type: string; property?: string; value?: any; breakpoint?: string; pseudoState?: string };
+  change: StructuralChange & { property?: string; value?: any; breakpoint?: string; pseudoState?: string };
 }
 
 function jsxNodes(ast: any): t.JSXElement[] {
@@ -342,6 +343,20 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
   // Resolve public coordinates and hashes against Babel's untouched input,
   // then pair the structure-identical trees by traversal order.
   const originalNodes = jsxNodes(babelParse(source, { sourceType: 'module', plugins: ['jsx', 'typescript'] }));
+  if (operations.some(op => structuralKinds.has(op.change?.type)) && operations.length !== 1) {
+    throw new Error('UNSUPPORTED_OPERATION: A structural action must have its own transaction.');
+  }
+  const resolve = (id: string): t.JSXElement => {
+    const local = typeof id === 'string' && id.match(/^line:(\d+):col:(\d+)(?::([a-fA-F0-9]+))?$/);
+    const full = typeof id === 'string' && id.match(/^.*?:(\d+):(\d+)(?::([a-fA-F0-9]+))?$/);
+    const match = local || full;
+    if (!match) throw new Error('INVALID_TARGET: An exact source reference is required.');
+    const line = Number(match[1]), column = Number(match[2]) + (local ? 1 : 0);
+    const index = originalNodes.findIndex(node => node.loc?.start.line === line && node.loc.start.column + 1 === column);
+    if (index < 0) throw new Error('INVALID_TARGET: The referenced node does not exist.');
+    if (match[3] && computeNodeHash(source.slice(originalNodes[index].start!, originalNodes[index].end!)) !== match[3]) throw new Error('STALE_NODE: The referenced node changed.');
+    return nodes[index];
+  };
   const targets = operations.map(op => {
     const node = originalNodes.find(n => n.loc?.start.line === op.line && n.loc.start.column === op.column - 1);
     if (!node) throw new Error(`NODE_NOT_FOUND: No JSX element exists at ${op.line}:${op.column}.`);
@@ -352,7 +367,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
   });
   operations.forEach((op, index) => {
     const change = op.change;
-    if (!change || change.pseudoState || (change.breakpoint && change.type !== 'class')) {
+    if (!change || change.pseudoState || (change.breakpoint && !['class', 'multi-class'].includes(change.type))) {
       throw new Error('UNSUPPORTED_OPERATION: This style scope needs an authored stylesheet.');
     }
     switch (change.type) {
@@ -361,29 +376,47 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
         mutateClass(targets[index], change.property, change.value, change.breakpoint);
         break;
       case 'style': mutateStyle(targets[index], change.value); break;
+      case 'position':
+        if (!change.value || change.value.position !== 'relative' || Object.keys(change.value).some(key => !['position', 'left', 'top'].includes(key))) {
+          throw new Error('UNSUPPORTED_OPERATION: Only relative flow-preserving offsets are supported.');
+        }
+        mutateStyle(targets[index], change.value);
+        break;
+      case 'multi-class':
+        if (!change.value || typeof change.value !== 'object' || Array.isArray(change.value)) throw new Error('INVALID_OPERATION: Expected class properties.');
+        for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint);
+        break;
       case 'text':
         if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');
         mutateText(targets[index], change.value);
         break;
-      default: throw new Error('UNSUPPORTED_OPERATION: This operation kind is not supported.');
+      default:
+        if (!structuralKinds.has(change.type)) throw new Error('UNSUPPORTED_OPERATION: This operation kind is not supported.');
+        mutateStructure(ast, targets[index], change, resolve);
     }
   });
   const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n' }).code;
+  const survivingNodes = jsxNodes(ast);
   const checked = babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
   const locations: { line: number; column: number; hash: string }[] = [];
   traverse(checked, { JSXElement(p: { node: t.JSXElement }) {
     locations.push({ line: p.node.loc!.start.line, column: p.node.loc!.start.column + 1,
       hash: computeNodeHash(code.slice(p.node.start!, p.node.end!)) });
   } });
-  if (locations.length !== nodes.length) throw new Error('INVALID_OUTPUT: The edit changed the JSX structure.');
+  if (locations.length !== survivingNodes.length) throw new Error('INVALID_OUTPUT: The printed JSX structure changed unexpectedly.');
   // Printing a changed node can move every following sibling and descendant.
   // Structure-preserving edits retain traversal order, so map every source node.
-  return { code, remaps: originalNodes.map((node, index) => ({
+  return { code, removed: originalNodes.flatMap((node, index) => survivingNodes.includes(nodes[index]) ? [] : [{
+    line: node.loc!.start.line, column: node.loc!.start.column + 1,
+  }]), remaps: originalNodes.flatMap((node, index) => {
+    const next = survivingNodes.indexOf(nodes[index]);
+    if (next < 0) return [];
+    return [{
     oldLine: node.loc!.start.line, oldColumn: node.loc!.start.column + 1,
     oldHash: computeNodeHash(source.slice(node.start!, node.end!)),
-    newHash: locations[index].hash,
-    newCoordinates: { line: locations[index].line, column: locations[index].column },
-  })) };
+    newHash: locations[next].hash,
+    newCoordinates: { line: locations[next].line, column: locations[next].column },
+  }]; }) };
 }
 
 function mutateText(node: t.JSXElement, newText: string): void {

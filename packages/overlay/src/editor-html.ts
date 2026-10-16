@@ -1,5 +1,6 @@
 import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
 import { createSourceMapping } from './source-mapping.js';
+import { createMutationTransport } from './mutation-transport.js';
 
 export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
@@ -2199,6 +2200,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // STATE
           // ═══════════════════════════════════════════════════════════════
           let socket = null;
+          let sourceTransport = null;
           const sourceMapping = (${createSourceMapping.toString()})();
           let currentFile = null;
           let selectedElement = null;
@@ -2330,6 +2332,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             updateConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             socket = new WebSocket(protocol + '//' + window.location.host);
+            socket.sendRaw = socket.send.bind(socket);
+            if (!sourceTransport) sourceTransport = (${createMutationTransport.toString()})({
+              send: data => socket.sendRaw(data),
+              digest: file => fileDigests.get(normalizePathSlash(file)),
+              currentFile: () => currentFile,
+              id: () => 'edit:' + crypto.randomUUID(),
+              error: error => showToast('error', error),
+              rejected: transactionId => {
+                if (pendingBatch && pendingBatch.batchId === transactionId) {
+                  pendingBatch = null;
+                  updateStagingBarUI();
+                }
+              },
+              mapping: sourceMapping
+            });
+            socket.send = data => sourceTransport.send(data);
             const dot = document.getElementById('ws-dot');
             const statusEl = document.getElementById('ws-status');
 
@@ -2342,6 +2360,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             });
 
             socket.addEventListener('close', () => {
+              sourceTransport.disconnected();
               updateConnectionState('disconnected');
               dot.classList.add('error');
               statusEl.textContent = 'Disconnected — retrying…';
@@ -2358,10 +2377,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               try {
                 const message = JSON.parse(event.data);
                 if (message.type === 'authenticated') {
+                  sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
                   return;
                 }
                 if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
+                if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;
                   if (!message.tree) {
@@ -2431,6 +2452,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 } else if (message.type === 'HISTORY_UPDATE') {
                   updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
+                  sourceTransport.accept(message);
                   if (message.action === 'batch-edit' && pendingBatch && message.transactionId === pendingBatch.batchId) {
                     if (message.success) {
                       pendingBatch.items.forEach(({ source, key, item }) => {
@@ -2825,6 +2847,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               fileDigests.set(normalizePathSlash(file.path), file.newDigest);
             });
             const remaps = message.selectionRemaps || [];
+            const deleted = new Set(message.deletedSourceIds || []);
+            const isDeleted = source => {
+              const parsed = parseSource(source);
+              return parsed && deleted.has(parsed.file + ':' + parsed.line + ':' + parsed.column);
+            };
+            selectedSources = selectedSources.filter(source => !isDeleted(source));
+            if (selectedElement && isDeleted(selectedElement.source)) {
+              selectedElement = null;
+              selectedRects = [];
+              clearOverlay();
+              showNoSelection();
+            }
+            if (glideClipboard && isDeleted(glideClipboard.source)) glideClipboard = null;
             if (!remaps.length) return;
             const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
@@ -6641,8 +6676,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const parsed = parseSource(source);
             if (!parsed) return;
             const targetFile = parsed.file || currentFile;
-            // Sends 'position' type — server writes to glide-positions.json, NOT App.tsx.
-            // The Vite plugin injects CSS overrides via HMR event — zero flicker, zero reload.
+            // Commit relative offsets through the revision-checked source transaction.
             socket.send(JSON.stringify({
               type: 'edit',
               file: targetFile,
@@ -6732,20 +6766,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               viewportWidth: iframeWidth.current,
               change: { type: 'delete', source: target.source }
             }));
-            selectedElement = null;
-            selectedSources = [];
-            selectedRects = [];
-            clearOverlay();
-            showNoSelection();
             const menu = document.getElementById('glide-context-menu');
             if (menu) menu.style.display = 'none';
             showToast('info', 'Deleting element...');
           }
 
           function triggerPaste() {
-            if (!glideClipboard || !glideClipboard.source) return;
+            if (!glideClipboard || !glideClipboard.source || !selectedElement?.source) return;
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(glideClipboard.source);
+            const parsed = parseSource(selectedElement.source);
             if (!parsed) return;
             socket.send(JSON.stringify({
               type: 'edit',
@@ -6754,7 +6783,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               column: parsed.column,
               generation: currentGeneration,
               viewportWidth: iframeWidth.current,
-              change: { type: 'duplicate', source: glideClipboard.source }
+              change: { type: 'paste', source: glideClipboard.source }
             }));
             const menu = document.getElementById('glide-context-menu');
             if (menu) menu.style.display = 'none';

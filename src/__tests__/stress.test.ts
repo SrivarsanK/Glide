@@ -22,6 +22,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import { connectLocal } from './ws-client.js';
+import { startTestProject, closeTestProjects, request } from './server-fixture.js';
+afterEach(closeTestProjects);
 import {
   SceneGraph,
   SceneRect,
@@ -62,132 +64,40 @@ function nextPort() { return portCounter++; }
 
 // ─── 1. Concurrent connections ────────────────────────────────────────────────
 
-describe('[Stress] Concurrent 50 WebSocket clients', () => {
-  let server: GlideServer;
-  let port: number;
+describe('[Stress] Revision-checked source writes', () => {
+  test('50 clients commit edits to distinct source files', async () => {
+    const f = await startTestProject();
+    const clients = await Promise.all(Array.from({ length: 50 }, () => f.connect()));
+    const results = await Promise.all(clients.map((client, index) => {
+      const file = 'Component' + index + '.tsx';
+      f.write(file, f.read());
+      return request(client, f.edit({ type: 'text', value: 'Client ' + index }, '<button', file));
+    }));
+    expect(results.every(result => result.success)).toBe(true);
+    for (let i = 0; i < clients.length; i++) expect(f.read('Component' + i + '.tsx')).toContain('Client ' + i);
+  }, 30000);
 
-  beforeEach(async () => {
-    port = nextPort();
-    server = new GlideServer(port);
-    server.onEdit(() => {});
-    await server.start();
-  });
-
-  afterEach(async () => { await server.stop(); });
-
-  test('all 50 clients connect and receive successful edit ack', async () => {
-    const N = 50;
-    const clients = await Promise.all(Array.from({ length: N }, () => openClient(port)));
-
-    const results = await Promise.all(
-      clients.map((ws, i) =>
-        sendAndAwait(ws, {
-          type: 'edit',
-          file: `src/Component${i}.tsx`,
-          line: i + 1,
-          column: 1,
-          change: { type: 'class', property: 'className', value: `text-${i}` },
-        })
-      )
-    );
-
-    for (const res of results) {
-      expect(res.success).toBe(true);
+  test('500 sequential writes advance the actual file revision', async () => {
+    const f = await startTestProject(), client = await f.connect();
+    for (let i = 0; i < 500; i++) {
+      const result = await request(client, f.edit({ type: 'text', value: 'Revision ' + i }));
+      expect(result.success, result.error).toBe(true);
     }
+    expect(f.read()).toContain('Revision 499');
+  }, 30000);
 
-    await Promise.all(clients.map((ws) => new Promise<void>((res) => { ws.close(); ws.on('close', res); })));
-  }, 15_000);
-});
-
-// ─── 2. Rapid-fire LWW flood ──────────────────────────────────────────────────
-
-describe('[Stress] LWW rapid-fire flood — same property', () => {
-  let server: GlideServer;
-  let port: number;
-
-  beforeEach(async () => {
-    port = nextPort();
-    server = new GlideServer(port);
-    server.onEdit(() => {});
-    await server.start();
-  });
-
-  afterEach(async () => { await server.stop(); });
-
-  test('500 sequential edits to same prop — only ascending timestamps accepted', async () => {
-    const ws = await openClient(port);
-    const ITERS = 500;
-    let accepted = 0;
-    let rejected = 0;
-
-    for (let i = 0; i < ITERS; i++) {
-      const ts = i % 3 === 0 ? i * 10 : (ITERS - i) * 10; // intentionally scrambled
-      const resp = await sendAndAwait(ws, {
-        type: 'edit',
-        file: 'src/App.tsx',
-        line: 5,
-        column: 2,
-        timestamp: ts,
-        change: { type: 'style', value: { width: `${i * 2}px` } },
-      });
-      if (resp.success) accepted++;
-      else rejected++;
+  test('independent files do not conflict under concurrent writes', async () => {
+    const f = await startTestProject();
+    const clients = await Promise.all(Array.from({ length: 10 }, () => f.connect()));
+    clients.forEach((_, i) => f.write('File' + i + '.tsx', f.read()));
+    for (let revision = 0; revision < 100; revision++) {
+      const results = await Promise.all(clients.map((client, i) => request(client,
+        f.edit({ type: 'text', value: 'Revision ' + revision }, '<button', 'File' + i + '.tsx'))));
+      expect(results.every(result => result.success)).toBe(true);
     }
-
-    // At least 1 accepted (first always passes), some rejected (stale timestamps)
-    expect(accepted).toBeGreaterThan(0);
-    expect(rejected).toBeGreaterThan(0);
-    expect(accepted + rejected).toBe(ITERS);
-
-    ws.close();
-  }, 30_000);
+    clients.forEach((_, i) => expect(f.read('File' + i + '.tsx')).toContain('Revision 99'));
+  }, 30000);
 });
-
-// ─── 3. Cross-property independence under load ────────────────────────────────
-
-describe('[Stress] Cross-property independence — 10 props × 100 edits', () => {
-  let server: GlideServer;
-  let port: number;
-
-  beforeEach(async () => {
-    port = nextPort();
-    server = new GlideServer(port);
-    server.onEdit(() => {});
-    await server.start();
-  });
-
-  afterEach(async () => { await server.stop(); });
-
-  test('distinct properties never block each other', async () => {
-    const ws = await openClient(port);
-    const PROPS = ['width', 'height', 'color', 'fontSize', 'padding',
-                   'margin', 'opacity', 'borderRadius', 'zIndex', 'flex'];
-    const ITERS = 100;
-
-    for (let i = 0; i < ITERS; i++) {
-      const results = await Promise.all(
-        PROPS.map((prop) =>
-          sendAndAwait(ws, {
-            type: 'edit',
-            file: 'src/App.tsx',
-            line: 1,
-            column: 1,
-            timestamp: Date.now() + i * 100,
-            change: { type: 'style', value: { [prop]: `${i}px` } },
-          })
-        )
-      );
-      // Every property-level write should succeed independently
-      for (const res of results) {
-        expect(res.success).toBe(true);
-      }
-    }
-
-    ws.close();
-  }, 60_000);
-});
-
-// ─── 4. SceneGraph build/hitTest performance ──────────────────────────────────
 
 describe('[Perf] SceneGraph 1 000-node build + hitTest', () => {
   test('builds 1 000 nodes and runs 1 000 hitTests in under 200 ms', () => {
@@ -245,7 +155,7 @@ describe('[Security] Path traversal blocked in server', () => {
   beforeEach(async () => {
     port = nextPort();
     server = new GlideServer(port);
-    server.onEdit(() => {});
+
     await server.start();
   });
 
@@ -255,7 +165,7 @@ describe('[Security] Path traversal blocked in server', () => {
     const ws = await openClient(port);
     try {
       const resp = await sendAndAwait(ws, {
-        type: 'edit',
+        type: 'edit', transactionId: 'invalid-path', expectedDigest: 'unused',
         file: '../../etc/passwd',
         line: 1,
         column: 1,
@@ -273,7 +183,7 @@ describe('[Security] Path traversal blocked in server', () => {
     const ws = await openClient(port);
     try {
       const resp = await sendAndAwait(ws, {
-        type: 'edit',
+        type: 'edit', transactionId: 'invalid-path', expectedDigest: 'unused',
         file: '..\\..\\Windows\\System32\\calc.exe',
         line: 1,
         column: 1,
@@ -406,61 +316,23 @@ describe('[Stress] DeltaQueue: deferred drain order', () => {
 
 // ─── 11. Server: burst 200 rapid edits without hang ─────────────────────────
 
-describe('[Stress] Server: 200 rapid edits burst on single connection', () => {
-  let server: GlideServer;
-  let port: number;
-
-  beforeEach(async () => {
-    port = nextPort();
-    server = new GlideServer(port);
-    server.onEdit(() => {});
-    await server.start();
-  });
-
-  afterEach(async () => { await server.stop(); });
-
-  test('200 edit messages processed — each returns status + HISTORY_UPDATE (400 total msgs)', async () => {
-    const ws = await openClient(port);
-    const N = 200;
-    // Each edit sends 2 messages: 'status' + 'HISTORY_UPDATE'
-    const EXPECTED_MSGS = N * 2;
+describe('[Stress] Concurrent edits from one base revision', () => {
+  test('200 burst requests yield one commit and 199 stale-revision rejections', async () => {
+    const f = await startTestProject(), client = await f.connect();
+    const payloads = Array.from({ length: 200 }, (_, i) => f.edit({ type: 'text', value: 'Change ' + i }));
     const responses: any[] = [];
-
-    const done = new Promise<void>((res) => {
-      ws.on('message', (d) => {
-        responses.push(JSON.parse(d.toString()));
-        if (responses.length >= EXPECTED_MSGS) res();
-      });
-    });
-
-    for (let i = 0; i < N; i++) {
-      ws.send(JSON.stringify({
-        type: 'edit',
-        file: 'src/App.tsx',
-        line: i % 100 + 1,
-        column: 1,
-        timestamp: Date.now() + i,
-        change: { type: 'class', property: 'className', value: `cls-${i}` },
-      }));
-    }
-
-    await Promise.race([done, new Promise<void>((_, rej) => setTimeout(() => rej(new Error('Timeout: burst edits not processed in 5s')), 5000))]);
-
-    const statusMsgs = responses.filter(r => r.type === 'status');
-    const historyMsgs = responses.filter(r => r.type === 'HISTORY_UPDATE');
-
-    // Every edit produces exactly one status + one HISTORY_UPDATE
-    expect(statusMsgs.length).toBe(N);
-    expect(historyMsgs.length).toBe(N);
-    for (const r of statusMsgs) {
-      expect(typeof r.success).toBe('boolean');
-    }
-
-    ws.close();
-  }, 10_000);
+    const complete = new Promise<void>(resolve => client.on('message', data => {
+      const message = JSON.parse(String(data));
+      if (message.type === 'status') responses.push(message);
+      if (responses.length === 200) resolve();
+    }));
+    payloads.forEach(payload => client.send(JSON.stringify(payload)));
+    await complete;
+    expect(responses.filter(item => item.success)).toHaveLength(1);
+    expect(responses.filter(item => item.error?.includes('STALE_DIGEST'))).toHaveLength(199);
+    expect(f.read()).toContain('Change 0');
+  }, 30000);
 });
-
-// ─── 12. Server: 50 clients all get scene_update broadcast ──────────────────
 
 describe('[Stress] Server: broadcast reaches all 50 clients', () => {
   let server: GlideServer;
@@ -469,7 +341,7 @@ describe('[Stress] Server: broadcast reaches all 50 clients', () => {
   beforeEach(async () => {
     port = nextPort();
     server = new GlideServer(port);
-    server.onEdit(() => {});
+
     await server.start();
   });
 
@@ -628,7 +500,7 @@ describe('[Bug] Server: unknown message type', () => {
   beforeEach(async () => {
     port = nextPort();
     server = new GlideServer(port);
-    server.onEdit(() => {});
+
     await server.start();
   });
 

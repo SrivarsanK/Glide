@@ -21,7 +21,9 @@ test('rejects outside files on every structural mutation route before reading or
     const client = await connectLocal(port);
     for (const type of ['insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange']) {
       const response = new Promise<any>(resolve => client.once('message', data => resolve(JSON.parse(String(data)))));
-      client.send(JSON.stringify({ type, file, targetId: `${file}:1:19`, elementType: 'div', selectedIds: [] }));
+      client.send(JSON.stringify({ type, file, transactionId: `escape-${type}`, expectedDigest: 'not-used',
+        targetId: `${file}:1:19`, sourceId: `${file}:1:19`, groupId: `${file}:1:19`, parentId: `${file}:1:19`,
+        elementType: 'rectangle', selectedIds: [`${file}:1:19`] }));
       expect(await response).toMatchObject({ type: 'status', success: false, error: expect.stringContaining('INVALID_PATH') });
       expect(fs.readFileSync(file, 'utf8')).toBe(source);
     }

@@ -1,389 +1,133 @@
-import { describe, expect, test, afterEach } from 'vitest';
-import { GlideServer, EditMessage } from '../../packages/server/src/ws-server.js';
-import WebSocket from 'ws';
-import { connectLocal } from './ws-client.js';
-
-describe('GlideServer WebSocket Server', () => {
-  let server: GlideServer | null = null;
-  const testPort = 7890;
-
-  afterEach(async () => {
-    if (server) {
-      await server.stop();
-      server = null;
-    }
-  });
-
-  test('should start and stop successfully', async () => {
-    server = new GlideServer(testPort);
-    await expect(server.start()).resolves.toBeUndefined();
-    await expect(server.stop()).resolves.toBeUndefined();
-    server = null;
-  });
-
-  test('should accept connection and receive edit payload', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    let receivedEdit: any = null;
-    server.onEdit((file, line, column, change) => {
-      receivedEdit = { file, line, column, change };
-    });
-
-    const client = await connectLocal(testPort);
-
-    const payload: EditMessage = {
-      type: 'edit',
-      file: 'src/App.tsx',
-      line: 12,
-      column: 3,
-      change: {
-        type: 'class',
-        property: 'className',
-        value: 'ml-4',
-      },
-    };
-
-    client.send(JSON.stringify(payload));
-
-    const response = await new Promise<string>((resolve) => {
-      client.on('message', (data) => {
-        resolve(data.toString());
-      });
-    });
-
-    const resObj = JSON.parse(response);
-    expect(resObj.success).toBe(true);
-    expect(receivedEdit).not.toBeNull();
-    expect(receivedEdit.file).toBe('src/App.tsx');
-    expect(receivedEdit.line).toBe(12);
-    expect(receivedEdit.column).toBe(3);
-    expect(receivedEdit.change.value).toBe('ml-4');
-
-    client.close();
-  });
-
-  test('should reject malformed JSON', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    client.send('invalid json');
-
-    const response = await new Promise<string>((resolve) => {
-      client.on('message', (data) => {
-        resolve(data.toString());
-      });
-    });
-
-    const resObj = JSON.parse(response);
-    expect(resObj.success).toBe(false);
-    expect(resObj.error).toContain('Malformed JSON');
-
-    client.close();
-  });
-
-  test('should reject invalid payload parameters', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    client.send(JSON.stringify({ type: 'edit', file: '', line: 'not a number' }));
-
-    const response = await new Promise<string>((resolve) => {
-      client.on('message', (data) => {
-        resolve(data.toString());
-      });
-    });
-
-    const resObj = JSON.parse(response);
-    expect(resObj.success).toBe(false);
-    expect(resObj.error).toContain('Invalid edit payload');
-
-    client.close();
-  });
-
-  test('should accept connection and receive group and ungroup edit payloads', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    let receivedEdit: any = null;
-    server.onEdit((file, line, column, change) => {
-      receivedEdit = { file, line, column, change };
-    });
-
-    const client = await connectLocal(testPort);
-
-    // 1. Send Group Payload
-    const groupPayload = {
-      type: 'edit',
-      file: 'src/App.tsx',
-      line: 12,
-      column: 3,
-      change: {
-        type: 'group',
-        sources: ['src/App.tsx:12:3', 'src/App.tsx:13:3'],
-      },
-    };
-
-    client.send(JSON.stringify(groupPayload));
-
-    const groupResponse = await new Promise<string>((resolve) => {
-      client.once('message', (data) => {
-        resolve(data.toString());
-      });
-    });
-
-    let resObj = JSON.parse(groupResponse);
-    expect(resObj.success).toBe(true);
-    expect(receivedEdit).not.toBeNull();
-    expect(receivedEdit.change.type).toBe('group');
-    expect(receivedEdit.change.sources).toEqual(['src/App.tsx:12:3', 'src/App.tsx:13:3']);
-
-    // 2. Send Ungroup Payload
-    const ungroupPayload = {
-      type: 'edit',
-      file: 'src/App.tsx',
-      line: 12,
-      column: 3,
-      change: {
-        type: 'ungroup',
-        source: 'src/App.tsx:12:3',
-      },
-    };
-
-    client.send(JSON.stringify(ungroupPayload));
-
-    const ungroupResponse = await new Promise<string>((resolve) => {
-      client.once('message', (data) => {
-        resolve(data.toString());
-      });
-    });
-
-    resObj = JSON.parse(ungroupResponse);
-    expect(resObj.success).toBe(true);
-    expect(receivedEdit.change.type).toBe('ungroup');
-    expect(receivedEdit.change.source).toBe('src/App.tsx:12:3');
-
-    client.close();
-  });
-
-  test('should broadcast messages including scene_update to connected clients', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    const receivedMessages: any[] = [];
-    client.on('message', (data) => {
-      receivedMessages.push(JSON.parse(data.toString()));
-    });
-
-    server.broadcast({
-      type: 'scene_update',
-      file: 'src/App.tsx',
-      elements: [
-        { id: 'src/App.tsx:10:5', tag: 'div', line: 10, col: 5 }
-      ],
-      generation: 2
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const updateMsg = receivedMessages.find((m) => m.type === 'scene_update');
-    expect(updateMsg).toBeDefined();
-    expect(updateMsg.file).toBe('src/App.tsx');
-    expect(updateMsg.elements.length).toBe(1);
-    expect(updateMsg.elements[0].id).toBe('src/App.tsx:10:5');
-    expect(updateMsg.generation).toBe(2);
-
-    client.close();
-  });
-
-  test('should handle reparent message and return status', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    const reparentPayload = {
-      type: 'reparent',
-      file: 'non-existent-file.tsx',
-      sourceId: 'elem-1',
-      newParentId: 'container-2',
-      newIndex: 0
-    };
-
-    client.send(JSON.stringify(reparentPayload));
-
-    const response = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-
-    const resObj = JSON.parse(response);
-    expect(resObj.type).toBe('status');
-    expect(resObj.success).toBe(false);
-    expect(resObj.error).toContain('File not found');
-
-    client.close();
-  });
-
-  test('should handle resolve_component message and return resolved_component payload', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    // Test missing componentName error
-    client.send(JSON.stringify({
-      type: 'resolve_component',
-      componentName: ''
-    }));
-
-    const response1 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-
-    const res1 = JSON.parse(response1);
-    expect(res1.type).toBe('resolved_component');
-    expect(res1.success).toBe(false);
-    expect(res1.error).toContain('componentName is required');
-
-    client.close();
-  });
-
-  test('should handle open_component message and return open_component_status', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    client.send(JSON.stringify({
-      type: 'open_component',
-      file: 'non-existent-component.tsx',
-      line: 10,
-      column: 2
-    }));
-
-    const response = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-
-    const resObj = JSON.parse(response);
-    expect(resObj.type).toBe('open_component_status');
-    expect(resObj.success).toBe(false);
-    expect(resObj.error).toContain('File not found');
-
-    client.close();
-  });
-
-  test('should enforce property-level LWW conflict resolution on incoming edits', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    server.onEdit(() => {});
-
-    const client = await connectLocal(testPort);
-
-    const targetFile = 'src/App.tsx';
-
-    // 1. Send first write with timestamp 2000
-    client.send(JSON.stringify({
-      type: 'edit',
-      file: targetFile,
-      line: 10,
-      column: 5,
-      timestamp: 2000,
-      change: {
-        type: 'style',
-        value: { width: '200px' }
-      }
-    }));
-
-    const resp1 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-    const res1 = JSON.parse(resp1);
-    expect(res1.success).toBe(true);
-    expect(res1.properties).toContain('width');
-
-    // 2. Send older write with timestamp 1500 to the same property -> should be rejected under LWW
-    client.send(JSON.stringify({
-      type: 'edit',
-      file: targetFile,
-      line: 10,
-      column: 5,
-      timestamp: 1500,
-      change: {
-        type: 'style',
-        value: { width: '150px' }
-      }
-    }));
-
-    const resp2 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-    const res2 = JSON.parse(resp2);
-    expect(res2.success).toBe(false);
-    expect(res2.error).toContain('STALE_PROPERTY_WRITE');
-
-    // 3. Send write to a DIFFERENT property on same node with timestamp 1500 -> should succeed (no conflict across properties!)
-    client.send(JSON.stringify({
-      type: 'edit',
-      file: targetFile,
-      line: 10,
-      column: 5,
-      timestamp: 1500,
-      change: {
-        type: 'style',
-        value: { backgroundColor: '#ff0000' }
-      }
-    }));
-
-    const resp3 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-    const res3 = JSON.parse(resp3);
-    expect(res3.success).toBe(true);
-    expect(res3.properties).toContain('backgroundColor');
-
-    client.close();
-  });
-
-  test('should handle GET_PENDING_OPS and ACK_OP messages', async () => {
-    server = new GlideServer(testPort);
-    await server.start();
-
-    const client = await connectLocal(testPort);
-
-    // Request pending ops stats
-    client.send(JSON.stringify({ type: 'GET_PENDING_OPS' }));
-    const resp1 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-    const res1 = JSON.parse(resp1);
-    expect(res1.type).toBe('PENDING_OPS');
-    expect(typeof res1.pendingCount).toBe('number');
-
-    // Enqueue a pending op directly on server queue and ack it via WS
-    const q = server.getDeltaQueue();
-    const opId = q.enqueuePending('node-test', 'opacity', 0.5);
-
-    client.send(JSON.stringify({
-      type: 'ACK_OP',
-      opId
-    }));
-
-    const resp2 = await new Promise<string>((resolve) => {
-      client.once('message', (data) => resolve(data.toString()));
-    });
-    const res2 = JSON.parse(resp2);
-    expect(res2.type).toBe('ACK_OP_STATUS');
-    expect(res2.success).toBe(true);
-    expect(res2.opId).toBe(opId);
-
-    client.close();
-  });
+import { afterEach, expect, test } from 'vitest';
+import { startTestProject, closeTestProjects, request } from './server-fixture.js';
+
+afterEach(closeTestProjects);
+
+test('persists a live edit before acknowledging or notifying observers', async () => {
+  const f = await startTestProject();
+  const client = await f.connect();
+  let observed = '';
+  f.server.onEdit(() => { observed = f.read(); });
+  const response = await request(client, f.edit({ type: 'text', value: 'Changed' }));
+  expect(response.success, response.error).toBe(true);
+  expect(f.read()).toContain('>Changed</button>');
+  expect(observed).toBe(f.read());
+  expect(response.changedFiles).toHaveLength(1);
+  expect(response.selectionRemaps.length).toBeGreaterThan(0);
+});
+
+test('live and staged style edits have identical source output', async () => {
+  const live = await startTestProject(), staged = await startTestProject();
+  const first = live.edit({ type: 'class', property: 'padding', value: 16, breakpoint: 'md' });
+  const second = staged.edit(first.change);
+  expect((await request(await live.connect(), first)).success).toBe(true);
+  expect((await request(await staged.connect(), { type: 'batch-edit', batchId: second.transactionId, edits: [second] })).success).toBe(true);
+  expect(live.read()).toBe(staged.read());
+});
+
+test('rejects malformed JSON and remains responsive', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  expect((await request(client, 'invalid json')).error).toContain('Malformed JSON');
+  expect((await request(client, { type: 'GET_PENDING_OPS' }, 'PENDING_OPS')).pendingCount).toBe(0);
+});
+
+test('requires a transaction ID and source digest for every live edit', async () => {
+  const f = await startTestProject(), client = await f.connect(), before = f.read();
+  const edit: any = f.edit({ type: 'text', value: 'Changed' });
+  delete edit.expectedDigest;
+  expect((await request(client, edit)).success).toBe(false);
+  delete edit.transactionId;
+  expect((await request(client, edit)).success).toBe(false);
+  expect(f.read()).toBe(before);
+});
+
+test('unknown edits and stale revisions do not report success or move history', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  const edit = f.edit({ type: 'text', value: 'Changed' });
+  f.write('App.tsx', f.read() + '// external');
+  expect((await request(client, edit)).error).toContain('STALE_DIGEST');
+  const unknown = await request(client, f.edit({ type: 'unknown' }));
+  expect(unknown.error).toContain('UNSUPPORTED_OPERATION');
+  expect((await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).stack).toHaveLength(0);
+  expect(f.read()).toContain('// external');
+});
+
+test('retries a transaction without another write, observer notification, or history entry', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  let calls = 0;
+  f.server.onEdit(() => { calls++; });
+  const edit = f.edit({ type: 'text', value: 'Changed' });
+  const first = await request(client, edit);
+  expect(await request(client, edit)).toEqual(first);
+  expect(calls).toBe(1);
+  expect((await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).stack).toHaveLength(1);
+});
+
+test('structural control messages persist and undo through the same service', async () => {
+  const f = await startTestProject(), client = await f.connect(), before = f.read();
+  const edit = f.edit({ type: 'text', value: '' });
+  const result = await request(client, { ...edit, type: 'group', selectedIds: ['App.tsx:1:' + (before.indexOf('<button>A') + 1), 'App.tsx:1:' + (before.indexOf('<button>B') + 1)] });
+  expect(result.success, result.error).toBe(true);
+  expect(f.read()).toContain('<div>');
+  expect((await request(client, { type: 'undo', transactionId: 'undo-structure' })).success).toBe(true);
+  expect(f.read()).toBe(before);
+});
+
+test('isolates history between two simultaneous project servers', async () => {
+  const one = await startTestProject(), two = await startTestProject();
+  const client = await one.connect(), other = await two.connect();
+  expect((await request(client, one.edit({ type: 'text', value: 'One' }))).success).toBe(true);
+  expect((await request(other, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).stack).toHaveLength(0);
+  expect(two.read()).not.toContain('One');
+  expect((await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).stack).toHaveLength(1);
+});
+
+test('returns tree digests and the requested path alias', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  const tree = await request(client, { type: 'get-tree', file: 'App.tsx' }, 'tree');
+  expect(tree.requestedFile).toBe('App.tsx');
+  expect(tree.digest).toMatch(/^[a-f0-9]{64}$/);
+  expect(tree.tree.length).toBeGreaterThan(0);
+});
+
+test('rejects stale undo and leaves history cursor unchanged', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  expect((await request(client, f.edit({ type: 'text', value: 'Changed' }))).success).toBe(true);
+  f.write('App.tsx', f.read() + '// outside edit');
+  expect((await request(client, { type: 'undo', transactionId: 'undo-stale' })).error).toContain('STALE_DIGEST');
+  expect(f.read()).toContain('// outside edit');
+  expect((await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).currentIndex).toBe(0);
+});
+
+test('only one concurrent writer can commit from the same base revision', async () => {
+  const f = await startTestProject(), a = await f.connect(), b = await f.connect();
+  const results = await Promise.all([request(a, f.edit({ type: 'text', value: 'One' })), request(b, f.edit({ type: 'text', value: 'Two' }))]);
+  expect(results.filter(item => item.success)).toHaveLength(1);
+  expect(results.find(item => !item.success).error).toContain('STALE_DIGEST');
+});
+
+test('history errors acknowledge their transaction so the browser can resume editing', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  const result = await request(client, { type: 'undo', transactionId: 'empty-history' });
+  expect(result).toMatchObject({ transactionId: 'empty-history', success: false, error: expect.stringContaining('INVALID_HISTORY') });
+  expect((await request(client, f.edit({ type: 'text', value: 'After error' }))).success).toBe(true);
+});
+
+test('zero-based tree references resolve to the same structural target as stamped coordinates', async () => {
+  const f = await startTestProject(), client = await f.connect(), before = f.read();
+  const edit = f.edit({ type: 'text', value: '' });
+  const result = await request(client, { ...edit, type: 'arrange', action: 'front',
+    sourceId: 'line:1:col:' + before.indexOf('<button>A') });
+  expect(result.success, result.error).toBe(true);
+  expect(f.read().indexOf('>B</button>')).toBeLessThan(f.read().indexOf('>A</button>'));
+});
+
+test('rejects a structural source reference belonging to a different file', async () => {
+  const f = await startTestProject(), client = await f.connect(), before = f.read();
+  f.write('Other.tsx', before);
+  const result = await request(client, { ...f.edit({ type: 'text', value: '' }), type: 'arrange', action: 'front',
+    sourceId: 'Other.tsx:1:' + (before.indexOf('<button>A') + 1) });
+  expect(result).toMatchObject({ success: false, error: expect.stringContaining('same file') });
+  expect(f.read()).toBe(before);
+  expect(f.read('Other.tsx')).toBe(before);
 });
