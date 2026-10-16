@@ -4,6 +4,7 @@
 
 export { findJSXElementAt, updateClassName, updateJSXText, updateClassString, updateJSXStyleProp, computeNodeHash } from './writer.js';
 export { transformJSXBatch } from './writer.js';
+export { inspectJSXProps } from './props.js';
 export type { JSXMutation } from './writer.js';
 export { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement, parseJSXElements } from './reorder.js';
 export type { JSXElementRecord } from './reorder.js';

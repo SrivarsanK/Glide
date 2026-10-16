@@ -1,6 +1,7 @@
 import { GlideConfig, DEFAULT_CONFIG } from '@srivarsank/core';
 import { createSourceMapping } from './source-mapping.js';
 import { createMutationTransport } from './mutation-transport.js';
+import { createSourceProps } from './source-props.js';
 
 export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
@@ -1761,6 +1762,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             </div>
 
             <div id="props-content" style="display:none;">
+              <div class="props-section">
+                <div class="props-section-title">Authored props</div>
+                <div id="source-props" style="font-size:11px;line-height:1.5;overflow-wrap:anywhere;"></div>
+              </div>
 
                <!-- Alignment Toolbar (Figma style) -->
                <div class="props-section" style="padding: 8px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.08);">
@@ -2204,6 +2209,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const sourceMapping = (${createSourceMapping.toString()})();
           let currentFile = null;
           let selectedElement = null;
+          const sourceProps = (${createSourceProps.toString()})({
+            container: document.getElementById('source-props'),
+            selected: () => selectedElement?.source || null,
+            parse: source => sourceMapping.parse(source, currentFile),
+            digest: file => fileDigests.get(normalizePathSlash(file)),
+            send: message => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); },
+            edit: (source, change, digest) => {
+              if (stagingModeActive) { stageEdit(source, change); return; }
+              const parsed = parseSource(source);
+              if (parsed && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest: digest, change }));
+            }
+          });
           let selectedRect = null;
           let selectedComputedStyles = null;
           const componentRootSources = new Set();
@@ -2376,6 +2393,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             socket.addEventListener('message', (event) => {
               try {
                 const message = JSON.parse(event.data);
+                sourceProps.accept(message);
                 if (message.type === 'authenticated') {
                   sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
@@ -2437,6 +2455,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     });
                   }
                 } else if (message.type === 'scene_update') {
+                  selectedElement = null;
+                  selectedSources = [];
+                  showNoSelection();
                   if (typeof message.generation === 'number') {
                     currentGeneration = message.generation;
                   }
@@ -2468,6 +2489,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                   if (message.success) {
                     applyTransactionMappings(message);
+                    if (selectedElement) sourceProps.request();
                     if (typeof message.generation === 'number') {
                       currentGeneration = message.generation;
                     }
@@ -5221,6 +5243,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               // Click → select (with multi-select modifier)
               item.addEventListener('click', (e) => {
                 if (e.target.closest('.layer-actions') || e.target.closest('.layer-caret')) return;
+                if (isComponent) {
+                  selectedElement = { source: nodeSource };
+                  selectedSources = [nodeSource];
+                  showPropsPanel(node.name || node.tagName);
+                  return;
+                }
                 const isShift = e.shiftKey || e.ctrlKey || e.metaKey;
                 if (!isShift) {
                   document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
@@ -5562,6 +5590,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function showPropsPanel(tagName) {
+            sourceProps.request();
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';

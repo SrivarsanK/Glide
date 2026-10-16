@@ -6,7 +6,7 @@ import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { parseJSXElements } from '@srivarsank/ast-writer';
+import { parseJSXElements, inspectJSXProps } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { HistoryStore } from './history-manager.js';
@@ -975,6 +975,21 @@ export class GlideServer {
                     tree: null,
                     error: `Invalid or unaccessible file: ${requestedFile}`
                   }));
+                }
+                return;
+              }
+
+              if (message.type === 'inspect-props') {
+                try {
+                  const file = this.projectPaths.sourceFile(message.file);
+                  if (!/\.[jt]sx?$/.test(file)) throw new Error('UNSUPPORTED_ADAPTER: Property editing currently requires JSX or TSX.');
+                  const code = fs.readFileSync(file, 'utf8');
+                  if (!message.expectedDigest || contentDigest(code) !== message.expectedDigest) throw new Error('STALE_DIGEST: Reload the source tree and select the authored layer again.');
+                  ws.send(JSON.stringify({ type: 'source-props', requestId: message.requestId, file: message.file,
+                    line: message.line, column: message.column, digest: contentDigest(code), success: true,
+                    ...inspectJSXProps(code, message.line, message.column) }));
+                } catch (error: any) {
+                  ws.send(JSON.stringify({ type: 'source-props', requestId: message.requestId, success: false, error: error.message }));
                 }
                 return;
               }

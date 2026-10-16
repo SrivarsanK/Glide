@@ -8,6 +8,7 @@ import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
+import { mutateProp } from './props.js';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -326,7 +327,7 @@ export interface JSXMutation {
   line: number;
   column: number;
   hash?: string;
-  change: StructuralChange & { property?: string; value?: any; breakpoint?: string; pseudoState?: string };
+  change: StructuralChange & { property?: string; value?: any; breakpoint?: string; pseudoState?: string; scope?: string };
 }
 
 function jsxNodes(ast: any): t.JSXElement[] {
@@ -371,6 +372,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
       throw new Error('UNSUPPORTED_OPERATION: This style scope needs an authored stylesheet.');
     }
     switch (change.type) {
+      case 'prop': mutateProp(ast, targets[index], change.property, change.value, change.scope); break;
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
         mutateClass(targets[index], change.property, change.value, change.breakpoint);

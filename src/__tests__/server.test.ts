@@ -131,3 +131,17 @@ test('rejects a structural source reference belonging to a different file', asyn
   expect(f.read()).toBe(before);
   expect(f.read('Other.tsx')).toBe(before);
 });
+
+test('inspects and persists literal call-site props with revision and scope checks', async () => {
+  const before = 'const App = () => <main><Button title="First" disabled /><Button title="Second" /></main>;';
+  const f = await startTestProject(before), client = await f.connect();
+  const edit = f.edit({ type: 'prop', property: 'title', value: 'Changed', scope: 'call-site' }, '<Button');
+  const info = await request(client, { ...edit, type: 'inspect-props', requestId: 12 }, 'source-props');
+  expect(info).toMatchObject({ success: true, scope: 'call-site', requestId: 12 });
+  expect(info.props).toContainEqual(expect.objectContaining({ name: 'disabled', value: true }));
+  expect((await request(client, edit)).success).toBe(true);
+  expect(f.read()).toContain('<Button title="Second" />');
+  expect((await request(client, { ...edit, type: 'inspect-props', requestId: 13 }, 'source-props')).error).toContain('STALE_DIGEST');
+  expect((await request(client, { type: 'undo', transactionId: 'undo-prop' })).success).toBe(true);
+  expect(f.read()).toBe(before);
+});
