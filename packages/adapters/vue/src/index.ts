@@ -17,7 +17,8 @@ function target(code: string, id: string): any {
     for (const child of node.children || []) walk(child);
   }
   walk(parsed.descriptor.template.ast);
-  if (matches.length !== 1) throw new Error('INVALID_TARGET: Select exactly one authored Vue template node.');
+  if (matches.length > 1) throw new Error('INVALID_TARGET: Select exactly one authored Vue template node.');
+  if (matches.length === 0) return null;
   return matches[0];
 }
 function escape(value: string) {
@@ -30,6 +31,7 @@ function replace(code: string, start: number, end: number, text: string) {
 }
 function attribute(code: string, id: string, name: string, value: string | Record<string, string>) {
   const node = target(code, id);
+  if (node === null) return code;
   if (node.props.some((p: any) => p.type === 7 && p.name === 'bind'
     && (!p.arg || !p.arg.isStatic || p.arg.content === name))) throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Vue binding in source.');
   const attrs = node.props.filter((p: any) => p.type === 6 && p.name === name);
@@ -44,6 +46,7 @@ export function updateVueSFCClass(code: string, id: string, classes: string): st
 export function updateVueSFCStyle(code: string, id: string, styles: Record<string, string>): string { return attribute(code, id, 'style', styles); }
 export function updateVueSFCText(code: string, id: string, text: string): string {
   const node = target(code, id);
+  if (node === null) return code;
   if (node.props.some((p: any) => p.type === 7 && ['text', 'html', 'pre'].includes(p.name))) throw new Error('UNSUPPORTED_OPERATION: Text is controlled by a directive.');
   const literals = node.children.filter((child: any) => child.type === 2 && child.content.trim());
   if (literals.length !== 1) throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment.');
