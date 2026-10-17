@@ -2,6 +2,8 @@ import { GlideConfig, DEFAULT_CONFIG, trustedWindowMessage } from '@srivarsank/c
 import { createSourceMapping } from './source-mapping.js';
 import { createMutationTransport } from './mutation-transport.js';
 import { createSourceProps } from './source-props.js';
+import { createMutationScope } from './mutation-scope.js';
+import { createSelectionFeedback } from './selection-feedback.js';
 
 export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
@@ -10,9 +12,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
       <head>
         <meta charset="UTF-8">
         <title>Glide — Code-Native Visual Designer</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-        <script src="https://unpkg.com/lucide@latest"></script>
+        <script src="/__glide_assets__/lucide.js"></script>
         <style>
+          ${[300, 400, 500, 600, 700].map(weight => `@font-face {
+            font-family: 'Inter'; font-style: normal; font-weight: ${weight}; font-display: swap;
+            src: url('/__glide_assets__/inter-${weight}.woff2') format('woff2');
+          }`).join('\n')}
           :root {
             /* FIGMA CUSTOM THEME DESIGN TOKENS */
             --bg-canvas: ${config.editorTheme.bgCanvas}; /* OBSERVED */
@@ -1677,6 +1682,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           <!-- RIGHT SIDEBAR — PROPERTIES -->
           <div class="sidebar sidebar-right" id="glide-properties">
+            <div id="source-mapping-error" role="alert" hidden style="padding: 12px; color: #fecaca; background: #451a1a; font-size: 12px;"></div>
+            <div style="display: flex; gap: 6px; padding: 8px;">
+              <select id="edit-breakpoint" aria-label="Edit breakpoint" title="Tailwind breakpoint">
+                <option value="">Base</option><option>sm</option><option>md</option><option>lg</option><option>xl</option><option>2xl</option>
+              </select>
+              <select id="edit-pseudo-state" aria-label="Edit state" title="Tailwind state">
+                <option value="">Default</option><option>hover</option><option>focus</option><option>focus-visible</option><option>active</option><option>disabled</option>
+              </select>
+              <select id="edit-representation" aria-label="Style format">
+                <option value="">Auto</option><option value="tailwind">Tailwind</option><option value="inline">Inline</option>
+              </select>
+            </div>
             <div class="sidebar-header" style="display: flex; align-items: center; justify-content: space-between;">
               <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
                 <span>Properties</span>
@@ -1787,7 +1804,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                   <div class="props-subheader" style="margin-bottom: 0;">Position</div>
-                  <button id="btn-bake-position" title="Graduate drag position from glide-positions.json to source code inline style" style="background: rgba(13,153,255,0.15); border: 1px solid rgba(13,153,255,0.4); color: #0d99ff; font-size: 10px; border-radius: 3px; padding: 2px 6px; cursor: pointer;">⚡ Bake to Source</button>
                 </div>
                 <div class="props-grid" style="margin-bottom: 6px;">
                   <div class="props-field">
@@ -2206,6 +2222,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           let socket = null;
           let sourceTransport = null;
+          const selectionFeedback = (${createSelectionFeedback.toString()})(
+            document.getElementById('source-mapping-error'), document.getElementById('props-content'));
+          const mutationScope = (${createMutationScope.toString()})(() => ({
+            breakpoint: document.getElementById('edit-breakpoint').value,
+            pseudoState: document.getElementById('edit-pseudo-state').value,
+            authoringRepresentation: document.getElementById('edit-representation').value || undefined
+          }));
           const sourceMapping = (${createSourceMapping.toString()})();
           let currentFile = null;
           let selectedElement = null;
@@ -2364,7 +2387,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               },
               mapping: sourceMapping
             });
-            socket.send = data => sourceTransport.send(data);
+            socket.send = data => {
+              const message = JSON.parse(data);
+              if (message.type === 'edit') message.change = mutationScope.capture(message.change);
+              sourceTransport.send(JSON.stringify(message));
+            };
             const dot = document.getElementById('ws-dot');
             const statusEl = document.getElementById('ws-status');
 
@@ -2672,6 +2699,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function stageEdit(source, change) {
+            change = mutationScope.capture(change);
             if (pendingBatch) {
               showToast('info', 'Wait for the current source changes to finish.');
               return;
@@ -2691,21 +2719,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               stagedEdits.set(source, new Map());
             }
             const propMap = stagedEdits.get(source);
+            mutationScope.entries(change).forEach(entry => {
+              propMap.set(entry.key, { change: entry.change, parsed, timestamp: Date.now() });
+            });
 
             if (change.type === 'class' && change.property) {
-              propMap.set(change.property, { change, parsed, timestamp: Date.now() });
               previewStyleInIframe(source, { [change.property]: change.value });
-            } else if (change.type === 'multi-class' && typeof change.value === 'object') {
-              for (const [p, v] of Object.entries(change.value)) {
-                propMap.set(p, {
-                  change: { type: 'class', property: p, value: v },
-                  parsed,
-                  timestamp: Date.now()
-                });
-              }
+            } else if (['multi-class', 'style', 'layout'].includes(change.type) && typeof change.value === 'object') {
               previewStyleInIframe(source, change.value);
             } else if (change.type === 'text') {
-              propMap.set('__text__', { change, parsed, timestamp: Date.now() });
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({
@@ -2715,8 +2737,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 }, '*');
               }
             } else {
-              const key = change.property || change.type || 'style';
-              propMap.set(key, { change, parsed, timestamp: Date.now() });
               if (change.property) {
                 previewStyleInIframe(source, { [change.property]: change.value });
               }
@@ -2798,6 +2818,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function sendEdit(change) {
             if (!selectedElement) return;
+            change = mutationScope.capture(change);
 
             // Intercept style & class edits when Staged Mode is enabled
             if (stagingModeActive && change.type !== 'position' && change.type !== 'bake-position') {
@@ -3783,33 +3804,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 const movedDx = resizeDir.includes('l') ? (startRect.width - resizeFinalW) : 0;
                 const movedDy = resizeDir.includes('t') ? (startRect.height - resizeFinalH) : 0;
 
-                if ((movedDx !== 0 || movedDy !== 0) && selectedElement) {
-                  const newLeft = resizeInitialLeft - movedDx;
-                  const newTop = resizeInitialTop - movedDy;
-                  sendPositionChange(selectedElement.source, {
-                    position: 'relative',
-                    left: Math.round(newLeft) + 'px',
-                    top: Math.round(newTop) + 'px'
-                  });
-                }
-
-                // Commit size to source via style prop (only if changed)
+                // Size and leading-edge offsets form one undoable source mutation.
                 const sizeChanged = Math.abs(resizeFinalW - startRect.width) > 1 || Math.abs(resizeFinalH - startRect.height) > 1;
-                if (sizeChanged && socket && socket.readyState === WebSocket.OPEN) {
-                  const resizeParsed = parseSource(selectedElement.source);
-                  if (resizeParsed) {
-                    const targetFile = resizeParsed.file || currentFile;
-                    socket.send(JSON.stringify({
-                      type: 'edit',
-                      file: targetFile,
-                      line: resizeParsed.line,
-                      column: resizeParsed.column,
-                      hash: resizeParsed.hash,
-                      generation: currentGeneration,
-                      viewportWidth: iframeWidth.current,
-                      change: { type: 'style', value: { width: resizeFinalW + 'px', height: resizeFinalH + 'px' } }
-                    }));
-                  }
+                if (sizeChanged) {
+                  const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
+                  if (movedDx) styles.left = Math.round(resizeInitialLeft + movedDx) + 'px';
+                  if (movedDy) styles.top = Math.round(resizeInitialTop + movedDy) + 'px';
+                  sendPositionChange(selectedElement.source, styles);
                 }
 
                 // ── Immediately update local rects so canvas handles redraw
@@ -4080,6 +4081,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   e.preventDefault();
                   isResizing = true;
                   const handleDir = pos.dir;
+                  resizeDir = handleDir;
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
@@ -4138,8 +4140,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     if (blockerEl) blockerEl.style.display = 'none';
 
                     if (selectedElement && resizeFinalW && resizeFinalH) {
-                      sendEdit({ type: 'class', property: 'width', value: resizeFinalW + 'px' });
-                      sendEdit({ type: 'class', property: 'height', value: resizeFinalH + 'px' });
+                      const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
+                      if (handleDir.includes('l')) styles.left = Math.round(resizeInitialLeft + startRect.width - resizeFinalW) + 'px';
+                      if (handleDir.includes('t')) styles.top = Math.round(resizeInitialTop + startRect.height - resizeFinalH) + 'px';
+                      sendPositionChange(selectedElement.source, styles);
                     }
                   }
 
@@ -4809,10 +4813,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
               if (!didReparent) {
                 sendPositionChange(data.source, {
-                  position: 'relative',
                   left: data.dx + 'px',
                   top: data.dy + 'px'
-                });
+                }, data.layoutPosition);
               }
 
               if (data.rect) {
@@ -5588,6 +5591,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // PROPERTIES PANEL
           // ═══════════════════════════════════════════════════════════════
           function showNoSelection() {
+            selectionFeedback(false, false);
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
@@ -5596,6 +5600,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function showPropsPanel(tagName) {
+            selectionFeedback(!!selectedElement, !!(selectedElement && parseSource(selectedElement.source)));
             sourceProps.request();
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
@@ -6457,6 +6462,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // Helper: send style change by source
           function sendStyleChange(source, property, value) {
+            if (stagingModeActive) { stageEdit(source, { type: 'class', property, value }); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
@@ -6658,6 +6664,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           let _styleTimer = null;
           function sendStylePropsChange(source, styles) {
+            const change = mutationScope.capture({ type: 'style', value: styles });
+            if (stagingModeActive) { stageEdit(source, change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
@@ -6680,7 +6688,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 hash: parsed.hash,
                 generation: currentGeneration,
                 viewportWidth: iframeWidth.current,
-                change: { type: 'style', value: capturedStyles }
+                change
               }));
             }, 150);
           }
@@ -6706,7 +6714,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }));
           }
 
-          function sendPositionChange(source, styles) {
+          function sendPositionChange(source, styles, layoutPosition) {
+            const change = mutationScope.capture({ type: 'layout', value: styles,
+              layoutPosition: layoutPosition || (selectedComputedStyles && selectedComputedStyles.position) || 'static' });
+            if (stagingModeActive) { stageEdit(source, change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
@@ -6720,29 +6731,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               hash: parsed.hash,
               generation: currentGeneration,
               viewportWidth: iframeWidth.current,
-              change: { type: 'position', value: styles }
+              change
             }));
           }
 
-          function bakePosition() {
-            if (!selectedElement || !socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(selectedElement.source);
-            if (!parsed) return;
-            const targetFile = parsed.file || currentFile;
-            socket.send(JSON.stringify({
-              type: 'edit',
-              file: targetFile,
-              line: parsed.line,
-              column: parsed.column,
-              hash: parsed.hash,
-              generation: currentGeneration,
-              viewportWidth: iframeWidth.current,
-              change: { type: 'bake-position' }
-            }));
-            showToast('info', 'Baking position to source code...');
-          }
-
-          document.getElementById('btn-bake-position')?.addEventListener('click', bakePosition);
           document.getElementById('btn-jump-definition')?.addEventListener('click', () => {
             const btn = document.getElementById('btn-jump-definition');
             const comp = btn?.dataset.component;

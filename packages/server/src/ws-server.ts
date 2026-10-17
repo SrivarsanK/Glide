@@ -15,6 +15,8 @@ import { MutationService, contentDigest, type MutationOperation } from './mutati
 import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 import { finalizeEditorChanges } from './editor-git.js';
+import { getEditorAsset } from './editor-assets.js';
+import type { MutationScope } from '@srivarsank/core';
 
 const execFileAsync = promisify(execFile);
 
@@ -734,8 +736,9 @@ function findGitRoot(startPath: string): string {
 let activeProjectGitRoot: string = process.cwd();
 
 
-export interface EditChange {
-  type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'group' | 'ungroup';
+export interface EditChange extends MutationScope {
+  type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'layout' | 'group' | 'ungroup';
+  layoutPosition?: string;
   property?: string;
   value?: any;
   sources?: string[];
@@ -826,6 +829,20 @@ export class GlideServer {
           }
           const url = req.url || '/';
           const pathname = new URL(url, 'http://localhost').pathname;
+          if (pathname.startsWith('/__glide_assets__/')) {
+            try {
+              const asset = getEditorAsset(pathname);
+              res.writeHead(asset ? 200 : 404, {
+                'Content-Type': asset?.contentType || 'text/plain',
+                'X-Content-Type-Options': 'nosniff',
+              });
+              res.end(asset?.body || 'Editor asset not found.');
+            } catch {
+              res.writeHead(500);
+              res.end('Editor asset is missing. Reinstall Glide.');
+            }
+            return;
+          }
 
           // ── Editor shell: only served at root '/' or '/index.html' ──
           if (pathname === '/' || pathname === '/index.html') {
@@ -1367,7 +1384,11 @@ export class GlideServer {
     const operations: MutationOperation[] = edits.map((item, index) => ({
       operationId: item?.operationId || `${transactionId}:${index}`, filePath: item?.file,
       expectedDigest: item?.expectedDigest, line: item?.line, column: item?.column,
-      hash: item?.hash, change: item?.change,
+      hash: item?.hash, breakpoint: item?.breakpoint, pseudoState: item?.pseudoState,
+      authoringRepresentation: item?.authoringRepresentation,
+      change: { ...item?.change, breakpoint: item?.breakpoint ?? item?.change?.breakpoint,
+        pseudoState: item?.pseudoState ?? item?.change?.pseudoState,
+        authoringRepresentation: item?.authoringRepresentation ?? item?.change?.authoringRepresentation },
     }));
     const result = await this.mutations.execute(transactionId, operations);
     if (result.success && !this.notifiedTransactions.has(transactionId)) {

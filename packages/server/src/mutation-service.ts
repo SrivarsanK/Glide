@@ -10,7 +10,7 @@ export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
-export interface MutationOperation {
+export interface MutationOperation extends Pick<JSXMutation, 'breakpoint' | 'pseudoState' | 'authoringRepresentation'> {
   operationId: string;
   filePath: string;
   expectedDigest: string;
