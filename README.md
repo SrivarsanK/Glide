@@ -321,6 +321,11 @@ Glide/
 │   ├── ast-writer/     # Recast and Babel source file codemods
 │   ├── adapters/       # Framework adapters (React, Vue, Svelte, Astro, HTML)
 │   └── vite-plugin/    # Source stamping plugin (glideSourceStamping)
+├── docs/               # Architecture specs, design docs, and guides
+│   ├── reports/        # Audit, completion, and remaining work reports
+│   └── INSTALL.md      # Detailed manual & agent installation guide
+├── src/                # Package root entrypoints & version resolution
+│   └── __tests__/      # Centralized Vitest workspace test suite (44 files)
 ├── skills/             # Bundled AI agent skills
 │   ├── glide/
 │   ├── glide-component-segregator/
@@ -336,6 +341,7 @@ Contributions are welcome.
 
 - Review the [Contributing Guide](CONTRIBUTING.md) for local architecture details and testing procedures.
 - We follow conventional commit conventions for atomic commits.
+- Check [docs/](docs/) for architecture guides, specs, and [audit reports](docs/reports/GLIDE_AUDIT_REPORT.md).
 - Check [skills/glide/references/](skills/glide/references/) for background on AST codemods, framework adapters, and spatial scene graph design.
 
 ---

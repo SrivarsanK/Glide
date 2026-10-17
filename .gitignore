@@ -138,9 +138,9 @@ glide-components.json
 .firecrawl/
 .agent-grid/
 .claude/
-docs/
+docs/*.docx
+docs/unpacked_docx/
 fix/
 ui/
 logo/
 test-site/
-figma-v0-architectural-framework.md
