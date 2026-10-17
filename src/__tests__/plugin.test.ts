@@ -121,7 +121,7 @@ describe('glideSourceStamping Vite Plugin', () => {
     }
   });
 
-  test('handles null entries in glide-positions.json during transformIndexHtml', () => {
+  test('never injects legacy position sidecars into the development app', () => {
     const plugin = glideSourceStamping();
 
     const mockRoot = path.resolve(__dirname, '../../tmp-test-root');
@@ -144,9 +144,9 @@ describe('glideSourceStamping Vite Plugin', () => {
         const html = '<html><head></head><body></body></html>';
         const result = (plugin.transformIndexHtml as any)(html);
 
-        expect(result).toContain('src/App.tsx:10:5');
-        expect(result).toContain('position:relative!important');
-        expect(result).toContain('left:10px!important');
+        expect(result).not.toContain('src/App.tsx:10:5');
+        expect(result).not.toContain('__glide_positions__');
+        expect(result).not.toContain('glide:positions-updated');
         expect(result).not.toContain('src/App.tsx:20:5');
       }
     } finally {

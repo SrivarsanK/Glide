@@ -9,6 +9,8 @@ import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
 import { mutateProp } from './props.js';
+import { layoutStyles } from './layout.js';
+import { mutationVariants, splitClassVariants, type MutationScope } from '@srivarsank/core';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -63,7 +65,7 @@ export function findJSXElementAt(
 }
 
 function matchesProperty(c: string, property: string): boolean {
-  const parts = c.split(':');
+  const parts = splitClassVariants(c);
   const name = parts[parts.length - 1];
 
   switch (property) {
@@ -77,6 +79,8 @@ function matchesProperty(c: string, property: string): boolean {
     case 'paddingTop': return name.startsWith('pt-');
     case 'paddingBottom': return name.startsWith('pb-');
     case 'padding': return name.split('-')[0] === 'p';
+    case 'paddingInline': return name.startsWith('px-');
+    case 'paddingBlock': return name.startsWith('py-');
     case 'width': return name.startsWith('w-');
     case 'height': return name.startsWith('h-');
     case 'gap': return name.startsWith('gap-') && !name.startsWith('gap-y') && !name.startsWith('gap-x');
@@ -161,6 +165,8 @@ function getNewClass(property: string, value: any): string {
         case 'paddingTop': prefix = 'pt-'; break;
         case 'paddingBottom': prefix = 'pb-'; break;
         case 'padding': prefix = 'p-'; break;
+        case 'paddingInline': prefix = 'px-'; break;
+        case 'paddingBlock': prefix = 'py-'; break;
         case 'width': prefix = 'w-'; break;
         case 'height': prefix = 'h-'; break;
         case 'gap': prefix = 'gap-'; break;
@@ -183,7 +189,7 @@ function getNewClass(property: string, value: any): string {
         }
 
         // Check for standard multiples of 4 for margins/paddings
-        if (['marginLeft','marginRight','marginTop','marginBottom','margin','paddingLeft','paddingRight','paddingTop','paddingBottom','padding'].includes(property)) {
+        if (['marginLeft','marginRight','marginTop','marginBottom','margin','paddingLeft','paddingRight','paddingTop','paddingBottom','padding','paddingInline','paddingBlock'].includes(property)) {
           const num = Number(val);
           if (!isNaN(num) && num % 4 === 0 && num > 0 && num <= 384) {
             return `${prefix}${num / 4}`;
@@ -238,11 +244,20 @@ export function updateClassString(
   existingClasses: string,
   property: string,
   value: any,
-  breakpoint?: string
+  breakpoint?: string,
+  pseudoState?: string
 ): string {
+  const variants = mutationVariants({ breakpoint, pseudoState });
   if (property === 'className') {
+    if (variants.length) throw new Error('UNSUPPORTED_SCOPE: Replace individual properties in a scoped edit.');
     return value;
   }
+
+  const classes = existingClasses.split(/\s+/).filter(Boolean);
+  const inScope = (token: string) => {
+    const prefixes = splitClassVariants(token).slice(0, -1);
+    return prefixes.length === variants.length && variants.every(variant => prefixes.includes(variant));
+  };
 
   let finalValue = value;
   const valStr = String(value).trim();
@@ -250,37 +265,17 @@ export function updateClassString(
     const isNegative = valStr.startsWith('-=');
     const change = Number(valStr.slice(2).replace('px', ''));
     if (!isNaN(change)) {
-      const current = getExistingValue(existingClasses, property);
+      const current = getExistingValue(classes.filter(inScope).join(' '), property);
       finalValue = isNegative ? (current - change) : (current + change);
     }
   }
 
-  const classes = existingClasses.split(/\s+/).filter(Boolean);
   const newClass = getNewClass(property, finalValue);
   if (!newClass) return existingClasses;
 
-  if (breakpoint) {
-    const breakpointNewClass = `${breakpoint}:${newClass}`;
-    const filtered = classes.filter(c => {
-      const parts = c.split(':');
-      if (parts.length > 1 && parts[0] === breakpoint) {
-        return !matchesProperty(c, property);
-      }
-      return true;
-    });
-    filtered.push(breakpointNewClass);
-    return filtered.join(' ');
-  } else {
-    const filtered = classes.filter(c => {
-      const parts = c.split(':');
-      if (parts.length === 1) {
-        return !matchesProperty(c, property);
-      }
-      return true;
-    });
-    filtered.push(newClass);
-    return filtered.join(' ');
-  }
+  const filtered = classes.filter(c => !inScope(c) || !matchesProperty(c, property));
+  filtered.push([...variants, newClass].join(':'));
+  return filtered.join(' ');
 }
 
 function getStaticAttribute(opening: t.JSXOpeningElement, name: string): t.JSXAttribute | undefined {
@@ -304,13 +299,16 @@ function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
   throw new Error('UNSUPPORTED_OPERATION: className must be a static string literal.');
 }
 
-function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string): string {
+function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string): string {
+  if (property !== 'className' && !getNewClass(property, value)) {
+    throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
+  }
   const openingEl = node.openingElement;
   const classAttr = getStaticAttribute(openingEl, 'className');
   const literal = classLiteral(classAttr);
   const existingVal = literal?.value ?? '';
 
-  const newVal = updateClassString(existingVal, property, value, breakpoint);
+  const newVal = updateClassString(existingVal, property, value, breakpoint, pseudoState);
 
   // Change only the node selected by its source location.
   if (literal) {
@@ -323,11 +321,11 @@ function mutateClass(node: t.JSXElement, property: string, value: any, breakpoin
   return newVal;
 }
 
-export interface JSXMutation {
+export interface JSXMutation extends MutationScope {
   line: number;
   column: number;
   hash?: string;
-  change: StructuralChange & { property?: string; value?: any; breakpoint?: string; pseudoState?: string; scope?: string };
+  change: StructuralChange & MutationScope & { property?: string; value?: any; scope?: string; layoutPosition?: string };
 }
 
 function jsxNodes(ast: any): t.JSXElement[] {
@@ -367,17 +365,36 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
     return nodes[originalNodes.indexOf(node)];
   });
   operations.forEach((op, index) => {
-    const change = op.change;
-    if (!change || change.pseudoState || (change.breakpoint && !['class', 'multi-class'].includes(change.type))) {
+    const change = { ...op.change, breakpoint: op.breakpoint ?? op.change.breakpoint,
+      pseudoState: op.pseudoState ?? op.change.pseudoState,
+      authoringRepresentation: op.authoringRepresentation ?? op.change.authoringRepresentation };
+    const variants = mutationVariants(change);
+    if (variants.length && !['class', 'multi-class', 'style', 'layout'].includes(change.type)) {
       throw new Error('UNSUPPORTED_OPERATION: This style scope needs an authored stylesheet.');
+    }
+    if (variants.length && change.type === 'style' && change.authoringRepresentation !== 'tailwind') {
+      throw new Error('UNSUPPORTED_OPERATION: Scoped styles require Tailwind authoring.');
     }
     switch (change.type) {
       case 'prop': mutateProp(ast, targets[index], change.property, change.value, change.scope); break;
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
-        mutateClass(targets[index], change.property, change.value, change.breakpoint);
+        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value });
+        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState);
         break;
-      case 'style': mutateStyle(targets[index], change.value); break;
+      case 'style':
+        if (change.authoringRepresentation === 'tailwind') {
+          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
+        } else mutateStyle(targets[index], change.value);
+        break;
+      case 'layout': {
+        const styles = layoutStyles(change.value, change.layoutPosition);
+        if (variants.length || change.authoringRepresentation === 'tailwind') {
+          if (change.authoringRepresentation !== 'tailwind') throw new Error('UNSUPPORTED_SCOPE: Scoped layout needs Tailwind authoring.');
+          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
+        } else mutateStyle(targets[index], styles);
+        break;
+      }
       case 'position':
         if (!change.value || change.value.position !== 'relative' || Object.keys(change.value).some(key => !['position', 'left', 'top'].includes(key))) {
           throw new Error('UNSUPPORTED_OPERATION: Only relative flow-preserving offsets are supported.');
@@ -386,7 +403,8 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
         break;
       case 'multi-class':
         if (!change.value || typeof change.value !== 'object' || Array.isArray(change.value)) throw new Error('INVALID_OPERATION: Expected class properties.');
-        for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint);
+        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], change.value);
+        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
         break;
       case 'text':
         if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');

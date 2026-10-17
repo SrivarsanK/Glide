@@ -459,6 +459,7 @@ export function buildBridgeScript(
   var initialMarginTop = 0;
   var initialLeft = 0;
   var initialTop = 0;
+  var initialPosition = 'static';
   var currentDx = 0;
   var currentDy = 0;
   var rafId = null;
@@ -992,6 +993,7 @@ export function buildBridgeScript(
       }
 
       var cs = window.getComputedStyle(selectTarget);
+      initialPosition = cs.position;
       initialMarginLeft = parseInt(cs.marginLeft) || 0;
       initialMarginTop = parseInt(cs.marginTop) || 0;
       var styleLeft = cs.left;
@@ -1147,7 +1149,7 @@ export function buildBridgeScript(
       // Clear guide lines on drag end.
       window.parent.postMessage({ type: 'glide:snap-guides-clear' }, '*');
 
-      dragEl.style.setProperty('position', 'relative', 'important');
+      dragEl.style.setProperty('position', initialPosition === 'static' ? 'relative' : initialPosition, 'important');
       dragEl.style.setProperty('left', finalLeft + 'px', 'important');
       dragEl.style.setProperty('top', finalTop + 'px', 'important');
       dragEl.style.transform = '';
@@ -1166,6 +1168,7 @@ export function buildBridgeScript(
 
       window.parent.postMessage({
         type: 'glide:element-drag-end',
+        layoutPosition: initialPosition,
         source: dragEl.getAttribute('${sourceAttr}'),
         dx: finalLeft,
         dy: finalTop,
@@ -1790,36 +1793,6 @@ export function glideSourceStamping(): Plugin {
     DEFAULT_CONFIG.snapThresholdPx
   );
 
-  /**
-   * Build CSS rules from glide-positions.json for the current root.
-   * Each entry maps a data-gl-source value to position styles.
-   */
-  function buildPositionCSS(sourceAttr = glideConfig.sourceAttribute): string {
-    const posFile = path.join(rootDir, 'glide-positions.json');
-    if (!fs.existsSync(posFile)) return '';
-    try {
-      const positions: Record<string, Record<string, string> | null> = JSON.parse(
-        fs.readFileSync(posFile, 'utf-8')
-      );
-      return Object.entries(positions)
-        .map(([sourceId, styles]) => {
-          if (!styles) return '';
-          const escapedId = sourceId.replace(/\\/g, '/').replace(/"/g, '\\"');
-          const styleStr = Object.entries(styles)
-            .map(([k, v]) => {
-              const prop = k.replace(/([A-Z])/g, '-$1').toLowerCase();
-              return `${prop}:${v}!important`;
-            })
-            .join(';');
-          return `[${sourceAttr}="${escapedId}"]{${styleStr}}`;
-        })
-        .filter(Boolean)
-        .join('\n');
-    } catch {
-      return '';
-    }
-  }
-
   function stampHTMLTemplate(code: string, filepath: string): string {
     // Replace Astro frontmatter (---...---), script, style and comments with spaces to preserve line/col numbers
     let cleanCode = code
@@ -1955,61 +1928,18 @@ export function glideSourceStamping(): Plugin {
         next();
       });
 
-      // Watch glide-positions.json for changes
-      const posFile = path.join(rootDir, 'glide-positions.json');
-      // Use chokidar (available from Vite) to watch the file
-      server.watcher.add(posFile);
-
-      const handlePositionsChange = (changedFile: string) => {
-        const normChanged = changedFile.replace(/\\/g, '/').toLowerCase();
-        const normPosFile = posFile.replace(/\\/g, '/').toLowerCase();
-        if (normChanged === normPosFile) {
-          console.log('[Glide Plugin] glide-positions.json changed, broadcasting glide:positions-updated');
-          // Send a custom HMR event with the updated CSS — no React reload needed
-          const css = buildPositionCSS();
-          server.ws.send({
-            type: 'custom',
-            event: 'glide:positions-updated',
-            data: { css }
-          });
-        }
-      };
-
-      server.watcher.on('add', handlePositionsChange);
-      server.watcher.on('change', handlePositionsChange);
     },
 
 
     /**
-     * Inject the bridge script and position CSS injector as inline script tags into index.html.
+     * Inject the development bridge. Layout is persisted in authored source.
      * This runs entirely in the browser with no Node.js imports.
      */
     transformIndexHtml(html) {
       if (!isDev) return html;
-      const initialCSS = buildPositionCSS();
-      const positionInjector = `<script type="module">
-(function() {
-  var styleEl = document.createElement('style');
-  styleEl.id = '__glide_positions__';
-  styleEl.textContent = ${JSON.stringify(initialCSS)};
-  document.head.appendChild(styleEl);
-
-  // Listen for position updates from the Vite HMR websocket
-  if (typeof import.meta !== 'undefined' && import.meta.hot) {
-    import.meta.hot.on('glide:positions-updated', function(data) {
-      var el = document.getElementById('__glide_positions__');
-      if (el) el.textContent = data.css;
-      if (window.__glide_refresh_selection__) {
-        window.__glide_refresh_selection__();
-      }
-      window.parent.postMessage({ type: 'glide:positions-applied' }, '*');
-    });
-  }
-})();
-</script>`;
       return html.replace(
         '<head>',
-        `<head>${positionInjector}<script>${bridgeScript}<\/script>`
+        `<head><script>${bridgeScript}<\/script>`
       );
     },
 
