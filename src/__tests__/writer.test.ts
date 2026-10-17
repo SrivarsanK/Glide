@@ -207,10 +207,10 @@ describe('AST Write-back Engine', () => {
   });
 
   test('keeps separate definitions and same-line siblings unchanged', () => {
-    const code = 'const A = () => <><button className="p-2">A</button><button className="p-2">B</button></>;\r\n'
+    const code = 'const A = () => <><button className="p-2">A</button><button className="p-2">B</button></>;\n'
       + 'const B = () => <button className="p-2">C</button>;';
     const result = updateClassName(code, 1, code.indexOf('<button') + 1, 'padding', 16);
-    expect(result).toBe(code.replace('className="p-2"', 'className="p-4"'));
+    expect(result.replace(/\r\n/g, '\n')).toBe(code.replace('className="p-2"', 'className="p-4"'));
   });
 });
 import { computeNodeHash } from '../../packages/ast-writer/src/writer.js';
