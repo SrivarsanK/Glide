@@ -523,6 +523,8 @@ export function watchRegistry(
   }
 
   const watcher = chokidar.watch(meta.srcDir, {
+    usePolling: process.platform === 'win32',
+    interval: 200,
     ignored: /(node_modules|\.git|dist|build)/,
     persistent: true,
     ignoreInitial: true,

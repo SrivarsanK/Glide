@@ -1,4 +1,4 @@
-export const VERSION = '0.1.0';
+export { VERSION } from './version.js';
 
 export { detectProjectMeta, generateVSCodeConfig } from '@srivarsank/core';
 export { buildComponentTree, getNestingPath } from '@srivarsank/core';

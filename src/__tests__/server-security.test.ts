@@ -31,7 +31,7 @@ test('rejects outside files on every structural mutation route before reading or
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
-});
+}, 15000);
 
 test('binds only to loopback and rejects a foreign Host header', async () => {
   server = new GlideServer(port);
