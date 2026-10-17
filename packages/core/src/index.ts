@@ -3,6 +3,7 @@
  */
 
 export * from './types.js';
+export * from './mutation-scope.js';
 export { computeNodeHash, parseTargetId, findTagAtLineCol, findTagBySelectorOrText, getLineFromPos, getColFromPos, stampHTMLTemplate } from './utils.js';
 export { detectProjectMeta, detectStyling, generateVSCodeConfig } from './detect.js';
 export { buildComponentTree, getNestingPath } from './tree.js';

@@ -1,3 +1,5 @@
+import type { MutationScope } from './mutation-scope.js';
+
 /**
  * Shared types for the Glide visual editor.
  * All packages import types from @srivarsank/core.
@@ -37,8 +39,9 @@ export interface ComponentTreeNode {
 
 // ── Edit Message Types ─────────────────────────────────────────────────
 
-export interface EditChange {
-  type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'group' | 'ungroup';
+export interface EditChange extends MutationScope {
+  type: 'style' | 'class' | 'text' | 'multi-class' | 'position' | 'layout' | 'group' | 'ungroup';
+  layoutPosition?: string;
   property?: string;
   value?: any;
   sources?: string[];
