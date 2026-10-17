@@ -11,8 +11,21 @@ permissions:
   packages: write
 
 jobs:
+  verify-release:
+    name: Verify release tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify:release
+
   publish-npm:
     name: Publish to npm
+    needs: verify-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,9 +43,6 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Run test suite
-        run: npm test
-
       - name: Publish to npm
         run: npm publish --provenance --access public
         env:
@@ -40,6 +50,7 @@ jobs:
 
   publish-github:
     name: Publish to GitHub Packages
+    needs: verify-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
