@@ -129,10 +129,10 @@ describe('GlideOverlay Canvas Layer', () => {
     expect(html).toContain("glide:request-scene-nodes");
   });
 
-  test('should include cross-parent canvas drop reparenting in getEditorHTML', () => {
+  test('should preserve source ownership during ordinary canvas drags', () => {
     const html = getEditorHTML();
-    expect(html).toContain("type: 'reparent'");
-    expect(html).toContain("newParentId");
+    expect(html).toContain('sendPositionChange(data.source');
+    expect(html.includes('let didReparent')).toBe(false);
   });
 
   test('should include component definition jump button and resolution handling in getEditorHTML', () => {

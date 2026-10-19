@@ -53,16 +53,17 @@ try {
 
   const project = path.join(temp, 'project');
   fs.mkdirSync(project);
-  fs.writeFileSync(path.join(project, 'index.html'), '<html><head></head><body><script type="module" src="/App.tsx"></script></body></html>');
+  fs.writeFileSync(path.join(project, 'index.html'), '<html><head><style>@keyframes entrance { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } } main { animation: entrance 20s ease; }</style></head><body><script type="module" src="/App.tsx"></script></body></html>');
   fs.writeFileSync(path.join(project, 'App.tsx'), `function h(tag, attrs, ...children) {
     const el = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs || {})) {
       if (key === 'style') Object.assign(el.style, value);
       else el.setAttribute(key === 'className' ? 'class' : key, value);
     }
-    el.append(...children); return el;
+    el.append(...children.filter(child => child !== false && child !== null)); return el;
   }
   document.body.append(<button style={{ width: '160px', height: '60px' }}>Consumer button</button>);
+  document.body.append(<main style={{ position: 'relative', width: '600px', height: '300px', marginTop: '140px' }}></main>);
 `);
   const { createServer, build, preview } = await import(pathToFileURL(requireConsumer.resolve('vite')));
   const { glideSourceStamping } = await import(pathToFileURL(requireConsumer.resolve('@srivarsank/glide/vite-plugin')));
@@ -102,6 +103,9 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('svg.lucide').length > 10);
   await page.evaluate(() => document.fonts.ready);
   const frame = page.frameLocator('#app-iframe');
+  await frame.locator('main').waitFor();
+  assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).opacity), '1', 'Design mode must not freeze entrance animations at opacity zero');
+  assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).animationName), 'none');
   await frame.getByRole('button', { name: 'Consumer button' }).click();
   await page.locator('#edit-representation').selectOption('inline');
   const width = page.locator('#prop-w');
@@ -131,6 +135,7 @@ try {
   await page.reload();
   await button.click();
   const handle = page.locator('#selection-group rect[width="8"]').nth(2);
+  await handle.waitFor({ state: 'visible' });
   const handleBounds = await handle.boundingBox();
   assert.ok(handleBounds, 'Resize handle must be visible');
   await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
@@ -154,7 +159,7 @@ try {
     const node = document.createElement('button');
     node.textContent = 'Unmapped runtime node';
     node.style.cssText = 'display:block;margin-top:120px';
-    el.parentElement.appendChild(node);
+    document.body.appendChild(node);
   });
   await frame.getByRole('button', { name: 'Unmapped runtime node' }).click();
   console.log('Fallback selection:', await page.evaluate(() => ({
@@ -166,6 +171,115 @@ try {
   assert.equal(await page.locator('#props-content').evaluate(el => el.inert), true);
   await button.click();
   await page.locator('#source-mapping-error').waitFor({ state: 'hidden' });
+
+  // Draw through the real canvas gesture and verify both source and runtime geometry.
+  await page.reload();
+  await frame.locator('main').waitFor();
+  await page.waitForFunction(() => typeof currentFile === 'string' && fileDigests.size > 0);
+  const iframeBounds = await page.locator('#app-iframe').boundingBox();
+  const scale = iframeBounds.width / 800;
+  const mainBounds = await frame.locator('main').boundingBox();
+  await page.evaluate(() => setTool('rect'));
+  await page.mouse.move(mainBounds.x + 40 * scale, mainBounds.y + 40 * scale);
+  await page.mouse.down();
+  await page.mouse.move(mainBounds.x + 160 * scale, mainBounds.y + 120 * scale, { steps: 8 });
+  await page.mouse.up();
+  await waitForSource(project, code => /backgroundColor:/.test(code));
+  const shape = frame.locator('main > div');
+  await shape.waitFor();
+  const shapeStyle = await shape.evaluate(measure);
+  assert.equal(shapeStyle.position, 'absolute');
+  assert.ok(Math.abs(parseFloat(shapeStyle.left) - 40) <= 1);
+  assert.ok(Math.abs(parseFloat(shapeStyle.top) - 40) <= 1);
+  assert.ok(Math.abs(parseFloat(shapeStyle.width) - 120) <= 1);
+  await shape.click();
+  await page.locator('#btn-move-to-canvas').click();
+  await waitForSource(project, code => /false &&/.test(code));
+  await page.locator('[data-workspace-id]').waitFor();
+  await shape.waitFor({ state: 'detached' });
+  await page.reload();
+  await page.locator('[data-workspace-id]').waitFor();
+  assert.equal(await frame.locator('main > div').count(), 0);
+  await page.locator('#workspace-layers').getByRole('button', { name: 'Restore', exact: true }).click();
+  await waitForSource(project, code => !/data-gl-workspace-id/.test(code));
+  await shape.waitFor();
+  assert.deepEqual(await shape.evaluate(measure), shapeStyle);
+  await page.locator('#btn-interaction-preview').click();
+  await frame.locator('html:not([data-glide-design-mode])').waitFor();
+  await page.locator('#btn-interaction-preview').click();
+  await frame.locator('html[data-glide-design-mode]').waitFor();
+  assert.equal(await page.locator('#app-iframe').evaluate(el => el.clientHeight), 600);
+  console.log('PASS: drawn coordinates, source-backed detach/reload/restore, preview mode, fixed viewport');
+
+  await page.evaluate(() => { zoomCanvasTo(0.5); setTool('text'); });
+  const zoomedFrame = await page.locator('#app-iframe').boundingBox();
+  await page.mouse.click(zoomedFrame.x - 70, zoomedFrame.y + 30);
+  await waitForSource(project, code => /false &&/.test(code) && /New text/.test(code));
+  const outside = page.locator('[data-workspace-id]');
+  await outside.waitFor();
+  assert.equal(await frame.getByText('New text', { exact: true }).count(), 0);
+  const textInput = page.getByRole('textbox', { name: 'Canvas object text', exact: true });
+  await textInput.fill('Canvas note');
+  await textInput.press('Tab');
+  await waitForSource(project, code => /Canvas note/.test(code));
+  await outside.filter({ hasText: 'Canvas note' }).waitFor();
+  const outsideBounds = await outside.boundingBox();
+  const destinationBounds = await frame.locator('main').boundingBox();
+  await page.mouse.move(outsideBounds.x + 5, outsideBounds.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(destinationBounds.x + 180, destinationBounds.y + 90, { steps: 10 });
+  await page.mouse.up();
+  await waitForSource(project, code => !/data-gl-workspace-id/.test(code));
+  const note = frame.getByText('Canvas note', { exact: true });
+  await note.waitFor();
+  await note.click();
+  await page.waitForFunction(() => selectedElement && selectedElement.source && selectedSources.length === 1);
+  await page.evaluate(() => triggerDelete());
+  await waitForSource(project, code => !/Canvas note/.test(code));
+  await note.waitFor({ state: 'detached' });
+  let idleReloads = 0;
+  const countReload = f => { if (f.parentFrame()) idleReloads++; };
+  page.on('framenavigated', countReload);
+  await page.waitForTimeout(750);
+  page.off('framenavigated', countReload);
+  assert.equal(idleReloads, 0, 'Idle editor must not continuously reload');
+  console.log('PASS: outside text creation/edit, drag into frame, source deletion, and idle refresh stability');
+
+  // A final runtime bound must not be dropped while persistence is pending.
+  await shape.click();
+  await page.evaluate(() => { isPendingPositionUpdate = true; });
+  await shape.evaluate(el => { el.style.top = '75px'; });
+  await page.waitForFunction(() => {
+    const element = document.getElementById('app-iframe').contentDocument.querySelector('main > div');
+    return selectedRect && Math.abs(selectedRect.y - element.getBoundingClientRect().top) < 1;
+  });
+  const outline = await page.locator('#selection-group rect').first().boundingBox();
+  const actualShape = await shape.boundingBox();
+  assert.ok(Math.abs(outline.y - actualShape.y) < 2, 'Selection outline must track the runtime element while a save is pending');
+  await page.evaluate(() => { isPendingPositionUpdate = false; });
+  await shape.evaluate((el, top) => { el.style.top = top; }, shapeStyle.top);
+
+  const activeFile = await page.evaluate(() => currentFile);
+  await shape.evaluate(el => {
+    const source = el.getAttribute('data-gl-source');
+    for (let i = 0; i < 20; i++) {
+      window.parent.postMessage({ type: 'glide:element-hovered', source: 'Other.tsx:1:1' }, '*');
+      window.parent.postMessage({ type: 'glide:element-selected', source }, '*');
+    }
+  });
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => currentFile), activeFile, 'Hover must not switch the source tree');
+  console.log('PASS: selection alignment during persistence and stable source tree during cross-file hover');
+
+  fs.appendFileSync(path.join(project, 'App.tsx'), `\n['First instance', 'Second instance'].forEach(label => document.body.append(<p className="repeated">{label}</p>));\n`);
+  const repeated = frame.locator('.repeated');
+  await repeated.nth(1).waitFor();
+  await repeated.nth(1).click();
+  await page.waitForFunction(() => document.getElementById('source-mapping-error').textContent.includes('all 2 rendered instances'));
+  await repeated.nth(1).evaluate(el => window.postMessage({ type: 'glide:select-element-by-id', id: el.getAttribute('data-gl-source') }, '*'));
+  await page.waitForTimeout(100);
+  assert.ok(await repeated.nth(1).evaluate(el => el.hasAttribute('data-glide-selected')), 'Source selection must retain the selected repeated DOM instance');
+  console.log('PASS: shared-template warning and repeated instance selection');
 
   await build({ root: project, configFile: false, esbuild: { jsxFactory: 'h' }, plugins: [], logLevel: 'error' });
   production = await preview({ root: project, configFile: false, plugins: [], preview: { host: '127.0.0.1', port: 0 } });

@@ -4,6 +4,7 @@ import { createMutationTransport } from './mutation-transport.js';
 import { createSourceProps } from './source-props.js';
 import { createMutationScope } from './mutation-scope.js';
 import { createSelectionFeedback } from './selection-feedback.js';
+import { createWorkspaceCanvas } from './workspace-canvas.js';
 
 export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
   return `
@@ -455,14 +456,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           .canvas-viewport {
             position: relative;
             transform-origin: center center;
-            transition: transform 0.05s;
           }
           .preview-frame-wrapper {
             background: #fff;
             border-radius: 6px;
             box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.08);
             position: relative;
-            overflow: hidden;
+            overflow: visible;
           }
           #app-iframe {
             width: ${config.defaultViewport.width}px;
@@ -1391,6 +1391,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             <!-- Three-state Connection Status Button -->
             <button class="connection-btn disconnected" id="btn-load">Disconnected</button>
+            <button class="connection-btn" id="btn-interaction-preview" aria-pressed="false" title="Run page interactions and animations">Preview</button>
+            <button class="connection-btn" id="btn-move-to-canvas" title="Keep the selected element in source, outside the rendered frame">Move to canvas</button>
 
             <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 4px;"></div>
 
@@ -1521,6 +1523,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   Click an element<br>on the canvas to<br>see layers.
                 </div>
               </div>
+              <div id="workspace-layers" style="max-height:35%;overflow:auto;flex-shrink:0"></div>
             </div>
             <!-- LEFT SIDEBAR — HISTORY PANEL (overlays layers panel when visible) -->
             <div id="glide-history" style="display: none; position: absolute; inset: 0; z-index: 100; background: var(--bg-surface); flex-direction: column;">
@@ -1559,6 +1562,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   <span id="load-status" style="font-size:13px;color:var(--text-secondary)">Loading app…</span>
                 </div>
                 <iframe id="app-iframe" title="App Preview"></iframe>
+                <div id="workspace-objects" style="position:absolute;inset:0;pointer-events:none;z-index:8;overflow:visible"></div>
                 <!-- Transparent blocker shown during resize/drag to prevent iframe eating pointer events -->
                 <div id="iframe-blocker" style="position:absolute;inset:0;z-index:9;display:none;cursor:inherit;"></div>
                 <!-- Draw preview for creation tools (Frame/Rect/Text/Ellipse) -->
@@ -2427,6 +2431,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   return;
                 }
                 if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
+                if (message.type === 'tree' && message.file) {
+                  sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
+                  if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
+                }
                 if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;
@@ -2436,7 +2444,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                   currentFile = message.file;
                   currentGeneration = message.generation || 0;
-                  layerTree = message.tree;
+                  workspaceCanvas.update(message.file, message.workspaceObjects || []);
+                  const dormantSources = (message.workspaceObjects || []).map(object => object.source);
+                  const visibleLayers = nodes => nodes.filter(node => !dormantSources.some(source => isSourceMatch(convertNodeIdToSource(node.id, message.file), source)))
+                    .map(node => ({ ...node, children: visibleLayers(node.children || []) }));
+                  layerTree = visibleLayers(message.tree);
 
                   const baseName = currentFile ? currentFile.split('/').pop() : 'Page 1';
                   const activePageName = document.getElementById('active-page-name');
@@ -2482,9 +2494,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     });
                   }
                 } else if (message.type === 'scene_update') {
-                  selectedElement = null;
-                  selectedSources = [];
-                  showNoSelection();
                   if (typeof message.generation === 'number') {
                     currentGeneration = message.generation;
                   }
@@ -2523,6 +2532,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
                     }
+                    (message.changedFiles || []).forEach(file => {
+                      if (!isSourceMatch(file.path, currentFile)) socket.send(JSON.stringify({ type: 'get-tree', file: file.path }));
+                    });
                     if (message.action === 'undo' || message.action === 'redo') {
                       showToast('success', message.message || 'Action completed');
                     } else {
@@ -2531,6 +2543,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     }
                   } else {
                     console.error('[Glide] Server error:', message.error);
+                    workspaceCanvas.refresh();
                     if (message.error && message.error.includes('STALE_GENERATION')) {
                       if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
@@ -2880,6 +2893,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             return str.split(String.fromCharCode(92)).join('/');
           }
 
+          const sourceFileAliases = new Map();
+          function sameSourceFile(a, b) {
+            const first = sourceFileAliases.get(normalizePathSlash(a)) || normalizePathSlash(a);
+            const second = sourceFileAliases.get(normalizePathSlash(b)) || normalizePathSlash(b);
+            if (!first || !second) return false;
+            return /^[a-z]:/i.test(first) && /^[a-z]:/i.test(second)
+              ? first.toLowerCase() === second.toLowerCase() : first === second;
+          }
+
           function parseSource(source) {
             return sourceMapping.parse(source, currentFile);
           }
@@ -3071,22 +3093,53 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function setIframeWidth(px) {
             const frame = document.getElementById('app-iframe');
-            if (frame) {
+            if (frame && Number.isFinite(px) && px >= 100 && px <= 4000) {
               frame.style.width = px + 'px';
               iframeWidth.current = px;
+              drawRulers();
             }
           }
 
           function setIframeHeight(px) {
             const frame = document.getElementById('app-iframe');
-            if (frame) {
+            if (frame && Number.isFinite(px) && px >= 100 && px <= 4000) {
               frame.style.height = px + 'px';
+              const wrapper = document.getElementById('frame-wrapper');
+              if (wrapper) wrapper.style.removeProperty('height');
+              drawRulers();
             }
           }
 
           // ═══════════════════════════════════════════════════════════════
           // ZOOM & PAN
           // ═══════════════════════════════════════════════════════════════
+          function framePointFromClient(clientX, clientY) {
+            const frame = document.getElementById('app-iframe');
+            if (!frame) return { x: 0, y: 0 };
+            const rect = frame.getBoundingClientRect();
+            const scaleX = rect.width / frame.clientWidth || zoomLevel;
+            const scaleY = rect.height / frame.clientHeight || zoomLevel;
+            return { x: (clientX - rect.left) / scaleX, y: (clientY - rect.top) / scaleY };
+          }
+
+          function zoomCanvasTo(value, clientX, clientY) {
+            if (!Number.isFinite(value)) return;
+            const frame = document.getElementById('app-iframe');
+            const viewport = document.getElementById('canvas-viewport');
+            const container = document.getElementById('canvas-container');
+            if (!frame || !viewport || !container) return;
+            const canvasRect = container.getBoundingClientRect();
+            const anchorX = Number.isFinite(clientX) ? clientX : canvasRect.left + canvasRect.width / 2;
+            const anchorY = Number.isFinite(clientY) ? clientY : canvasRect.top + canvasRect.height / 2;
+            const point = framePointFromClient(anchorX, anchorY);
+            zoomLevel = Math.min(4, Math.max(0.1, value));
+            viewport.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
+            const nextRect = frame.getBoundingClientRect();
+            panX += anchorX - (nextRect.left + point.x * (nextRect.width / frame.clientWidth));
+            panY += anchorY - (nextRect.top + point.y * (nextRect.height / frame.clientHeight));
+            applyTransform();
+          }
+
           function applyTransform() {
             const vp = document.getElementById('canvas-viewport');
             vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
@@ -3138,11 +3191,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return;
-            const fw = iframe.clientWidth;
-            const container = document.getElementById('canvas-container');
-            const cw = container.clientWidth;
-
-            const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
+            const originX = iframe.getBoundingClientRect().left - canvas.getBoundingClientRect().left;
 
             const startX = Math.floor(-originX / zoomLevel);
             const endX = Math.ceil((width - originX) / zoomLevel);
@@ -3201,11 +3250,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return;
-            const fh = iframe.clientHeight;
-            const container = document.getElementById('canvas-container');
-            const ch = container.clientHeight;
-
-            const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
+            const originY = iframe.getBoundingClientRect().top - canvas.getBoundingClientRect().top;
 
             const startY = Math.floor(-originY / zoomLevel);
             const endY = Math.ceil((height - originY) / zoomLevel);
@@ -3246,17 +3291,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
           }
 
-          document.getElementById('zoom-in').addEventListener('click', () => { zoomLevel = Math.min(4, zoomLevel + 0.1); applyTransform(); });
-          document.getElementById('zoom-out').addEventListener('click', () => { zoomLevel = Math.max(0.1, zoomLevel - 0.1); applyTransform(); });
+          document.getElementById('zoom-in').addEventListener('click', () => zoomCanvasTo(zoomLevel + 0.1));
+          document.getElementById('zoom-out').addEventListener('click', () => zoomCanvasTo(zoomLevel - 0.1));
           document.getElementById('zoom-fit').addEventListener('click', fitToScreen);
 
           function fitToScreen() {
             const container = document.getElementById('canvas-container');
             const frame = document.getElementById('app-iframe');
-            const cw = container.clientWidth - 80;
-            const ch = container.clientHeight - 80;
+            if (!container || !frame) return;
+            const cw = Math.max(1, container.clientWidth - 80);
+            const ch = Math.max(1, container.clientHeight - 80);
             const fw = frame.clientWidth;
             const fh = frame.clientHeight;
+            if (!fw || !fh) return;
             zoomLevel = Math.min(cw / fw, ch / fh, 1);
             panX = 0; panY = 0;
             applyTransform();
@@ -3266,8 +3313,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
               e.preventDefault();
-              zoomLevel = Math.min(4, Math.max(0.1, zoomLevel - e.deltaY * 0.001));
-              applyTransform();
+              zoomCanvasTo(zoomLevel - e.deltaY * 0.001, e.clientX, e.clientY);
             } else {
               e.preventDefault();
               const iframe = document.getElementById('app-iframe');
@@ -3604,8 +3650,47 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // CANVAS INTERACTIONS & SHAPE DRAWING
           // ═══════════════════════════════════════════════════════════════
           const canvasContainer = document.getElementById('canvas-container');
+          let interactionPreview = false;
+          function syncInteractionMode() {
+            const frame = document.getElementById('app-iframe');
+            if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: 'glide:set-interaction-mode', enabled: interactionPreview }, '*');
+            document.getElementById('btn-interaction-preview').textContent = interactionPreview ? 'Back to design' : 'Preview';
+            document.getElementById('btn-interaction-preview').setAttribute('aria-pressed', String(interactionPreview));
+            document.getElementById('workspace-objects').style.display = interactionPreview ? 'none' : '';
+            if (interactionPreview) { setTool('select'); clearOverlay(); }
+          }
+          document.getElementById('btn-interaction-preview').addEventListener('click', () => {
+            interactionPreview = !interactionPreview; syncInteractionMode();
+          });
+          function canvasPoint(event) {
+            return framePointFromClient(event.clientX, event.clientY);
+          }
+          function insideFrame(x, y) {
+            const frame = document.getElementById('app-iframe');
+            return x >= 0 && y >= 0 && x < frame.clientWidth && y < frame.clientHeight;
+          }
+          function mutateWorkspace(source, change) {
+            const parsed = parseSource(source);
+            if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({ type: 'edit', ...parsed, change }));
+          }
+          const workspaceCanvas = (${createWorkspaceCanvas.toString()})({
+            host: document.getElementById('workspace-objects'), layers: document.getElementById('workspace-layers'),
+            point: canvasPoint, inside: insideFrame, destination: resolveParentAtPoint, mutate: mutateWorkspace,
+            error: message => showToast('error', message),
+            select: source => { selectedElement = { source }; selectedSources = [source]; clearOverlay(); showNoSelection(); }
+          });
+          function detachToCanvas(source, x, y) {
+            mutateWorkspace(source, { type: 'detach', workspaceId: crypto.randomUUID(), x: Math.round(x), y: Math.round(y) });
+          }
+          document.getElementById('btn-move-to-canvas').addEventListener('click', () => {
+            if (!selectedElement) { showToast('info', 'Select an authored element first'); return; }
+            const frame = document.getElementById('app-iframe');
+            detachToCanvas(selectedElement.source, frame.clientWidth + 40, selectedRect ? selectedRect.y : 0);
+          });
 
           function handleShapeDrawStart(e) {
+            if (interactionPreview) return;
             if (!['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) return;
             if (e.button !== 0) return;
             const fw = document.getElementById('frame-wrapper');
@@ -3655,12 +3740,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
               handleShapeDrawStart(e);
+              if (isDrawingShape) { canvasContainer.setPointerCapture(e.pointerId); e.preventDefault(); }
             }
           });
 
-          let canvasContainerRect = canvasContainer.getBoundingClientRect();
           window.addEventListener('resize', () => {
-            canvasContainerRect = canvasContainer.getBoundingClientRect();
+            drawRulers();
           });
 
           document.addEventListener('pointermove', (e) => {
@@ -3690,24 +3775,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               applyTransform();
             }
             if (draggingGuide) {
-              const container = document.getElementById('canvas-container');
               const iframe = document.getElementById('app-iframe');
               if (iframe) {
-                const fw = iframe.clientWidth;
-                const fh = iframe.clientHeight;
-                const cw = container.clientWidth;
-                const ch = container.clientHeight;
-
-                const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
-                const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
-
+                const point = framePointFromClient(e.clientX, e.clientY);
                 if (draggingGuide.axis === 'x') {
-                  const rawX = (e.clientX - canvasContainerRect.left - originX) / zoomLevel;
-                  const pageX = Math.round(rawX / 8) * 8;
+                  const pageX = Math.round(point.x / 8) * 8;
                   guides[draggingGuide.index].position = pageX;
                 } else {
-                  const rawY = (e.clientY - canvasContainerRect.top - originY) / zoomLevel;
-                  const pageY = Math.round(rawY / 8) * 8;
+                  const pageY = Math.round(point.y / 8) * 8;
                   guides[draggingGuide.index].position = pageY;
                 }
                 drawOverlay();
@@ -3776,8 +3851,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (propH) propH.value = resizeFinalH;
             }
             // Update cursor coords in status bar
-            const cx = Math.round((e.clientX - canvasContainerRect.left - panX) / zoomLevel);
-            const cy = Math.round((e.clientY - canvasContainerRect.top - panY) / zoomLevel);
+            const cursorPoint = framePointFromClient(e.clientX, e.clientY);
+            const cx = Math.round(cursorPoint.x);
+            const cy = Math.round(cursorPoint.y);
             document.getElementById('cursor-pos').textContent = cx + ', ' + cy + ' px';
           });
 
@@ -3787,6 +3863,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const previewEl = document.getElementById('draw-preview');
               if (previewEl) previewEl.style.display = 'none';
               handleFinishShapeDraw(e);
+              if (canvasContainer.hasPointerCapture(e.pointerId)) canvasContainer.releasePointerCapture(e.pointerId);
             }
             if (isPanning) {
               isPanning = false;
@@ -3875,53 +3952,46 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function resolveParentAtPoint(x, y) {
-            // ── Try SceneGraph first (deterministic, zoom-aware) ──────────
-            if (!_sg.isEmpty) {
-              const hit = _sg.hitTest(x, y);
-              if (hit) {
-                const parsed = parseSource(hit.id);
-                return {
-                  parentId: hit.id,
-                  file: (parsed && parsed.file) ? parsed.file : (currentFile || null)
-                };
-              }
-            }
-
-            // ── Fallback: elementFromPoint (when SceneGraph is not ready) ─
+            if (!insideFrame(x, y)) return null;
             const iframe = document.getElementById('app-iframe');
             if (!iframe) return null;
             const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
             if (!iDoc) return null;
-
-            const maxW = iframe.clientWidth || 800;
-            const maxH = iframe.clientHeight || 600;
-            const hitX = Math.max(0, Math.min(x, maxW));
-            const hitY = Math.max(0, Math.min(y, maxH));
-
-            let targetEl = iDoc.elementFromPoint(hitX, hitY);
-            let stampedEl = targetEl ? targetEl.closest('[data-gl-source]') : null;
-
-            if (!stampedEl) {
-              stampedEl = iDoc.querySelector('[data-gl-source]');
-            }
-
+            const containers = new Set(['div', 'main', 'section', 'article', 'aside', 'header', 'footer', 'nav', 'form', 'fieldset', 'li', 'td']);
+            let stampedEl = iDoc.elementFromPoint(x, y);
+            while (stampedEl && (!stampedEl.hasAttribute('data-gl-source') || !containers.has(stampedEl.localName))) stampedEl = stampedEl.parentElement;
             if (!stampedEl) return null;
-
             const sourceAttr = stampedEl.getAttribute('data-gl-source') || '';
             const parsed = parseSource(sourceAttr);
+            if (!parsed) return null;
+            // Absolute offsets are relative to the containing block, not the hit node.
+            let block = stampedEl;
+            const win = iframe.contentWindow;
+            while (block && win.getComputedStyle(block).position === 'static' && win.getComputedStyle(block).transform === 'none') block = block.parentElement;
+            const rect = block ? block.getBoundingClientRect() : { left: -win.scrollX, top: -win.scrollY };
             return {
-              parentId: sourceAttr,
-              file: (parsed && parsed.file) ? parsed.file : (currentFile || null)
+              parentId: sourceAttr, file: parsed.file,
+              x: Math.round(x - rect.left - (block ? block.clientLeft : 0) + (block ? block.scrollLeft : 0)),
+              y: Math.round(y - rect.top - (block ? block.clientTop : 0) + (block ? block.scrollTop : 0))
             };
           }
 
           function dispatchShapeInsert(tool, x, y, width, height) {
-            const centerX = x + Math.round(width / 2);
-            const centerY = y + Math.round(height / 2);
-            const resolved = resolveParentAtPoint(centerX, centerY) || resolveParentAtPoint(x, y);
-
-            const targetFile = (resolved && resolved.file) ? resolved.file : currentFile;
-            const parentId = (resolved && resolved.parentId) ? resolved.parentId : 'root';
+            const detached = !insideFrame(drawStart.x, drawStart.y);
+            let resolved = detached ? null : resolveParentAtPoint(drawStart.x, drawStart.y);
+            if (detached) {
+              const frame = document.getElementById('app-iframe');
+              const doc = frame.contentDocument;
+              const root = doc && Array.from(doc.querySelectorAll('[data-gl-source]')).find(el => ['div', 'main', 'section', 'article'].includes(el.localName));
+              const source = root && root.getAttribute('data-gl-source');
+              const parsed = source && parseSource(source);
+              if (parsed) resolved = { parentId: source, file: parsed.file, x, y };
+            }
+            if (!resolved) {
+              showToast('error', 'Choose a mapped source container before drawing.'); setTool('select'); return;
+            }
+            const targetFile = resolved.file;
+            const parentId = resolved.parentId;
 
             const elemTypeMap = {
               rect: 'rectangle',
@@ -3937,11 +4007,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 file: targetFile,
                 parentId: parentId,
                 elementType: elementType,
+                x: detached ? x : resolved.x + x - drawStart.x,
+                y: detached ? y : resolved.y + y - drawStart.y,
+                detached,
+                workspaceId: detached ? crypto.randomUUID() : undefined,
                 width: Math.round(width),
                 height: Math.round(height)
               }));
-              const displayFile = targetFile ? (targetFile.split('/').pop() || targetFile) : 'file';
-              showToast('info', 'Created ' + elementType + ' in ' + displayFile);
+              showToast('info', 'Saving ' + elementType + ' to source…');
             } else {
               showToast('error', 'Server connection not ready');
             }
@@ -3982,6 +4055,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const isHeader = e.target.closest('header');
             const isToolbar = e.target.closest('#figma-toolbar');
             const isIframe = e.target.closest('#app-iframe');
+            if (e.target.closest('#workspace-objects, #workspace-layers, #btn-move-to-canvas')) return;
 
             if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
               selectedSources = [];
@@ -4494,6 +4568,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!data || !data.type) return;
 
             if (data.type === 'glide:ready') {
+              syncInteractionMode();
               const loadingEl = document.getElementById('canvas-loading');
               if (loadingEl) loadingEl.style.display = 'none';
 
@@ -4519,11 +4594,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             if (data.type === 'glide:document-height') {
               const iframe = document.getElementById('app-iframe');
-              if (iframe) {
-                const heightInput = document.getElementById('viewport-height-input');
-                if (!heightInput || !heightInput.value) {
-                  iframe.style.height = data.height + 'px';
-                }
+              if (iframe && Number.isFinite(data.height)) {
+                // Content extent is metadata. The selected viewport controls layout and media queries.
+                iframe.dataset.documentHeight = String(data.height);
               }
               return;
             }
@@ -4623,7 +4696,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 }
                 renderLayersTree(layerTree);
               }
-              autoFitIframeHeight();
+              drawRulers();
               // Sync iframe with current snap settings
               const ifrDOM = document.getElementById('app-iframe');
               if (ifrDOM && ifrDOM.contentWindow) {
@@ -4633,32 +4706,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return;
             }
 
-            function autoFitIframeHeight() {
-              const iframe = document.getElementById('app-iframe');
-              if (iframe && iframe.contentWindow) {
-                try {
-                  const doc = iframe.contentWindow.document;
-                  if (doc && doc.body) {
-                    const h = Math.max(
-                      doc.body.scrollHeight || 0,
-                      doc.body.offsetHeight || 0,
-                      doc.documentElement ? doc.documentElement.scrollHeight : 0
-                    );
-                    if (h > 200) {
-                      iframe.style.height = h + 'px';
-                      const fw = document.getElementById('frame-wrapper');
-                      if (fw) fw.style.height = (h + 40) + 'px';
-                    }
-                  }
-                } catch(e) {}
-              }
-            }
-
-            if (data.type === 'glide:element-selected' || data.type === 'glide:element-hovered') {
+            if (data.type === 'glide:element-selected') {
               updateLayersPanel(data);
             }
             if (data.type === 'glide:overlay') {
-              if (isResizing || isDragging || isPendingPositionUpdate) return;
+              // Bounds are runtime observations, not source writes. Never discard
+              // the final observation during a save: the bridge may not send it again.
+              if (isResizing || isDragging) return;
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
@@ -4769,54 +4823,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
              if (data.type === 'glide:element-drag-end') {
               isDragging = false;
+              if (data.outsideViewport && data.source && data.rect) {
+                detachToCanvas(data.source, data.rect.x, data.rect.y);
+                clearOverlay(); renderSnapGuides([]); return;
+              }
               isPendingPositionUpdate = true;
               clearTimeout(window.__glide_pending_position_timeout);
               window.__glide_pending_position_timeout = setTimeout(() => {
                 isPendingPositionUpdate = false;
               }, 1000);
 
-              // Cross-parent canvas drop detection (reparenting)
-              let didReparent = false;
-              if (data.rect && data.source && !_sg.isEmpty) {
-                const dropCenterX = data.rect.x + (data.rect.width || 0) / 2;
-                const dropCenterY = data.rect.y + (data.rect.height || 0) / 2;
-                const currentSceneNode = _sg.getById(data.source);
-                const originalParentId = currentSceneNode ? (currentSceneNode.parent ? currentSceneNode.parent.id : null) : null;
-
-                function isDescendant(node, ancestorId) {
-                  let p = node ? node.parent : null;
-                  while (p) {
-                    if (p.id === ancestorId) return true;
-                    p = p.parent;
-                  }
-                  return false;
-                }
-
-                let candidate = _sg.hitTest(dropCenterX, dropCenterY);
-                while (candidate && (candidate.id === data.source || isDescendant(candidate, data.source))) {
-                  candidate = candidate.parent;
-                }
-
-                if (candidate && candidate.id && originalParentId && candidate.id !== originalParentId && candidate.isStamped) {
-                  didReparent = true;
-                  if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                      type: 'reparent',
-                      file: currentFile,
-                      sourceId: data.source,
-                      newParentId: candidate.id,
-                      newIndex: candidate.children ? candidate.children.length : 0
-                    }));
-                  }
-                }
-              }
-
-              if (!didReparent) {
-                sendPositionChange(data.source, {
-                  left: data.dx + 'px',
-                  top: data.dy + 'px'
-                }, data.layoutPosition);
-              }
+              // Moving on the page changes position. DOM overlap cannot establish
+              // JSX ownership (component roots and repeated templates share DOM space).
+              // Reparenting remains an explicit layers operation.
+              sendPositionChange(data.source, {
+                left: data.dx + 'px',
+                top: data.dy + 'px'
+              }, data.layoutPosition);
 
               if (data.rect) {
                 selectedRect = data.rect;
@@ -4915,13 +4938,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let lastRequestedTreeFile = null;
 
           function updateLayersPanel(data) {
+            if (data.type !== 'glide:element-selected') return;
             if (!data.source) return;
             const parsed = parseSource(data.source);
             const newFile = (parsed && parsed.file && !parsed.cstSelector) ? parsed.file : null;
 
             // Request get-tree when tree is empty OR when the selected element lives in a different file
             if (socket && socket.readyState === WebSocket.OPEN && newFile) {
-              const fileChanged = !currentFile || (normalizePathSlash(newFile).toLowerCase() !== normalizePathSlash(currentFile).toLowerCase());
+              const fileChanged = !sameSourceFile(newFile, currentFile);
               if (fileChanged || !layerTree || layerTree.length === 0) {
                 const normLast = lastRequestedTreeFile ? normalizePathSlash(lastRequestedTreeFile).toLowerCase() : null;
                 const normNew = normalizePathSlash(newFile).toLowerCase();
@@ -4944,8 +4968,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const itemSrc = item.dataset.source || item.dataset.nodeSource || '';
               const matches = isSourceMatch(itemSrc, targetSrc);
               if (matches) {
+                const newlySelected = !item.classList.contains('active');
                 item.classList.add('active');
-                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                if (newlySelected) item.scrollIntoView({ block: 'nearest', behavior: 'instant' });
               } else if (!isSourceSelected(itemSrc, selectedSources)) {
                 item.classList.remove('active');
               }
@@ -5525,6 +5550,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
             iframe.onload = function() {
+              // A new document invalidates every cached screen rectangle.
+              selectedRect = null; selectedRects = []; hoveredRect = null;
+              isPendingPositionUpdate = false;
+              clearOverlay();
               setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
                 // Request fresh DOM tree — fixes layer panel after page refresh
@@ -5601,6 +5630,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function showPropsPanel(tagName) {
             selectionFeedback(!!selectedElement, !!(selectedElement && parseSource(selectedElement.source)));
+            // A mapped template can render more than one element. Make the scope
+            // of source edits visible instead of implying an instance-only edit.
+            if (selectedElement && parseSource(selectedElement.source)) {
+              try {
+                const nodes = document.getElementById('app-iframe').contentDocument.querySelectorAll('[data-gl-source]');
+                const count = Array.from(nodes).filter(node => isSourceMatch(node.getAttribute('data-gl-source'), selectedElement.source)).length;
+                if (count > 1) {
+                  const banner = document.getElementById('source-mapping-error');
+                  banner.hidden = false;
+                  banner.textContent = 'Shared source: edits affect all ' + count + ' rendered instances. Individual instances cannot be moved between layers.';
+                }
+              } catch (_) { /* Cross-origin previews cannot expose instance counts. */ }
+            }
             sourceProps.request();
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
@@ -7485,14 +7527,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             e.preventDefault();
             const ruler = document.getElementById('glide-ruler-h');
             try { ruler.setPointerCapture(e.pointerId); } catch (err) {}
-            const container = document.getElementById('canvas-container');
             const iframe = document.getElementById('app-iframe');
             if (iframe) {
-              const fh = iframe.clientHeight;
-              const ch = container.clientHeight;
-              const originY = (ch / 2) - (fh * zoomLevel / 2) + panY;
-              const rawY = (e.clientY - canvasContainerRect.top - originY) / zoomLevel;
-              const pageY = Math.round(rawY / 8) * 8;
+              const point = framePointFromClient(e.clientX, e.clientY);
+              const pageY = Math.round(point.y / 8) * 8;
 
               guides.push({ axis: 'y', position: pageY });
               draggingGuide = { index: guides.length - 1, axis: 'y' };
@@ -7505,14 +7543,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             e.preventDefault();
             const ruler = document.getElementById('glide-ruler-v');
             try { ruler.setPointerCapture(e.pointerId); } catch (err) {}
-            const container = document.getElementById('canvas-container');
             const iframe = document.getElementById('app-iframe');
             if (iframe) {
-              const fw = iframe.clientWidth;
-              const cw = container.clientWidth;
-              const originX = (cw / 2) - (fw * zoomLevel / 2) + panX;
-              const rawX = (e.clientX - canvasContainerRect.left - originX) / zoomLevel;
-              const pageX = Math.round(rawX / 8) * 8;
+              const point = framePointFromClient(e.clientX, e.clientY);
+              const pageX = Math.round(point.x / 8) * 8;
 
               guides.push({ axis: 'x', position: pageX });
               draggingGuide = { index: guides.length - 1, axis: 'x' };

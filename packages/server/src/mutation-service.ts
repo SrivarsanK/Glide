@@ -141,9 +141,12 @@ export class MutationService {
           const refs = [change.source, change.parentId, change.siblingId, ...(change.sources || [])].filter(Boolean);
           for (const ref of refs) {
             if (typeof ref !== 'string') throw new Error('INVALID_TARGET: Invalid source reference.');
-            if (/^line:\d+:col:\d+/.test(ref)) continue;
+            if (/^line:[1-9]\d*:col:\d+(?::[a-fA-F0-9]+)?$/.test(ref)) continue;
             const match = ref.match(/^(.*?):\d+:\d+(?::[a-fA-F0-9]+)?$/);
-            if (!match || this.resolveFile(match[1]) !== buffer.file) throw new Error('INVALID_TARGET: Structural references must belong to the same file.');
+            if (!match) throw new Error('INVALID_TARGET: Select an authored source element. A canvas selector is not a source reference.');
+            // Windows paths may differ only in drive-letter/case spelling. Compare
+            // resolved filesystem identities rather than their displayed strings.
+            if (path.relative(this.resolveFile(match[1]), buffer.file) !== '') throw new Error('INVALID_TARGET: Structural references must belong to the same file.');
           }
         }
         const transformed = transformJSXBatch(buffer.before, edits);

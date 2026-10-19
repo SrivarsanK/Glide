@@ -41,20 +41,13 @@ export function buildBridgeScript(
   style.textContent = [
     '[${hoverAttr}]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[${selectedAttr}]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
-    'html, body { overflow: auto !important; height: auto !important; -ms-overflow-style: none !important; scrollbar-width: none !important; } html::-webkit-scrollbar, body::-webkit-scrollbar { display: none !important; }',
-
-    /* ── Type Classes Standardized Behaviors ── */
-    /* Ensure all inline elements with typography type classes flow as inline-block for precise boundaries & dragging */
-    'span[${sourceAttr}], strong[${sourceAttr}], em[${sourceAttr}], a[${sourceAttr}], label[${sourceAttr}] { display: inline-block !important; }',
-    'span.highlight, span.stat-value, span.stat-label, span.brand-name, span.brand-icon, span.section-label, span.feature-tag, span.member-tag, a.nav-link { display: inline-block !important; }',
-
-    /* ── Stacking Context Bug Bypass ── */
-    /* Override background clip when gradient text element (or any of its ancestors) is hovered, selected, positioned, dragged, or styled with opacity/filter/mix-blend-mode */
-    '.highlight[data-glide-selected], .highlight[data-glide-hover], .highlight[style*="transform"], .highlight[style*="position"], .highlight[style*="opacity"], .highlight[style*="filter"], .highlight[style*="mix-blend-mode"], [data-glide-selected] .highlight, [data-glide-hover] .highlight, [style*="transform"] .highlight, [style*="position"] .highlight, [style*="opacity"] .highlight, [style*="filter"] .highlight, [style*="mix-blend-mode"] .highlight { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
-    '[class*="highlight"][data-glide-selected], [class*="highlight"][data-glide-hover], [class*="highlight"][style*="transform"], [class*="highlight"][style*="position"], [class*="highlight"][style*="opacity"], [class*="highlight"][style*="filter"], [class*="highlight"][style*="mix-blend-mode"], [data-glide-selected] [class*="highlight"], [data-glide-hover] [class*="highlight"], [style*="transform"] [class*="highlight"], [style*="position"] [class*="highlight"], [style*="opacity"] [class*="highlight"], [style*="filter"] [class*="highlight"], [style*="mix-blend-mode"] [class*="highlight"] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }',
-    '[class*="gradient"][data-glide-selected], [class*="gradient"][data-glide-hover], [class*="gradient"][style*="transform"], [class*="gradient"][style*="position"], [class*="gradient"][style*="opacity"], [class*="gradient"][style*="filter"], [class*="gradient"][style*="mix-blend-mode"], [data-glide-selected] [class*="gradient"], [data-glide-hover] [class*="gradient"], [style*="transform"] [class*="gradient"], [style*="position"] [class*="gradient"], [style*="opacity"] [class*="gradient"], [style*="filter"] [class*="gradient"], [style*="mix-blend-mode"] [class*="gradient"] { -webkit-background-clip: initial !important; background-clip: initial !important; -webkit-text-fill-color: var(--accent, #38bdf8) !important; color: var(--accent, #38bdf8) !important; background: none !important; }'
+    // Editing must preserve authored layout, typography and gradient paint.
+    'html[data-glide-design-mode] *, html[data-glide-design-mode] *::before, html[data-glide-design-mode] *::after { animation: none !important; transition: none !important; caret-color: transparent; }',
+    'html[data-glide-design-mode] [contenteditable="true"] { caret-color: auto; }'
   ].join(' ');
   document.head.appendChild(style);
+  var interactionMode = false;
+  if (document.documentElement) document.documentElement.setAttribute('data-glide-design-mode', '');
 
   var hovered = null;
   var selected = null;
@@ -339,28 +332,34 @@ export function buildBridgeScript(
 
   window.__glide_update_selection_node__ = function() {
     var all = document.querySelectorAll('[${sourceAttr}]');
-    if (selected) {
+    if (selected && selected.isConnected === false) {
       var src = selected.getAttribute('${sourceAttr}');
+      var replacement = null;
       if (src) {
         for (var i = 0; i < all.length; i++) {
           if (all[i].getAttribute('${sourceAttr}') === src) {
-            selected = all[i];
-            selected.setAttribute('${selectedAttr}', '');
+            replacement = all[i];
             break;
           }
         }
       }
+      selected = replacement;
+      if (selected) selected.setAttribute('${selectedAttr}', '');
+      else window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
     }
-    if (hovered) {
+    if (hovered && hovered.isConnected === false) {
       var src = hovered.getAttribute('${sourceAttr}');
+      var replacement = null;
       if (src) {
         for (var i = 0; i < all.length; i++) {
           if (all[i].getAttribute('${sourceAttr}') === src) {
-            hovered = all[i];
+            replacement = all[i];
             break;
           }
         }
       }
+      hovered = replacement;
+      if (!hovered) window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
     }
   };
 
@@ -463,6 +462,25 @@ export function buildBridgeScript(
   var currentDx = 0;
   var currentDy = 0;
   var rafId = null;
+  var dragOriginalStyles = null;
+  var dragBaseTransform = '';
+
+  function captureInlineStyles(el, properties) {
+    var saved = {};
+    properties.forEach(function(property) {
+      saved[property] = { value: el.style.getPropertyValue(property), priority: el.style.getPropertyPriority(property) };
+    });
+    return saved;
+  }
+
+  function restoreInlineStyles(el, saved) {
+    if (!saved) return;
+    Object.keys(saved).forEach(function(property) {
+      var original = saved[property];
+      if (original.value) el.style.setProperty(property, original.value, original.priority);
+      else el.style.removeProperty(property);
+    });
+  }
 
   var isMarqueeing = false;
   var wasMarqueeing = false;
@@ -934,13 +952,14 @@ export function buildBridgeScript(
       }
     }
 
-    dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)';
+    dragEl.style.transform = 'translate(' + snappedDx + 'px, ' + snappedDy + 'px)' + (dragBaseTransform ? ' ' + dragBaseTransform : '');
     dragEl.style.zIndex = '9999';
     window.parent.postMessage({ type: 'glide:drag-delta', dx: snappedDx, dy: snappedDy, guides: snap.guides }, '*');
     rafId = requestAnimationFrame(rafDragLoop);
   }
 
   document.addEventListener('pointerdown', function(e) {
+    if (interactionMode) return;
     if (e.target.contentEditable === 'true' || e.target.closest('[contenteditable="true"]')) {
       return;
     }
@@ -1030,11 +1049,15 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('pointermove', function(e) {
+    if (interactionMode) return;
     if (dragCandidate && !isDragging) {
       var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (moveDist >= 3) {
         isDragging = true;
         dragEl = dragCandidate;
+        dragOriginalStyles = captureInlineStyles(dragEl, ['transform', 'z-index', 'transition', 'transition-property']);
+        var transform = window.getComputedStyle(dragEl).transform;
+        dragBaseTransform = transform && transform !== 'none' ? transform : '';
         dragEl.style.setProperty('transition', 'none', 'important');
         dragEl.style.setProperty('transition-property', 'none', 'important');
         try { dragEl.setPointerCapture(dragPointerId); } catch(err) {}
@@ -1114,6 +1137,7 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('pointerup', function(e) {
+    if (interactionMode) return;
     if (isDragging && dragEl) {
       isDragging = false;
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -1152,22 +1176,17 @@ export function buildBridgeScript(
       dragEl.style.setProperty('position', initialPosition === 'static' ? 'relative' : initialPosition, 'important');
       dragEl.style.setProperty('left', finalLeft + 'px', 'important');
       dragEl.style.setProperty('top', finalTop + 'px', 'important');
-      dragEl.style.transform = '';
-      dragEl.style.zIndex = '';
+      restoreInlineStyles(dragEl, dragOriginalStyles);
+      dragOriginalStyles = null;
+      dragBaseTransform = '';
 
       var finalR = dragEl.getBoundingClientRect();
-      var elForTransition = dragEl;
-      requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          if (elForTransition) {
-            elForTransition.style.removeProperty('transition');
-            elForTransition.style.removeProperty('transition-property');
-          }
-        });
-      });
 
       window.parent.postMessage({
         type: 'glide:element-drag-end',
+        clientX: e.clientX,
+        clientY: e.clientY,
+        outsideViewport: e.clientX < 0 || e.clientY < 0 || e.clientX > window.innerWidth || e.clientY > window.innerHeight,
         layoutPosition: initialPosition,
         source: dragEl.getAttribute('${sourceAttr}'),
         dx: finalLeft,
@@ -1203,8 +1222,6 @@ export function buildBridgeScript(
     } else {
       if (dragCandidate) {
         if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-        dragCandidate.style.transform = '';
-        dragCandidate.style.zIndex = '';
         dragCandidate = null;
       }
       dragEl = null;
@@ -1212,7 +1229,17 @@ export function buildBridgeScript(
     }
   }, true);
 
+  document.addEventListener('pointercancel', function() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (dragEl) restoreInlineStyles(dragEl, dragOriginalStyles);
+    dragOriginalStyles = null;
+    dragEl = dragCandidate = null;
+    isDragging = isMarqueeing = false;
+    window.parent.postMessage({ type: 'glide:snap-guides-clear' }, '*');
+  }, true);
+
   document.addEventListener('contextmenu', function(e) {
+    if (interactionMode) return;
     // ── CST CONTEXTMENU DETECTION ─────────────────────────────────────
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
@@ -1247,9 +1274,11 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('click', function(e) {
+    if (interactionMode || e.target.isContentEditable) return;
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
     var el = target && target.closest && target.closest('[${sourceAttr}]');
+    if (!el) el = resolveElementAtPoint(e.clientX, e.clientY, false);
     var isShift = e.shiftKey || e.ctrlKey || e.metaKey;
     if (el) {
       e.preventDefault();
@@ -1267,9 +1296,11 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('dblclick', function(e) {
+    if (interactionMode || e.target.isContentEditable) return;
     var target = e.target;
     if (target.nodeType === 3) target = target.parentNode;
     var el = target && target.closest && target.closest('[${sourceAttr}]');
+    if (!el) el = resolveElementAtPoint(e.clientX, e.clientY, false);
     if (el) {
       e.preventDefault();
       e.stopPropagation();
@@ -1282,8 +1313,11 @@ export function buildBridgeScript(
       sendMsg('glide:element-selected', el, false);
 
       var textVal = getElementTextContent(el);
-      if (typeof textVal === 'string' && textVal.length > 0) {
+      // Rich text/container edits need a source-aware operation; contentEditable
+      // would flatten their nested markup before a source write can validate it.
+      if (typeof textVal === 'string' && (!el.children || el.children.length === 0)) {
         var originalText = el.textContent;
+        var originalContentEditable = el.getAttribute('contenteditable');
         el.contentEditable = "true";
         el.focus();
 
@@ -1298,6 +1332,7 @@ export function buildBridgeScript(
 
         // Add visual indicator styling
         var prevOutline = el.style.outline;
+        var prevOutlineOffset = el.style.outlineOffset;
         el.style.outline = '2px dashed #38bdf8';
         el.style.outlineOffset = '2px';
 
@@ -1307,8 +1342,10 @@ export function buildBridgeScript(
         function commitInlineEdit() {
           if (finished) return;
           finished = true;
-          el.contentEditable = "false";
+          if (originalContentEditable === null) el.removeAttribute('contenteditable');
+          else el.setAttribute('contenteditable', originalContentEditable);
           el.style.outline = prevOutline;
+          el.style.outlineOffset = prevOutlineOffset;
           window.__glide_inline_editing__ = null;
 
           var newText = el.textContent ? el.textContent.trim() : '';
@@ -1363,6 +1400,23 @@ export function buildBridgeScript(
   window.addEventListener('message', function(e) {
     if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
     if (!e.data) return;
+    if (e.data.type === 'glide:set-interaction-mode') {
+      interactionMode = !!e.data.enabled;
+      if (document.documentElement) {
+        if (interactionMode) document.documentElement.removeAttribute('data-glide-design-mode');
+        else document.documentElement.setAttribute('data-glide-design-mode', '');
+      }
+      if (interactionMode) {
+        if (hovered) hovered.removeAttribute('${hoverAttr}');
+        hovered = null;
+        var marked = document.querySelectorAll('[${selectedAttr}]');
+        for (var m = 0; m < marked.length; m++) marked[m].removeAttribute('${selectedAttr}');
+      } else if (selected && selected.isConnected !== false) {
+        selected.setAttribute('${selectedAttr}', '');
+        sendMsg('glide:element-selected', selected);
+      }
+      return;
+    }
     if (e.data.type === 'glide:scroll-by') {
       window.scrollBy({
         top: e.data.y,
@@ -1375,13 +1429,13 @@ export function buildBridgeScript(
       if (el) {
         if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
           el.value = e.data.value;
-        } else {
+        } else if (!el.children || el.children.length === 0) {
           el.textContent = e.data.value;
         }
       }
     }
     if (e.data.type === 'glide:optimistic-style') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.id + '"]');
+      var el = resolveElementById(e.data.id);
       if (el) {
         var styles = e.data.styles || {};
         for (var prop in styles) {
@@ -1438,20 +1492,21 @@ export function buildBridgeScript(
       });
     }
     if (e.data.type === 'glide:resize-start') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
+      var el = resolveElementById(e.data.source);
       if (el) {
+        if (!el.__glide_resize_styles__) el.__glide_resize_styles__ = captureInlineStyles(el, ['transition', 'transition-property']);
         el.style.setProperty('transition', 'none', 'important');
         el.style.setProperty('transition-property', 'none', 'important');
       }
     }
     if (e.data.type === 'glide:resize-end') {
-      var el = document.querySelector('[${sourceAttr}="' + e.data.source + '"]');
+      var el = resolveElementById(e.data.source);
       if (el) {
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
             if (el) {
-              el.style.removeProperty('transition');
-              el.style.removeProperty('transition-property');
+              restoreInlineStyles(el, el.__glide_resize_styles__);
+              delete el.__glide_resize_styles__;
             }
           });
         });
@@ -1552,6 +1607,8 @@ export function buildBridgeScript(
 
     function resolveElementById(targetId) {
       if (!targetId) return null;
+      // A repeated JSX template has several DOM instances. Keep the clicked one.
+      if (selected && selected.isConnected && selected.getAttribute('${sourceAttr}') === targetId) return selected;
       var pcst = '__glide_cst_';
       if (targetId.indexOf(pcst) === 0) {
         try { return document.querySelector(targetId.slice(pcst.length)); } catch(err) {}
@@ -1568,15 +1625,7 @@ export function buildBridgeScript(
         var s = (allStamped[i].getAttribute('${sourceAttr}') || '').replace(/\\\\/g, '/').toLowerCase();
         if (s === normTarget) return allStamped[i];
       }
-      // 3. Line:col suffix match
-      var lineColMatch = targetId.match(/:(\d+:\d+)$/);
-      var suffix = lineColMatch ? lineColMatch[0] : (targetId.match(/^\d+:\d+$/) ? ':' + targetId : null);
-      if (suffix) {
-        for (var j = 0; j < allStamped.length; j++) {
-          var srcAttr = (allStamped[j].getAttribute('${sourceAttr}') || '').replace(/\\\\/g, '/');
-          if (srcAttr.endsWith(suffix)) return allStamped[j];
-        }
-      }
+      // Never resolve by line/column alone: unrelated files share coordinates.
       return null;
     }
 
@@ -1597,7 +1646,7 @@ export function buildBridgeScript(
         } else {
           selected = el;
           el.setAttribute('${selectedAttr}', '');
-          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          if (e.data.scrollIntoView) el.scrollIntoView({ behavior: 'instant', block: 'nearest' });
           sendMsg('glide:element-selected', el, isShift);
         }
       }
@@ -1634,6 +1683,7 @@ export function buildBridgeScript(
     }
   });
   document.addEventListener('dragstart', function(e) {
+    if (interactionMode) return;
     // Prevent native dragging of buttons, links, images, etc. inside the iframe
     e.preventDefault();
   }, true);
@@ -1646,6 +1696,7 @@ export function buildBridgeScript(
   }, true);
 
   document.addEventListener('pointerleave', function(e) {
+    if (interactionMode) return;
     if (hovered) {
       hovered.removeAttribute('${hoverAttr}');
       hovered = null;
@@ -1676,7 +1727,7 @@ export function buildBridgeScript(
   // Real-time selection outline alignment loop
   var lastSentRect = null;
   function updateSelectionLoop() {
-    if (selected && !isDragging) {
+    if (selected && selected.isConnected !== false && !isDragging && !interactionMode) {
       var r = selected.getBoundingClientRect();
       if (!lastSentRect ||
           lastSentRect.left !== r.left ||
@@ -1693,56 +1744,29 @@ export function buildBridgeScript(
   }
   requestAnimationFrame(updateSelectionLoop);
 
-  // Watch for HMR updates and DOM structural changes to keep selection/hover overlays perfectly aligned
+  // Ignore our highlight bookkeeping and coalesce application updates once per
+  // animation frame. Telemetry must never feed back into another DOM refresh.
   if (typeof MutationObserver !== 'undefined') {
-    var observer = new MutationObserver(function() {
-      // Disconnect observer to avoid recursion from our own DOM mutations
-      observer.disconnect();
-
-      // Check if we can send the ready state now
-      sendReadyState();
-
-      // If we are actively dragging, skip sending style and layout updates to the parent editor
-      // to prevent layout thrashing, lagging, and screen flashing.
-      if (isDragging) {
-        observer.observe(document.documentElement, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          characterData: true
-        });
-        return;
-      }
-
-      // Re-query selection/hover elements if they got replaced in the DOM by HMR
-      if (selected) {
-        var src = selected.getAttribute('${sourceAttr}');
-        if (src) {
-          var newEl = document.querySelector('[${sourceAttr}="' + src + '"]');
-          if (newEl && newEl !== selected) {
-            selected = newEl;
-            selected.setAttribute('${selectedAttr}', '');
-          }
-        }
-        sendMsg('glide:element-selected', selected);
-      }
-      if (hovered) {
-        var src = hovered.getAttribute('${sourceAttr}');
-        if (src) {
-          var newEl = document.querySelector('[${sourceAttr}="' + src + '"]');
-          if (newEl && newEl !== hovered) {
-            hovered = newEl;
-          }
-        }
-        sendMsg('glide:element-hovered', hovered);
-      }
-
-      // Re-observe after mutations are complete
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        characterData: true
+    var mutationFrame = null;
+    var treeDirty = false;
+    var observer = new MutationObserver(function(records) {
+      var relevant = false;
+      records.forEach(function(record) {
+        if (record.type === 'attributes' && (record.attributeName === '${hoverAttr}' || record.attributeName === '${selectedAttr}' || record.attributeName === 'data-glide-design-mode')) return;
+        var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+        if (target && ((target.id || '').indexOf('__glide_') === 0 || (target.closest && target.closest('[data-glide-bridge]')))) return;
+        relevant = true;
+        if (record.type !== 'attributes' || record.attributeName === '${sourceAttr}' || record.attributeName === 'class' || record.attributeName === 'data-gl-name') treeDirty = true;
+      });
+      if (!relevant || mutationFrame !== null) return;
+      mutationFrame = requestAnimationFrame(function() {
+        mutationFrame = null;
+        if (isDragging || window.__glide_inline_editing__) return;
+        sendReadyState();
+        window.__glide_update_selection_node__();
+        if (selected && !interactionMode) sendMsg('glide:element-selected', selected);
+        if (hovered && !interactionMode) sendMsg('glide:element-hovered', hovered);
+        if (treeDirty) { treeDirty = false; sendDOMTree(); }
       });
     });
     observer.observe(document.documentElement, {
@@ -1986,35 +2010,8 @@ export function glideSourceStamping(): Plugin {
 
         // Only return the stamped code — bridge is injected via transformIndexHtml
         const hmrInjection = `
-if (import.meta.hot && !window.__glide_hmr_registered__) {
-  window.__glide_hmr_registered__ = true;
-  import.meta.hot.on('glide:positions-updated', function(data) {
-    var el = document.getElementById('__glide_positions__');
-    if (el) el.textContent = data.css;
-
-    // Defer clearing inline styles by 2 frames to ensure the browser has parsed the new CSS and rendered it.
-    // This eliminates the visual snap-back/flashing caused by removing inline styles before style recalculation completes.
-    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
-    raf(function() {
-      raf(function() {
-        var elements = document.querySelectorAll('[${glideConfig.sourceAttribute}]');
-        for (var i = 0; i < elements.length; i++) {
-          var item = elements[i];
-          item.style.removeProperty('left');
-          item.style.removeProperty('top');
-          item.style.removeProperty('position');
-        }
-      });
-    });
-
-    if (typeof window.__glide_refresh_selection__ === 'function') {
-      setTimeout(window.__glide_refresh_selection__, 0);
-    }
-  });
-}
-
-if (import.meta.hot) {
-  import.meta.hot.on('vite:afterUpdate', function() {
+if (import.meta.hot && window !== window.top) {
+  const __glideAfterUpdate = function() {
     if (window.__glide_refresh_pending__) return;
     window.__glide_refresh_pending__ = true;
     var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
@@ -2029,6 +2026,10 @@ if (import.meta.hot) {
         }
       });
     });
+  };
+  import.meta.hot.on('vite:afterUpdate', __glideAfterUpdate);
+  import.meta.hot.dispose(function() {
+    import.meta.hot.off('vite:afterUpdate', __glideAfterUpdate);
   });
 }
 `;
