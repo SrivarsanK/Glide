@@ -10,7 +10,8 @@ import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
 import { mutateProp } from './props.js';
 import { layoutStyles } from './layout.js';
-import { mutationVariants, splitClassVariants, type MutationScope } from '@srivarsank/core';
+import { mutationVariants, splitClassVariants, defaultTailwindTheme, isColorValue, isFontSizeValue, colorToken,
+  spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, type MutationScope, type TailwindTheme } from '@srivarsank/core';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -64,16 +65,30 @@ export function findJSXElementAt(
   return targetNode;
 }
 
-function matchesProperty(c: string, property: string): boolean {
+const DEFAULT_THEME = defaultTailwindTheme();
+const SPACING_PREFIXES: Record<string, string> = {
+  marginLeft: 'ml-', marginRight: 'mr-', marginTop: 'mt-', marginBottom: 'mb-', margin: 'm-',
+  paddingLeft: 'pl-', paddingRight: 'pr-', paddingTop: 'pt-', paddingBottom: 'pb-', padding: 'p-',
+  paddingInline: 'px-', paddingBlock: 'py-', width: 'w-', height: 'h-', gap: 'gap-', rowGap: 'gap-y-',
+};
+const COLOR_PREFIXES: Record<string, string> = { color: 'text-', backgroundColor: 'bg-', borderColor: 'border-' };
+const OTHER_PREFIXES: Record<string, string> = {
+  opacity: 'opacity-', borderTopLeftRadius: 'rounded-tl-', borderTopRightRadius: 'rounded-tr-',
+  borderBottomRightRadius: 'rounded-br-', borderBottomLeftRadius: 'rounded-bl-', borderWidth: 'border-',
+};
+
+/** Only classes positively identified as setting `property` match, so unknown classes survive an edit. */
+function matchesProperty(c: string, property: string, theme: TailwindTheme = DEFAULT_THEME): boolean {
   const parts = splitClassVariants(c);
   const name = parts[parts.length - 1];
+  const unsigned = name.replace(/^-/, '');
 
   switch (property) {
-    case 'marginLeft': return name.startsWith('ml-');
-    case 'marginRight': return name.startsWith('mr-');
-    case 'marginTop': return name.startsWith('mt-');
-    case 'marginBottom': return name.startsWith('mb-');
-    case 'margin': return name.split('-')[0] === 'm';
+    case 'marginLeft': return unsigned.startsWith('ml-');
+    case 'marginRight': return unsigned.startsWith('mr-');
+    case 'marginTop': return unsigned.startsWith('mt-');
+    case 'marginBottom': return unsigned.startsWith('mb-');
+    case 'margin': return unsigned.split('-')[0] === 'm';
     case 'paddingLeft': return name.startsWith('pl-');
     case 'paddingRight': return name.startsWith('pr-');
     case 'paddingTop': return name.startsWith('pt-');
@@ -91,19 +106,20 @@ function matchesProperty(c: string, property: string): boolean {
     case 'borderBottomRightRadius': return name.startsWith('rounded-br');
     case 'borderBottomLeftRadius': return name.startsWith('rounded-bl');
     case 'flexDirection': return name === 'flex-row' || name === 'flex-col';
-    case 'justifyContent': return name.startsWith('justify-');
+    case 'justifyContent': return name.startsWith('justify-') && !name.startsWith('justify-items-') && !name.startsWith('justify-self-');
     case 'alignItems': return name.startsWith('items-');
     case 'borderStyle': return ['border-solid', 'border-dashed', 'border-dotted', 'border-none'].includes(name);
+    // `text-*` is a color or a font size depending on the theme; a class that is both stays put.
     case 'fontSize':
-      return name.startsWith('text-') && !matchesProperty(c, 'color') && !matchesProperty(c, 'textAlign');
+      return name.startsWith('text-') && isFontSizeValue(name.slice(5), theme) && !isColorValue(name.slice(5), theme);
     case 'textAlign':
-      return ['text-left', 'text-center', 'text-right', 'text-justify'].includes(name);
+      return ['text-left', 'text-center', 'text-right', 'text-justify', 'text-start', 'text-end'].includes(name);
     case 'color':
-      return name.startsWith('text-') && !['left', 'center', 'right', 'justify'].includes(name.slice(5)) && !/^(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|\[\d+(px|rem|em)\])$/.test(name.slice(5));
+      return name.startsWith('text-') && isColorValue(name.slice(5), theme) && !isFontSizeValue(name.slice(5), theme);
     case 'backgroundColor':
-      return name.startsWith('bg-');
+      return name.startsWith('bg-') && isColorValue(name.slice(3), theme);
     case 'borderColor':
-      return name.startsWith('border-') && !matchesProperty(c, 'borderWidth') && !matchesProperty(c, 'borderStyle');
+      return name.startsWith('border-') && isColorValue(name.slice(7), theme);
     case 'borderWidth':
       return name.startsWith('border-') && (/^border-\[\d+px\]$/.test(name) || /^border-\d+$/.test(name) || name === 'border');
     case 'position': return ['static','relative','absolute','fixed','sticky'].includes(name);
@@ -116,8 +132,25 @@ function matchesProperty(c: string, property: string): boolean {
   }
 }
 
-function getNewClass(property: string, value: any): string {
+/** The token part of a matching class (`bg-primary/50` → `primary`). */
+function classToken(c: string, prefix: string): string | null {
+  const parts = splitClassVariants(c);
+  const name = parts[parts.length - 1].replace(/^-/, '');
+  if (!name.startsWith(prefix)) return null;
+  const token = name.slice(prefix.length);
+  return token.startsWith('[') ? null : token.split('/')[0];
+}
+
+/**
+ * The class for `property: value`. Uses the theme's token when the value
+ * equals one exactly; otherwise an arbitrary value. `existing` holds the tokens
+ * this property already uses in the edited scope.
+ */
+function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAULT_THEME, existing: string[] = []): string {
   const clean = String(value).trim().replace(/^["']|["']$/g, '');
+  // Tailwind splits classes on whitespace; arbitrary values use underscores.
+  const arbitraryValue = clean.replace(/\s+/g, '_');
+  const isNumber = /^-?\d*\.?\d+$/.test(clean);
 
   switch (property) {
     case 'flexDirection':
@@ -132,90 +165,51 @@ function getNewClass(property: string, value: any): string {
       return `border-${clean}`;
     case 'position':
       return ['static','relative','absolute','fixed','sticky'].includes(clean) ? clean : 'relative';
-    case 'left': {
-      let v = clean;
-      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
-      return `left-[${v}px]`;
-    }
-    case 'top': {
-      let v = clean;
-      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
-      return `top-[${v}px]`;
-    }
-    case 'right': {
-      let v = clean;
-      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
-      return `right-[${v}px]`;
-    }
+    case 'left':
+    case 'top':
+    case 'right':
     case 'bottom': {
       let v = clean;
       if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
-      return `bottom-[${v}px]`;
+      return `${property}-[${v}px]`;
     }
-    default:
-      let prefix = '';
-      switch (property) {
-        case 'marginLeft': prefix = 'ml-'; break;
-        case 'marginRight': prefix = 'mr-'; break;
-        case 'marginTop': prefix = 'mt-'; break;
-        case 'marginBottom': prefix = 'mb-'; break;
-        case 'margin': prefix = 'm-'; break;
-        case 'paddingLeft': prefix = 'pl-'; break;
-        case 'paddingRight': prefix = 'pr-'; break;
-        case 'paddingTop': prefix = 'pt-'; break;
-        case 'paddingBottom': prefix = 'pb-'; break;
-        case 'padding': prefix = 'p-'; break;
-        case 'paddingInline': prefix = 'px-'; break;
-        case 'paddingBlock': prefix = 'py-'; break;
-        case 'width': prefix = 'w-'; break;
-        case 'height': prefix = 'h-'; break;
-        case 'gap': prefix = 'gap-'; break;
-        case 'rowGap': prefix = 'gap-y-'; break;
-        case 'opacity': prefix = 'opacity-'; break;
-        case 'borderTopLeftRadius': prefix = 'rounded-tl-'; break;
-        case 'borderTopRightRadius': prefix = 'rounded-tr-'; break;
-        case 'borderBottomRightRadius': prefix = 'rounded-br-'; break;
-        case 'borderBottomLeftRadius': prefix = 'rounded-bl-'; break;
-        case 'fontSize': prefix = 'text-'; break;
-        case 'color': prefix = 'text-'; break;
-        case 'backgroundColor': prefix = 'bg-'; break;
-        case 'borderColor': prefix = 'border-'; break;
-        case 'borderWidth': prefix = 'border-'; break;
-      }
-      if (prefix) {
-        let val = clean;
-        if (/^\d+px$/.test(clean)) {
-          val = clean.slice(0, -2);
-        }
-
-        // Check for standard multiples of 4 for margins/paddings
-        if (['marginLeft','marginRight','marginTop','marginBottom','margin','paddingLeft','paddingRight','paddingTop','paddingBottom','padding','paddingInline','paddingBlock'].includes(property)) {
-          const num = Number(val);
-          if (!isNaN(num) && num % 4 === 0 && num > 0 && num <= 384) {
-            return `${prefix}${num / 4}`;
-          }
-        }
-
-        if (property === 'color' || property === 'backgroundColor' || property === 'borderColor') {
-          return `${prefix}[${val}]`;
-        }
-        if (property === 'opacity') {
-          return `${prefix}[${val}]`;
-        }
-        if (/^\d+$/.test(val)) {
-          return `${prefix}[${val}px]`;
-        }
-        return `${prefix}[${val}]`;
-      }
-      return '';
   }
+
+  const colorPrefix = COLOR_PREFIXES[property];
+  if (colorPrefix) {
+    const token = colorToken(clean, theme, existing);
+    return token ? `${colorPrefix}${token}` : `${colorPrefix}[${arbitraryValue}]`;
+  }
+
+  const spacingPrefix = SPACING_PREFIXES[property];
+  if (spacingPrefix) {
+    const px = lengthToPx(clean);
+    const token = px === null ? null : spacingToken(Math.abs(px), theme);
+    if (token && px !== null && (px >= 0 || property.startsWith('margin'))) return `${px < 0 ? '-' : ''}${spacingPrefix}${token}`;
+    return isNumber ? `${spacingPrefix}[${clean}px]` : `${spacingPrefix}[${arbitraryValue}]`;
+  }
+
+  if (property === 'fontSize') {
+    // Font-size tokens also set line-height, so only stay on tokens when the element already uses one.
+    const usesTokens = existing.some(token => theme.fontSizes.has(token));
+    const px = lengthToPx(clean);
+    const token = usesTokens && px !== null ? fontSizeToken(px, theme) : null;
+    if (token) return `text-${token}`;
+    return isNumber ? `text-[${clean}px]` : `text-[${arbitraryValue}]`;
+  }
+
+  const prefix = OTHER_PREFIXES[property];
+  if (!prefix) return '';
+  const val = /^\d+px$/.test(clean) ? clean.slice(0, -2) : arbitraryValue;
+  if (property !== 'opacity' && /^\d+$/.test(val)) return `${prefix}[${val}px]`;
+  return `${prefix}[${val}]`;
 }
 
-function getExistingValue(existingClasses: string, property: string): number {
+function getExistingValue(existingClasses: string, property: string, theme: TailwindTheme = DEFAULT_THEME): number {
   const classes = existingClasses.split(/\s+/).filter(Boolean);
   for (const c of classes) {
-    if (matchesProperty(c, property)) {
-      const parts = c.split(':');
+    if (matchesProperty(c, property, theme)) {
+      const parts = splitClassVariants(c);
       const name = parts[parts.length - 1];
 
       const jitMatch = name.match(/-\[([-\d]+)(?:px)?\]$/);
@@ -223,18 +217,10 @@ function getExistingValue(existingClasses: string, property: string): number {
         return Number(jitMatch[1]);
       }
 
-      let prefix = '';
-      if (property.startsWith('margin') || property.startsWith('padding')) {
-        const char = property.includes('Left') ? 'l' : property.includes('Right') ? 'r' : property.includes('Top') ? 't' : 'b';
-        prefix = property.startsWith('margin') ? `m${char}-` : `p${char}-`;
-      }
-      if (prefix && name.startsWith(prefix)) {
-        const valStr = name.slice(prefix.length);
-        const val = Number(valStr);
-        if (!isNaN(val)) {
-          return val * 4;
-        }
-      }
+      const prefix = SPACING_PREFIXES[property];
+      const token = prefix ? classToken(c, prefix) : null;
+      const px = token === null ? null : spacingTokenPx(token, theme);
+      if (px !== null) return name.startsWith('-') ? -px : px;
     }
   }
   return 0;
@@ -245,9 +231,10 @@ export function updateClassString(
   property: string,
   value: any,
   breakpoint?: string,
-  pseudoState?: string
+  pseudoState?: string,
+  theme: TailwindTheme = DEFAULT_THEME
 ): string {
-  const variants = mutationVariants({ breakpoint, pseudoState });
+  const variants = mutationVariants({ breakpoint, pseudoState }, [...theme.breakpoints.keys()]);
   if (property === 'className') {
     if (variants.length) throw new Error('UNSUPPORTED_SCOPE: Replace individual properties in a scoped edit.');
     return value;
@@ -265,15 +252,18 @@ export function updateClassString(
     const isNegative = valStr.startsWith('-=');
     const change = Number(valStr.slice(2).replace('px', ''));
     if (!isNaN(change)) {
-      const current = getExistingValue(classes.filter(inScope).join(' '), property);
+      const current = getExistingValue(classes.filter(inScope).join(' '), property, theme);
       finalValue = isNegative ? (current - change) : (current + change);
     }
   }
 
-  const newClass = getNewClass(property, finalValue);
+  const replaced = classes.filter(c => inScope(c) && matchesProperty(c, property, theme));
+  const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
+  const existingTokens = prefix ? replaced.flatMap(c => classToken(c, prefix) ?? []) : [];
+  const newClass = getNewClass(property, finalValue, theme, existingTokens);
   if (!newClass) return existingClasses;
 
-  const filtered = classes.filter(c => !inScope(c) || !matchesProperty(c, property));
+  const filtered = classes.filter(c => !replaced.includes(c));
   filtered.push([...variants, newClass].join(':'));
   return filtered.join(' ');
 }
@@ -299,8 +289,9 @@ function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
   throw new Error('UNSUPPORTED_OPERATION: className must be a static string literal.');
 }
 
-function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string): string {
-  if (property !== 'className' && !getNewClass(property, value)) {
+function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string,
+  theme: TailwindTheme = DEFAULT_THEME): string {
+  if (property !== 'className' && !getNewClass(property, value, theme)) {
     throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
   }
   const openingEl = node.openingElement;
@@ -308,7 +299,7 @@ function mutateClass(node: t.JSXElement, property: string, value: any, breakpoin
   const literal = classLiteral(classAttr);
   const existingVal = literal?.value ?? '';
 
-  const newVal = updateClassString(existingVal, property, value, breakpoint, pseudoState);
+  const newVal = updateClassString(existingVal, property, value, breakpoint, pseudoState, theme);
 
   // Change only the node selected by its source location.
   if (literal) {
@@ -335,7 +326,8 @@ function jsxNodes(ast: any): t.JSXElement[] {
 }
 
 /** Resolve all locations from the original source. Public columns start at one. */
-export function transformJSXBatch(source: string, operations: JSXMutation[]) {
+export function transformJSXBatch(source: string, operations: JSXMutation[], options: { theme?: TailwindTheme } = {}) {
+  const theme = options.theme ?? DEFAULT_THEME;
   const ast = recastParse(source, { parser: tsxParser });
   const nodes = jsxNodes(ast);
   // Recast expands leading tabs and normalizes line endings before parsing.
@@ -368,7 +360,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
     const change = { ...op.change, breakpoint: op.breakpoint ?? op.change.breakpoint,
       pseudoState: op.pseudoState ?? op.change.pseudoState,
       authoringRepresentation: op.authoringRepresentation ?? op.change.authoringRepresentation };
-    const variants = mutationVariants(change);
+    const variants = mutationVariants(change, [...theme.breakpoints.keys()]);
     if (variants.length && !['class', 'multi-class', 'style', 'layout'].includes(change.type)) {
       throw new Error('UNSUPPORTED_OPERATION: This style scope needs an authored stylesheet.');
     }
@@ -380,18 +372,18 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
         if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value });
-        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState);
+        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState, theme);
         break;
       case 'style':
         if (change.authoringRepresentation === 'tailwind') {
-          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
+          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
         } else mutateStyle(targets[index], change.value);
         break;
       case 'layout': {
         const styles = layoutStyles(change.value, change.layoutPosition);
         if (variants.length || change.authoringRepresentation === 'tailwind') {
           if (change.authoringRepresentation !== 'tailwind') throw new Error('UNSUPPORTED_SCOPE: Scoped layout needs Tailwind authoring.');
-          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
+          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
         } else mutateStyle(targets[index], styles);
         break;
       }
@@ -404,7 +396,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[]) {
       case 'multi-class':
         if (!change.value || typeof change.value !== 'object' || Array.isArray(change.value)) throw new Error('INVALID_OPERATION: Expected class properties.');
         if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], change.value);
-        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState);
+        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
         break;
       case 'text':
         if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');

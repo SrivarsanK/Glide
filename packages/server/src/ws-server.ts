@@ -6,7 +6,7 @@ import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { parseJSXElements, inspectJSXProps } from '@srivarsank/ast-writer';
+import { parseJSXElements, inspectJSXProps, listWorkspaceObjects } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { HistoryStore } from './history-manager.js';
@@ -95,9 +95,12 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   style.textContent = [
     '[${hoverAttr}]{outline:2px solid rgba(56,189,248,0.6)!important;outline-offset:1px;}',
     '[${selectedAttr}]{outline:2px solid #38bdf8!important;outline-offset:2px;}',
-    'html,body{overflow:auto!important;height:auto!important;}'
+    'html[data-glide-design-mode] *, html[data-glide-design-mode] *::before, html[data-glide-design-mode] *::after { animation: none !important; transition: none !important; caret-color: transparent; }',
+    'html[data-glide-design-mode] [contenteditable="true"] { caret-color: auto; }'
   ].join(' ');
   document.head.appendChild(style);
+  var interactionMode = false;
+  if (document.documentElement) document.documentElement.setAttribute('data-glide-design-mode', '');
 
   // ── CST: CSS Selector Tree ──────────────────────────────────────────────
   function getCSSPath(el) {
@@ -129,8 +132,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
 
   function getElId(el) {
     if (!el) return '';
-    var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) ||
-              (el.closest && el.closest('[${sourceAttr}]') && el.closest('[${sourceAttr}]').getAttribute('${sourceAttr}'));
+    var src = el.getAttribute && el.getAttribute('${sourceAttr}');
     return src || ('__glide_cst_' + getCSSPath(el));
   }
 
@@ -344,11 +346,34 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     // Re-send tree on dynamic mutations (throttled)
     if (window.MutationObserver) {
       var mutTimer = null;
-      var obs = new MutationObserver(function() {
-        clearTimeout(mutTimer);
-        mutTimer = setTimeout(sendDOMTree, 400);
+      var obs = new MutationObserver(function(records) {
+        var changed = records.some(function(record) {
+          if (record.type === 'attributes' && (record.attributeName === '${hoverAttr}' || record.attributeName === '${selectedAttr}' || record.attributeName === 'data-glide-design-mode')) return false;
+          var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+          return !target || ((target.id || '').indexOf('__glide_') !== 0 && !(target.closest && target.closest('[data-glide-bridge]')));
+        });
+        if (!changed || mutTimer !== null) return;
+        mutTimer = setTimeout(function() {
+          mutTimer = null;
+          if (selected && selected.isConnected === false) {
+            var source = selected.getAttribute('${sourceAttr}');
+            selected = null;
+            var candidates = document.querySelectorAll('[${sourceAttr}]');
+            for (var i = 0; source && i < candidates.length; i++) {
+              if (candidates[i].getAttribute('${sourceAttr}') === source) { selected = candidates[i]; break; }
+            }
+            if (selected && !interactionMode) selected.setAttribute('${selectedAttr}', '');
+            else window.parent.postMessage({ type: 'glide:clear-selection' }, '*');
+          }
+          if (hovered && hovered.isConnected === false) {
+            hovered = null;
+            window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
+          }
+          if (selected && !interactionMode) sendMsgForAny('glide:element-selected', selected);
+          sendDOMTree();
+        }, 50);
       });
-      obs.observe(document.body, { childList: true, subtree: true, attributes: false });
+      obs.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
     }
   }
 
@@ -362,6 +387,23 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   window.addEventListener('message', function(e) {
     if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
     if (!e.data || !e.data.type) return;
+    if (e.data.type === 'glide:set-interaction-mode') {
+      interactionMode = !!e.data.enabled;
+      if (document.documentElement) {
+        if (interactionMode) document.documentElement.removeAttribute('data-glide-design-mode');
+        else document.documentElement.setAttribute('data-glide-design-mode', '');
+      }
+      if (interactionMode) {
+        if (hovered) hovered.removeAttribute('${hoverAttr}');
+        hovered = null;
+        var marked = document.querySelectorAll('[${selectedAttr}]');
+        for (var m = 0; m < marked.length; m++) marked[m].removeAttribute('${selectedAttr}');
+      } else if (selected && selected.isConnected !== false) {
+        selected.setAttribute('${selectedAttr}', '');
+        sendMsgForAny('glide:element-selected', selected);
+      }
+      return;
+    }
     if (e.data.type === 'glide:request-dom-tree') { sendDOMTree(); }
     if (e.data.type === 'glide:request-scene-nodes') { sendDOMTree(); }
     if (e.data.type === 'glide:select-element-by-id') {
@@ -417,7 +459,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       if (target) {
         if (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'textarea') {
           target.value = e.data.value;
-        } else {
+        } else if (!target.children || target.children.length === 0) {
           target.textContent = e.data.value;
         }
       }
@@ -478,6 +520,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   window.addEventListener('resize', updateRectsOnScrollOrResize, { passive: true });
 
   document.addEventListener('pointermove', function(e) {
+    if (interactionMode) return;
     var el = resolveElementAtPoint(e.clientX, e.clientY);
     if (el && (el === document.body || el === document.documentElement)) el = null;
     if (el) {
@@ -495,6 +538,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }, true);
 
   document.addEventListener('pointerdown', function(e) {
+    if (interactionMode) return;
     if (e.target.isContentEditable || (e.target.closest && e.target.closest('[contenteditable="true"]'))) return;
     var leaf = resolveElementAtPoint(e.clientX, e.clientY);
     if (leaf && (leaf === document.body || leaf === document.documentElement)) leaf = null;
@@ -527,6 +571,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }, true);
 
   document.addEventListener('dblclick', function(e) {
+    if (interactionMode || e.target.isContentEditable) return;
     var leaf = resolveElementAtPoint(e.clientX, e.clientY);
     if (!leaf || leaf === document.body || leaf === document.documentElement) return;
 
@@ -550,7 +595,10 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       return;
     }
 
-    // Enable inline text editing for canvas elements
+    if (leaf.children && leaf.children.length > 0) return;
+    var originalText = leaf.textContent || '';
+    var originalContentEditable = leaf.getAttribute('contenteditable');
+    // Edit only leaf text without flattening nested authored markup.
     leaf.contentEditable = 'true';
     leaf.focus();
     try {
@@ -561,16 +609,24 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     } catch(err) {}
 
     function onBlur() {
-      leaf.contentEditable = 'false';
+      if (originalContentEditable === null) leaf.removeAttribute('contenteditable');
+      else leaf.setAttribute('contenteditable', originalContentEditable);
       var text = leaf.textContent ? leaf.textContent.trim() : '';
       var src = getElId(leaf);
-      window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
+      if (text !== originalText.trim()) window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
       leaf.removeEventListener('blur', onBlur);
+      leaf.removeEventListener('keydown', onKeyDown);
     }
+    function onKeyDown(event) {
+      if (event.key === 'Escape') { event.preventDefault(); leaf.textContent = originalText; leaf.blur(); }
+      else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); leaf.blur(); }
+    }
+    leaf.addEventListener('keydown', onKeyDown);
     leaf.addEventListener('blur', onBlur);
   }, true);
 
   document.addEventListener('click', function(e) {
+    if (interactionMode) return;
     if (e.target.isContentEditable || (e.target.closest && e.target.closest('[contenteditable="true"]'))) return;
     var el = resolveElementAtPoint(e.clientX, e.clientY);
     if (el && el !== document.body && el !== document.documentElement) {
@@ -582,6 +638,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }, true);
 
   document.addEventListener('contextmenu', function(e) {
+    if (interactionMode) return;
     var leaf = resolveElementAtPoint(e.clientX, e.clientY);
     if (leaf && leaf !== document.body && leaf !== document.documentElement) {
       e.preventDefault();
@@ -915,6 +972,8 @@ export class GlideServer {
                     type: 'tree',
                     file: filePath,
                     tree,
+                    workspaceObjects: listWorkspaceObjects(code, filePath),
+                    digest: contentDigest(code),
                     generation: this.fileGenerations.get(normPath) || 0
                   });
                 } catch {}
@@ -984,6 +1043,7 @@ export class GlideServer {
                     file,
                     requestedFile,
                     tree,
+                    workspaceObjects: /\.[jt]sx?$/.test(file) ? listWorkspaceObjects(code, file) : [],
                     digest: contentDigest(code),
                     generation: this.fileGenerations.get(normPath) || 0
                   }));
