@@ -10,6 +10,7 @@ import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
 import { mutateProp } from './props.js';
 import { layoutStyles } from './layout.js';
+import { readClassExpression, type BindingScope } from './class-expression.js';
 import { mutationVariants, splitClassVariants, defaultTailwindTheme, isColorValue, isFontSizeValue, colorToken,
   spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, type MutationScope, type TailwindTheme } from '@srivarsank/core';
 
@@ -241,6 +242,62 @@ export function updateClassString(
   }
 
   const classes = existingClasses.split(/\s+/).filter(Boolean);
+  const plan = planClassEdit(classes, property, value, breakpoint, pseudoState, theme);
+  if (!plan) return existingClasses;
+  return [...classes.filter(c => !plan.replaces(c)), plan.added].join(' ');
+}
+
+const SIDES: Record<string, string> = {
+  padding: 'trbl', paddingInline: 'rl', paddingBlock: 'tb',
+  paddingTop: 't', paddingRight: 'r', paddingBottom: 'b', paddingLeft: 'l',
+  margin: 'trbl', marginTop: 't', marginRight: 'r', marginBottom: 'b', marginLeft: 'l',
+};
+
+/** Properties whose classes set part of `property`, such as `px-4` for padding. */
+function overlappingProperties(property: string): string[] {
+  const sides = SIDES[property];
+  if (!sides) return [property];
+  const family = property.startsWith('padding') ? 'padding' : 'margin';
+  return Object.keys(SIDES).filter(other => other.startsWith(family) && [...SIDES[other]].some(side => sides.includes(side)));
+}
+
+/** Classes that set part of a property without being one of its own, such as `size-9` for width. */
+const ALSO_SETS: Record<string, RegExp> = {
+  width: /^size-/, height: /^size-/,
+  gap: /^gap-[xy]-/, rowGap: /^gap-(?!x-)/,
+  margin: /^m[xy]-/, marginTop: /^my-/, marginBottom: /^my-/, marginLeft: /^mx-/, marginRight: /^mx-/,
+};
+
+const NOT_COLOR: Record<string, RegExp> = {
+  backgroundColor: /^bg-(\[(url|image|length|size|position)|(no-)?repeat|cover|contain|auto|fixed|local|scroll|center|top|bottom|left|right|clip-|origin-|blend-|gradient-|linear-|radial-|conic-|none$)/,
+  color: /^text-(left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow)/,
+  borderColor: /^border(-[xytrblse])?(-\d+|-\[\d+px\])?$|^border-(solid|dashed|dotted|double|hidden|none|collapse|separate|spacing)/,
+};
+
+/**
+ * A color class the theme does not name, such as `bg-primary` without the
+ * project theme. Edits are refused rather than risk an override.
+ */
+function mayBeColor(c: string, property: string, theme: TailwindTheme): boolean {
+  const prefix = COLOR_PREFIXES[property];
+  const name = splitClassVariants(c).pop()!;
+  if (!prefix || !name.startsWith(prefix) || NOT_COLOR[property].test(name)) return false;
+  return !(property === 'color' && isFontSizeValue(name.slice(prefix.length), theme));
+}
+
+interface ClassEditPlan {
+  added: string;
+  /** The class sets the edited property in the edited scope, so the edit replaces it. */
+  replaces(c: string): boolean;
+  /** The class sets any part of the edited property in the edited scope. */
+  overlaps(c: string): boolean;
+  /** A class starting with this static text (`bg-` in `bg-${tone}`) may set part of the edited property. */
+  overlapsPartial(prefix: string): boolean;
+}
+
+function planClassEdit(classes: string[], property: string, value: any, breakpoint?: string, pseudoState?: string,
+  theme: TailwindTheme = DEFAULT_THEME): ClassEditPlan | null {
+  const variants = mutationVariants({ breakpoint, pseudoState }, [...theme.breakpoints.keys()]);
   const inScope = (token: string) => {
     const prefixes = splitClassVariants(token).slice(0, -1);
     return prefixes.length === variants.length && variants.every(variant => prefixes.includes(variant));
@@ -257,27 +314,56 @@ export function updateClassString(
     }
   }
 
-  const replaced = classes.filter(c => inScope(c) && matchesProperty(c, property, theme));
+  const replaces = (c: string) => inScope(c) && matchesProperty(c, property, theme);
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
-  const existingTokens = prefix ? replaced.flatMap(c => classToken(c, prefix) ?? []) : [];
+  const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
   const newClass = getNewClass(property, finalValue, theme, existingTokens);
-  if (!newClass) return existingClasses;
+  if (!newClass) return null;
 
-  const filtered = classes.filter(c => !replaced.includes(c));
-  filtered.push([...variants, newClass].join(':'));
-  return filtered.join(' ');
+  const related = overlappingProperties(property);
+  const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
+    || (p === 'fontSize' ? 'text-' : []));
+  const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(splitClassVariants(c).pop()!.replace(/^-/, ''));
+  return {
+    added: [...variants, newClass].join(':'),
+    replaces,
+    overlaps: c => inScope(c)
+      && (related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
+    overlapsPartial: start => {
+      const name = splitClassVariants(start).pop()!.replace(/^-/, '');
+      return inScope(start) && (relatedPrefixes.some(p => name.startsWith(p)) || alsoSets(start));
+    },
+  };
 }
 
-function getStaticAttribute(opening: t.JSXOpeningElement, name: string): t.JSXAttribute | undefined {
-  if (opening.attributes.some(attr => t.isJSXSpreadAttribute(attr))) {
-    throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
-  }
+/** Whether a spread is the rest of an object that already took `name` out, as in `({ className, ...props })`. */
+function restWithout(spread: t.JSXSpreadAttribute, name: string, scope?: BindingScope): boolean {
+  if (!t.isIdentifier(spread.argument)) return false;
+  const rest = spread.argument.name;
+  const binding = scope?.getBinding(rest);
+  let pattern = binding?.constant ? binding.path?.node : null;
+  if (t.isVariableDeclarator(pattern)) pattern = pattern.id;
+  if (t.isAssignmentPattern(pattern)) pattern = pattern.left;
+  if (!t.isObjectPattern(pattern)) return false;
+  return pattern.properties.some(p => t.isRestElement(p) && t.isIdentifier(p.argument, { name: rest }))
+    && pattern.properties.some(p => t.isObjectProperty(p) && !p.computed
+      && (t.isIdentifier(p.key, { name }) || t.isStringLiteral(p.key, { value: name })));
+}
+
+function getStaticAttribute(opening: t.JSXOpeningElement, name: string, scope?: BindingScope): t.JSXAttribute | undefined {
   const attributes = opening.attributes.filter((attr): attr is t.JSXAttribute =>
     t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name, { name }));
+  const attr = attributes[0];
+  // A spread after the attribute overrides it; a written attribute goes last, after every spread.
+  const position = attr ? opening.attributes.indexOf(attr) : -1;
+  if (opening.attributes.some((spread, index) => t.isJSXSpreadAttribute(spread) && index > position
+    && !restWithout(spread, name, scope))) {
+    throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
+  }
   if (attributes.length > 1) {
     throw new Error(`UNSUPPORTED_OPERATION: ${name} has duplicate attributes.`);
   }
-  return attributes[0];
+  return attr;
 }
 
 function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
@@ -289,13 +375,64 @@ function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
   throw new Error('UNSUPPORTED_OPERATION: className must be a static string literal.');
 }
 
+/**
+ * Edit the classes of a cn/clsx/template/cva className. Only classes that always
+ * apply are changed; an edit a condition or variant would override is refused.
+ */
+function mutateClassExpression(expression: t.Expression, property: string, value: any, breakpoint: string | undefined,
+  pseudoState: string | undefined, theme: TailwindTheme, scope: BindingScope): void {
+  if (property === 'className') throw new Error('UNSUPPORTED_OPERATION: Replacing every class needs a static className string.');
+  const { pieces, prepend } = readClassExpression(expression, scope);
+  const always = pieces.filter(piece => !piece.condition);
+  const plan = planClassEdit(always.flatMap(piece => piece.tokens.filter(token => !token.partial).map(token => token.name)),
+    property, value, breakpoint, pseudoState, theme);
+  if (!plan) return;
+  const label = property.replace(/[A-Z]/g, letter => ' ' + letter.toLowerCase());
+  for (const piece of pieces) {
+    for (const token of piece.tokens) {
+      if (token.prefix !== undefined && plan.overlapsPartial(token.prefix)) {
+        throw new Error(`UNSUPPORTED_OPERATION: The ${label} depends on a class built at runtime (\`${token.prefix}…\`).`);
+      }
+      if (piece.condition && !token.partial && plan.overlaps(token.name)) {
+        throw new Error(`UNSUPPORTED_OPERATION: The ${label} is also set ${piece.condition}. Edit that case in source.`);
+      }
+    }
+  }
+  const holders = always.filter(piece => piece.tokens.some(token => !token.partial && plan.replaces(token.name)));
+  const locked = holders.find(piece => piece.lockedBy);
+  if (locked) {
+    throw new Error(`UNSUPPORTED_OPERATION: The ${label} comes from \`${locked.lockedBy}\`, which other code also uses. Edit it in source.`);
+  }
+  const target = holders[0]
+    ?? always.find(piece => piece.canAdd && !piece.shared)
+    ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
+  if (!target && !prepend) {
+    const lockedBy = always.find(piece => piece.lockedBy)?.lockedBy;
+    throw new Error(t.isIdentifier(expression, { name: 'className' })
+      ? 'UNSUPPORTED_OPERATION: The classes are passed in through `className`. Edit them where the component is used.'
+      : lockedBy
+        ? `UNSUPPORTED_OPERATION: The classes come from \`${lockedBy}\`, which other code also uses. Edit it in source.`
+        : pieces.length
+          ? 'UNSUPPORTED_OPERATION: Every class here depends on a condition, so there is no class string to add to.'
+          : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
+  }
+  for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
+  if (!target) prepend!(plan.added);
+}
+
+/** With `scope`, className may be a cn/clsx/template/cva expression; without it, only a string. */
 function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string,
-  theme: TailwindTheme = DEFAULT_THEME): string {
+  theme: TailwindTheme = DEFAULT_THEME, scope?: BindingScope): string {
   if (property !== 'className' && !getNewClass(property, value, theme)) {
     throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
   }
   const openingEl = node.openingElement;
-  const classAttr = getStaticAttribute(openingEl, 'className');
+  const classAttr = getStaticAttribute(openingEl, 'className', scope);
+  const expression = t.isJSXExpressionContainer(classAttr?.value) ? classAttr.value.expression : null;
+  if (scope && expression && !t.isStringLiteral(expression) && !t.isJSXEmptyExpression(expression)) {
+    mutateClassExpression(expression, property, value, breakpoint, pseudoState, theme, scope);
+    return '';
+  }
   const literal = classLiteral(classAttr);
   const existingVal = literal?.value ?? '';
 
@@ -330,6 +467,9 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
   const theme = options.theme ?? DEFAULT_THEME;
   const ast = recastParse(source, { parser: tsxParser });
   const nodes = jsxNodes(ast);
+  // Scopes let class edits resolve `...props` and cva definitions.
+  const scopes = new Map<t.JSXElement, BindingScope>();
+  traverse(ast, { JSXElement(p: { node: t.JSXElement; scope: BindingScope }) { scopes.set(p.node, p.scope); } });
   // Recast expands leading tabs and normalizes line endings before parsing.
   // Resolve public coordinates and hashes against Babel's untouched input,
   // then pair the structure-identical trees by traversal order.
@@ -357,6 +497,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
     return nodes[originalNodes.indexOf(node)];
   });
   operations.forEach((op, index) => {
+    const scope = scopes.get(targets[index]);
     const change = { ...op.change, breakpoint: op.breakpoint ?? op.change.breakpoint,
       pseudoState: op.pseudoState ?? op.change.pseudoState,
       authoringRepresentation: op.authoringRepresentation ?? op.change.authoringRepresentation };
@@ -371,32 +512,32 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
       case 'prop': mutateProp(ast, targets[index], change.property, change.value, change.scope); break;
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
-        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value });
-        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState, theme);
+        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value }, scope);
+        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState, theme, scope);
         break;
       case 'style':
         if (change.authoringRepresentation === 'tailwind') {
-          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
-        } else mutateStyle(targets[index], change.value);
+          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
+        } else mutateStyle(targets[index], change.value, scope);
         break;
       case 'layout': {
         const styles = layoutStyles(change.value, change.layoutPosition);
         if (variants.length || change.authoringRepresentation === 'tailwind') {
           if (change.authoringRepresentation !== 'tailwind') throw new Error('UNSUPPORTED_SCOPE: Scoped layout needs Tailwind authoring.');
-          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
-        } else mutateStyle(targets[index], styles);
+          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
+        } else mutateStyle(targets[index], styles, scope);
         break;
       }
       case 'position':
         if (!change.value || change.value.position !== 'relative' || Object.keys(change.value).some(key => !['position', 'left', 'top'].includes(key))) {
           throw new Error('UNSUPPORTED_OPERATION: Only relative flow-preserving offsets are supported.');
         }
-        mutateStyle(targets[index], change.value);
+        mutateStyle(targets[index], change.value, scope);
         break;
       case 'multi-class':
         if (!change.value || typeof change.value !== 'object' || Array.isArray(change.value)) throw new Error('INVALID_OPERATION: Expected class properties.');
-        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], change.value);
-        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme);
+        if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], change.value, scope);
+        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
         break;
       case 'text':
         if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');
@@ -407,7 +548,14 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
         mutateStructure(ast, targets[index], change, resolve);
     }
   });
-  const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n' }).code;
+  // Recast prints every changed string with one quote style. Keep single quotes when every changed string had them.
+  const quotes = new Set<string>();
+  traverse(ast, { StringLiteral(p: { node: t.StringLiteral }) {
+    const raw = p.node.extra?.raw;
+    if (typeof raw === 'string' && p.node.extra?.rawValue !== p.node.value) quotes.add(raw[0]);
+  } });
+  const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n',
+    ...(quotes.size === 1 && quotes.has("'") ? { quote: 'single' as const } : {}) }).code;
   const survivingNodes = jsxNodes(ast);
   const checked = babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
   const locations: { line: number; column: number; hash: string }[] = [];
@@ -460,9 +608,9 @@ function mutateText(node: t.JSXElement, newText: string): void {
   }
 }
 
-function mutateStyle(node: t.JSXElement, styles: Record<string, string>): void {
+function mutateStyle(node: t.JSXElement, styles: Record<string, string>, scope?: BindingScope): void {
   const openingEl = node.openingElement;
-  const styleAttr = getStaticAttribute(openingEl, 'style');
+  const styleAttr = getStaticAttribute(openingEl, 'style', scope);
   if (styleAttr) {
     const value = styleAttr.value;
     if (!t.isJSXExpressionContainer(value) || !t.isObjectExpression(value.expression)) {

@@ -460,8 +460,11 @@ Copy these into AST Explorer while building Glide to verify node shapes:
 ```jsx
 <div className={cn('flex', isActive && 'bg-blue-500', styles.card)}>
 ```
-⛔ This form requires special handling — the write-back cannot simply swap a class
-string. For cn/clsx patterns, fall back to inline style write-back mode.
+The writer edits the string arguments of cn, clsx, cx, classnames, twMerge and twJoin,
+the static text of template literals, and the base string of a same-file cva definition
+(`packages/ast-writer/src/class-expression.ts`). Classes behind a condition (`isActive &&`,
+ternaries, clsx object keys, cva variants) are never changed; an edit they would override
+is refused with the condition named. Opaque parts such as `styles.card` are left as they are.
 
 ### Styled component definition
 ```javascript
