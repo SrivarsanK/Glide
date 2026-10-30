@@ -18,10 +18,11 @@ export function splitClassVariants(token: string): string[] {
   return parts;
 }
 
-export function mutationVariants(scope: MutationScope): string[] {
+/** `breakpoints` are the project's theme breakpoints; Tailwind's defaults when omitted. */
+export function mutationVariants(scope: MutationScope, breakpoints: readonly string[] = ['sm', 'md', 'lg', 'xl', '2xl']): string[] {
   const breakpoint = scope.breakpoint?.replace(/:$/, '') || '';
   const pseudo = scope.pseudoState?.replace(/:$/, '') || '';
-  if (breakpoint && !['sm', 'md', 'lg', 'xl', '2xl'].includes(breakpoint)) throw new Error('UNSUPPORTED_SCOPE: Unknown breakpoint.');
+  if (breakpoint && !breakpoints.includes(breakpoint)) throw new Error('UNSUPPORTED_SCOPE: Unknown breakpoint.');
   if (pseudo && !['hover', 'focus', 'focus-visible', 'active', 'disabled'].includes(pseudo)) throw new Error('UNSUPPORTED_SCOPE: Unknown pseudo-state.');
   if (scope.authoringRepresentation && !['tailwind', 'inline'].includes(scope.authoringRepresentation)) throw new Error('UNSUPPORTED_SCOPE: Unknown authoring representation.');
   if ((breakpoint || pseudo) && scope.authoringRepresentation === 'inline') throw new Error('UNSUPPORTED_SCOPE: Inline styles cannot represent responsive or pseudo-state edits.');

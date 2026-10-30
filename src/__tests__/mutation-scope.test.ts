@@ -11,7 +11,8 @@ test('scoped tokens preserve base, other breakpoints, states, and arbitrary-valu
   expect(updateClassString(classes, 'paddingInline', 24, 'md')).toBe('px-4 lg:px-4 md:hover:px-4 bg-[url(https://example.test/a:b)] md:px-6');
   expect(updateClassString(classes, 'paddingInline', 24, 'md:', 'hover:')).toBe('px-4 md:px-4 lg:px-4 bg-[url(https://example.test/a:b)] md:hover:px-6');
   expect(updateClassString('ml-2 md:ml-8 md:hover:ml-12', 'marginLeft', '+=4px', 'md')).toBe('ml-2 md:hover:ml-12 md:ml-9');
-  expect(updateClassString('bg-[url(https://example.test/a:b)] md:bg-red-500', 'backgroundColor', 'blue')).toBe('md:bg-red-500 bg-[blue]');
+  // A background image is not a background color, so a color edit keeps it.
+  expect(updateClassString('bg-[url(https://example.test/a:b)] md:bg-red-500', 'backgroundColor', 'blue')).toBe('bg-[url(https://example.test/a:b)] md:bg-red-500 bg-[blue]');
 });
 
 test('staging captures scope and keeps property edits in different scopes separate', () => {

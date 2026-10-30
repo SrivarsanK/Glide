@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { transformJSXBatch, type JSXMutation } from '@srivarsank/ast-writer';
+import { loadTailwindTheme, type TailwindTheme } from '@srivarsank/core';
 import { parse } from '@babel/parser';
 import type { HistoryStore } from './history-manager.js';
 import { ProjectPaths } from './project-paths.js';
@@ -49,6 +50,8 @@ export class MutationService {
   constructor(projectRoot: string, private readonly options: {
     rename?: typeof fs.renameSync;
     onPersist?: (diffs: { file: string; before: string; after: string }[]) => void;
+    /** Tailwind theme for class edits; defaults to the project's own theme. */
+    theme?: () => TailwindTheme;
   } = {}) {
     this.paths = new ProjectPaths(projectRoot);
     this.projectRoot = this.paths.root;
@@ -149,7 +152,7 @@ export class MutationService {
             if (path.relative(this.resolveFile(match[1]), buffer.file) !== '') throw new Error('INVALID_TARGET: Structural references must belong to the same file.');
           }
         }
-        const transformed = transformJSXBatch(buffer.before, edits);
+        const transformed = transformJSXBatch(buffer.before, edits, { theme: this.options.theme?.() ?? loadTailwindTheme(this.projectRoot) });
         buffer.after = transformed.code;
         const newDigest = contentDigest(buffer.after);
         const aliases = new Set([buffer.file, ...edits.map(edit => edit.filePath)].map(file => file.replace(/\\/g, '/')));
