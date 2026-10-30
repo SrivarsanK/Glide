@@ -9,11 +9,9 @@ test.each(['flex', 'grid', 'block'])('drag and resize preserve %s and persist in
   const f = await startTestProject(original), client = await f.connect();
   const result = await request(client, f.edit({ type: 'layout', layoutPosition: 'static', value: { left: '24px', top: '12px', width: '160px', height: '60px' } }));
   expect(result.success, result.error).toBe(true);
-  expect(f.read()).toContain(`display: '${display}'`);
-  expect(f.read()).toContain('position: "relative"');
-  expect(f.read()).toContain('width: "160px"');
-  expect(f.read()).toContain("color: 'red'");
-  expect(f.read()).toContain('<button>B</button>');
+  // New style values use the file's quotes, and nothing outside the style object changes.
+  expect(f.read()).toBe(original.replace("color: 'red' }}",
+    "color: 'red', left: '24px', top: '12px', width: '160px', height: '60px', position: 'relative' }}"));
   expect(fs.readdirSync(f.root).some(name => /position.*\.(css|json)/.test(name))).toBe(false);
   const history = await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE');
   expect(history.stack).toHaveLength(1);

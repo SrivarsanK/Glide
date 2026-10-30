@@ -163,22 +163,21 @@ test('a spread blocks an edit only when it may carry the attribute', () => {
     .toThrow('style may come from a spread attribute.');
   const withStyle = CARD.replace('{ className, ...props }', '{ className, style, ...props }');
   expect(edit(withStyle, '<div', { type: 'class', property: 'width', value: '30px', authoringRepresentation: 'inline' }))
-    .toContain('style={{\n        width: "30px"\n      }}');
+    .toBe(withStyle.replace('{...props}\n', '{...props}\n      style={{ width: "30px" }}\n'));
 });
 
-test('shadcn-style card and input edits change the class in place', () => {
+test('shadcn-style card and input edits change only the class', () => {
   expect(edit(CARD, '<div', { type: 'class', property: 'gap', value: '16px' }))
-    .toContain('"bg-card text-card-foreground flex flex-col gap-4 rounded-xl border py-6 shadow-sm",\n        className');
+    .toBe(CARD.replace('flex-col gap-6', 'flex-col gap-4'));
   expect(edit(INPUT, '<input', { type: 'class', property: 'width', value: '320px' }))
-    .toContain('className={cn("flex h-9 w-80 rounded-md border px-3 py-1", className)}');
+    .toBe(INPUT.replace('h-9 w-full', 'h-9 w-80'));
 });
 
 test('a cva definition only this element uses is edited in place', () => {
   // `typeof buttonVariants` names the type only, so the JSX call is the one use.
   const local = BUTTON.replace('export { Button, buttonVariants }', 'export { Button }');
-  const justified = edit(local, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' });
-  expect(justified).toContain('"inline-flex items-center justify-start gap-2 whitespace-nowrap rounded-md text-sm font-medium disabled:opacity-50",');
-  expect(justified).toContain('default: "h-9 px-4 py-2 has-[>svg]:px-3",');
+  expect(edit(local, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' }))
+    .toBe(local.replace('justify-center gap-2', 'justify-start gap-2'));
 });
 
 test('shadcn-style button never changes an exported cva definition for one element', () => {
@@ -191,7 +190,7 @@ test('shadcn-style button never changes an exported cva definition for one eleme
   expect(() => edit(linked, '<a', { type: 'class', property: 'marginTop', value: '16px' }))
     .toThrow('The classes come from `buttonVariants`, which other code also uses.');
   expect(edit(BUTTON, '<Comp', { type: 'class', property: 'marginTop', value: '16px' }))
-    .toContain('className={cn("mt-4", buttonVariants({ variant, size, className }))}');
+    .toBe(BUTTON.replace('cn(buttonVariants', 'cn("mt-4", buttonVariants'));
 });
 
 test('shadcn-style button refuses what a variant sets', () => {
