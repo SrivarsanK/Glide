@@ -89,3 +89,22 @@ test.each(['Other.tsx', 'App.tsx'])('dragging over %s preserves file boundaries'
   expect(vm.runInContext('sent.length', context)).toBe(0);
   expect(vm.runInContext('positions.length', context)).toBe(1);
 });
+
+test('workspace mutations carry the file digest the server checks', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping(), sourceFileAliases = new Map(), fileDigests = new Map();
+    let currentFile = 'src/App.tsx';
+    const sent = [], toasts = [], WebSocket = { OPEN: 1 };
+    const socket = { readyState: 1, send(value) { sent.push(JSON.parse(value)); } };
+    function showToast(kind, message) { toasts.push(message); }
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('parseSource')} ${fn('mutateWorkspace')}
+    mutateWorkspace('src/App.tsx:4:7', { type: 'detach', workspaceId: 'one', x: 0, y: 0 });
+    fileDigests.set('src/App.tsx', 'abc123');
+    mutateWorkspace('src/App.tsx:4:7', { type: 'workspace-position', x: 10, y: 20 });
+  `, context);
+  expect(vm.runInContext('toasts.length', context)).toBe(1);
+  expect(vm.runInContext('sent', context)).toMatchObject([
+    { type: 'edit', file: 'src/App.tsx', line: 4, column: 7, expectedDigest: 'abc123', change: { type: 'workspace-position' } },
+  ]);
+});

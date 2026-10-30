@@ -3700,7 +3700,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function mutateWorkspace(source, change) {
             const parsed = parseSource(source);
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
-            socket.send(JSON.stringify({ type: 'edit', ...parsed, change }));
+            // The server rejects edits whose digest does not match the file on disk.
+            const expectedDigest = fileDigests.get(normalizePathSlash(parsed.file));
+            if (!expectedDigest) { showToast('error', 'Source mapping is not ready. Select the element again.'); return; }
+            socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest, change }));
           }
           const workspaceCanvas = (${createWorkspaceCanvas.toString()})({
             host: document.getElementById('workspace-objects'), layers: document.getElementById('workspace-layers'),
