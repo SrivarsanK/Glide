@@ -11,6 +11,7 @@ import { mutateStructure, structuralKinds, type StructuralChange } from './struc
 import { mutateProp } from './props.js';
 import { layoutStyles } from './layout.js';
 import { readClassExpression, type BindingScope } from './class-expression.js';
+import { spliceChanges } from './splice.js';
 import { mutationVariants, splitClassVariants, defaultTailwindTheme, isColorValue, isFontSizeValue, colorToken,
   spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, type MutationScope, type TailwindTheme } from '@srivarsank/core';
 
@@ -27,6 +28,19 @@ const tsxParser = {
 const traverse = (traverseModule as any).default || traverseModule;
 const generate = (_generate as any).default || _generate;
 
+/** Print an edited file. Edits are spliced into the source where possible, so nothing else changes. */
+export function printEdited(source: string, ast: any): string {
+  const spliced = spliceChanges(source, ast, code => tsxParser.parse(code));
+  if (spliced !== null) return spliced;
+  // Recast prints every changed string with one quote style. Keep single quotes when every changed string had them.
+  const quotes = new Set<string>();
+  traverse(ast, { StringLiteral(p: { node: t.StringLiteral }) {
+    const raw = p.node.extra?.raw;
+    if (typeof raw === 'string' && p.node.extra?.rawValue !== p.node.value) quotes.add(raw[0]);
+  } });
+  return recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n',
+    ...(quotes.size === 1 && quotes.has("'") ? { quote: 'single' as const } : {}) }).code;
+}
 
 export function computeNodeHash(sourceCodeSlice: string): string {
   return crypto.createHash('sha1').update(sourceCodeSlice.trim()).digest('hex').substring(0, 8);
@@ -403,7 +417,7 @@ function mutateClassExpression(expression: t.Expression, property: string, value
   if (locked) {
     throw new Error(`UNSUPPORTED_OPERATION: The ${label} comes from \`${locked.lockedBy}\`, which other code also uses. Edit it in source.`);
   }
-  const target = holders[0]
+  const target = holders.at(0)
     ?? always.find(piece => piece.canAdd && !piece.shared)
     ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
   if (!target && !prepend) {
@@ -416,6 +430,10 @@ function mutateClassExpression(expression: t.Expression, property: string, value
           ? 'UNSUPPORTED_OPERATION: Every class here depends on a condition, so there is no class string to add to.'
           : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
   }
+  // A prepended class comes before every other class, so one that sets part of the property would override it.
+  const later = !target && always.flatMap(piece => piece.tokens)
+    .find(token => !token.partial && plan.overlaps(token.name) && !plan.replaces(token.name));
+  if (later) throw new Error(`UNSUPPORTED_OPERATION: The ${label} is also set by \`${later.name}\`, which would override the new class.`);
   for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
   if (!target) prepend!(plan.added);
 }
@@ -548,14 +566,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
         mutateStructure(ast, targets[index], change, resolve);
     }
   });
-  // Recast prints every changed string with one quote style. Keep single quotes when every changed string had them.
-  const quotes = new Set<string>();
-  traverse(ast, { StringLiteral(p: { node: t.StringLiteral }) {
-    const raw = p.node.extra?.raw;
-    if (typeof raw === 'string' && p.node.extra?.rawValue !== p.node.value) quotes.add(raw[0]);
-  } });
-  const code = recastPrint(ast, { lineTerminator: source.includes('\r\n') ? '\r\n' : '\n',
-    ...(quotes.size === 1 && quotes.has("'") ? { quote: 'single' as const } : {}) }).code;
+  const code = printEdited(source, ast);
   const survivingNodes = jsxNodes(ast);
   const checked = babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
   const locations: { line: number; column: number; hash: string }[] = [];
@@ -705,7 +716,7 @@ export function updateClassName(
   const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
   const newVal = mutateClass(target, property, value, breakpoint);
 
-  const updatedSourceCode = recastPrint(ast).code;
+  const updatedSourceCode = printEdited(sourceCode, ast);
 
   validateTypeScript(updatedSourceCode);
 
@@ -772,7 +783,7 @@ export function updateJSXText(
   const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
   mutateText(target, newText);
 
-  const updatedSourceCode = recastPrint(ast).code;
+  const updatedSourceCode = printEdited(sourceCode, ast);
 
   validateTypeScript(updatedSourceCode);
 
@@ -840,7 +851,7 @@ export function updateJSXStyleProp(
   const target = jsxNodes(ast)[jsxNodes(babelAst).indexOf(babelTarget.node)];
   mutateStyle(target, styles);
 
-  const updatedSourceCode = recastPrint(ast).code;
+  const updatedSourceCode = printEdited(sourceCode, ast);
 
   validateTypeScript(updatedSourceCode);
 

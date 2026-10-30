@@ -50,10 +50,11 @@ export function updateCSSModuleRule(
 }
 
 // ── Tailwind Token Rewriting ──────────────────────────────────────────────────
-import { parse as recastParse, print as recastPrint } from 'recast';
+import { parse as recastParse } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
 import traverseModule from '@babel/traverse';
+import { printEdited } from './writer.js';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -342,6 +343,6 @@ export function rewriteTailwindToken(
     }
   }
 
-  return recastPrint(ast).code;
+  return printEdited(source, ast);
 }
 
