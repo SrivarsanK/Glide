@@ -106,7 +106,30 @@ try {
   await frame.locator('main').waitFor();
   assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).opacity), '1', 'Design mode must not freeze entrance animations at opacity zero');
   assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).animationName), 'none');
+  await page.locator('#btn-help-floating').click();
+  await page.locator('#editor-shortcut-dialog').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Close shortcuts' }).click();
+  for (const screenWidth of [1280, 1600]) {
+    await page.setViewportSize({ width: screenWidth, height: 1000 });
+    const headerSize = await page.locator('header').evaluate(el => ({width: el.clientWidth, scroll: el.scrollWidth, children: [...el.children].map(child => ({class: child.className, width: child.getBoundingClientRect().width, right: child.getBoundingClientRect().right}))}));
+    assert.ok(headerSize.scroll <= headerSize.width + 1, `Editor header must fit at ${screenWidth}px: ${JSON.stringify(headerSize)}`);
+    await page.locator('#zoom-label').click();
+    await page.locator('[data-canvas-zoom="0.5"]').click();
+    assert.equal(await page.locator('#zoom-label').textContent(), '50%');
+    await page.locator('#zoom-label').click();
+    await page.locator('[data-canvas-zoom="1"]').click();
+  }
   await frame.getByRole('button', { name: 'Consumer button' }).click();
+  const selectedSource = await page.evaluate(() => selectedElement.source);
+  await page.locator('#zoom-label').click();
+  await page.locator('[data-canvas-zoom="selection"]').click();
+  assert.equal(await page.evaluate(() => selectedElement.source), selectedSource, 'Zoom menu must retain selection');
+  const fitButton = await frame.getByRole('button', { name: 'Consumer button' }).boundingBox();
+  const fitCanvas = await page.locator('#canvas-container').boundingBox();
+  assert.ok(Math.abs(fitButton.x + fitButton.width / 2 - fitCanvas.x - fitCanvas.width / 2) < 2, 'Fit selection centers the selected element');
+  await page.locator('#zoom-fit').click();
+  if (process.env.GLIDE_ACCEPTANCE_SCREENSHOT) await page.screenshot({ path: process.env.GLIDE_ACCEPTANCE_SCREENSHOT });
+  console.log('PASS: polished shell at 1280/1600, shortcut help, zoom presets, fit selection');
   await page.locator('#edit-representation').selectOption('inline');
   const width = page.locator('#prop-w');
   await width.fill('240');
