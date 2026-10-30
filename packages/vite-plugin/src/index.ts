@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
 import { loadConfigFromDisk, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
+import { GlideServer } from '@srivarsank/server';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
@@ -1842,8 +1843,13 @@ export function buildBridgeScript(
 `;
 }
 
-export function glideSourceStamping(): Plugin {
+/**
+ * `editor: false` skips serving the editor at /__glide/, for projects that run
+ * the glide command instead.
+ */
+export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin {
   let isDev = false;
+  let configReady: Promise<unknown> = Promise.resolve();
   let rootDir = process.cwd();
   let mainEntryInjected = false;
   let viteServer: any = null;
@@ -1927,7 +1933,7 @@ export function glideSourceStamping(): Plugin {
       // Load glide.config.ts from the user's project root synchronously.
       // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
       try {
-        loadConfigFromDisk(rootDir).then(cfg => {
+        configReady = loadConfigFromDisk(rootDir).then(cfg => {
           glideConfig = cfg;
           bridgeScript = buildBridgeScript(
             cfg.sourceAttribute,
@@ -1941,6 +1947,28 @@ export function glideSourceStamping(): Plugin {
 
     configureServer(server) {
       viteServer = server;
+
+      // ── EDITOR AT /__glide/ ──────────────────────────────────────────────
+      // Glide's server attaches to this dev server: the editor, its assets and
+      // its socket share the app's origin, so the preview needs no proxy and
+      // Vite's HMR socket works as it does without Glide.
+      if (options.editor !== false && server.httpServer) {
+        const httpServer = server.httpServer as import('http').Server;
+        let handle: ((req: any, res: any, next: () => void) => void) | null = null;
+        const glide = configReady.then(() => {
+          const port = Number(server.config.server.port) || 5173;
+          return new GlideServer(port, port, glideConfig, rootDir);
+        });
+        glide.then(instance => instance.attach(httpServer)).then(middleware => { handle = middleware; })
+          .catch(error => server.config.logger.error(`[Glide] Editor failed to start: ${error?.message ?? error}`));
+        server.middlewares.use((req, res, next) => handle ? handle(req, res, next) : next());
+        httpServer.once('listening', () => {
+          const address = httpServer.address();
+          const port = address && typeof address === 'object' ? address.port : server.config.server.port;
+          server.config.logger.info(`  [Glide] Editor: http://localhost:${port}/__glide/`);
+        });
+        httpServer.once('close', () => { glide.then(instance => instance.stop()).catch(() => {}); });
+      }
 
       // ── IFRAME EMBEDDING FIX ─────────────────────────────────────────────
       // Glide embeds the user's app in an iframe from a different origin

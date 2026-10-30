@@ -11,7 +11,8 @@
   "dependencies": {
     "@babel/core": "^7.24.0",
     "@babel/parser": "^7.24.0",
-    "@srivarsank/babel-plugin": "^1.0.1"
+    "@srivarsank/babel-plugin": "^1.0.1",
+    "@srivarsank/server": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.4.2"

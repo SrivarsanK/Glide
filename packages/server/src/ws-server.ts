@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer, Server, request as httpRequest } from 'http';
+import { createServer, Server, request as httpRequest, type IncomingMessage, type ServerResponse } from 'http';
+import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
@@ -838,6 +839,9 @@ export class GlideServer {
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private lastSelfWrites = new Map<string, string>();
+  /** Set by attach(): a dev server that serves Glide alongside the app, with no proxy. */
+  private hosted: { httpServer: Server; onUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => void } | null = null;
+  private requestHandler: ((req: IncomingMessage, res: ServerResponse, next?: () => void) => void) | null = null;
 
   public recordSelfWrite(filePath: string) {
     const normPath = normalizePathKey(filePath);
@@ -871,21 +875,44 @@ export class GlideServer {
     };
   }
 
+  /**
+   * Serve Glide from an existing dev server instead of its own port: the editor at
+   * /__glide/, its assets, and the editor socket at /__glide/ws. The dev server keeps
+   * serving the app, so the preview loads it directly and its HMR socket is untouched.
+   * Returns middleware for every other request to fall through.
+   */
+  public async attach(httpServer: Server): Promise<(req: IncomingMessage, res: ServerResponse, next: () => void) => void> {
+    this.hosted = { httpServer };
+    await this.start();
+    return (req, res, next) => this.requestHandler!(req, res, next);
+  }
+
+  /** The port browsers reach Glide on: its own server's, or the dev server's when attached. */
+  private servedPort(): number {
+    const address = (this.hosted?.httpServer ?? this.server)?.address();
+    return address && typeof address === 'object' ? address.port : this.port;
+  }
+
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.history.setLimit(this.config.historyLimit);
 
-        this.server = createServer((req, res) => {
-          const address = this.server?.address();
-          const port = address && typeof address === 'object' ? address.port : this.port;
+        this.requestHandler = (req, res, next) => {
+          const url = req.url || '/';
+          const pathname = new URL(url, 'http://localhost').pathname;
+          // Attached, Glide answers only its own paths; the dev server handles the rest.
+          if (this.hosted && next && !pathname.startsWith('/__glide/') && pathname !== '/__glide'
+            && !pathname.startsWith('/__glide_assets__/')) {
+            next();
+            return;
+          }
+          const port = this.servedPort();
           if (!trustedRequest(req, port, this.config.remoteAccess)) {
             res.writeHead(403);
             res.end('Request origin or host is not allowed.');
             return;
           }
-          const url = req.url || '/';
-          const pathname = new URL(url, 'http://localhost').pathname;
           if (pathname.startsWith('/__glide_assets__/')) {
             try {
               const asset = getEditorAsset(pathname);
@@ -901,10 +928,16 @@ export class GlideServer {
             return;
           }
 
-          // ── Editor shell: only served at root '/' or '/index.html' ──
-          if (pathname === '/' || pathname === '/index.html') {
+          // ── Editor shell: '/' on Glide's own server, '/__glide/' when attached ──
+          const shell = this.hosted ? ['/__glide', '/__glide/', '/__glide/index.html'] : ['/', '/index.html'];
+          if (shell.includes(pathname)) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store' });
-            res.end(getEditorHTML(this.config, this.sessionToken));
+            res.end(getEditorHTML(this.config, this.sessionToken, { hosted: !!this.hosted }));
+            return;
+          }
+          if (this.hosted) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not found.');
             return;
           }
 
@@ -920,7 +953,8 @@ export class GlideServer {
           // Any other URL requested by the browser/iframe (e.g. /_astro/..., /@id/..., /src/..., /api/...)
           // is forwarded directly to the dev server without bridge injection.
           proxyToDevServer(this.targetPort, url, req, res, '');
-        });
+        };
+        if (!this.hosted) this.server = createServer((req, res) => this.requestHandler!(req, res));
 
 
         // Start file watcher for drift detection
@@ -987,14 +1021,21 @@ export class GlideServer {
           console.error('[Glide Watcher] Watcher error:', err);
         });
 
-        this.wss = new WebSocketServer({
-          server: this.server, maxPayload: 256 * 1024,
-          verifyClient: (info: { req: import('node:http').IncomingMessage }) => {
-            const address = this.server?.address();
-            const port = address && typeof address === 'object' ? address.port : this.port;
-            return trustedRequest(info.req, port, this.config.remoteAccess);
-          },
-        });
+        if (this.hosted) {
+          // Share the dev server: take upgrades on /__glide/ws only, leaving its HMR socket alone.
+          const wss = this.wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+          this.hosted.onUpgrade = (req, socket, head) => {
+            if (new URL(req.url || '/', 'http://localhost').pathname !== '/__glide/ws') return;
+            if (!trustedRequest(req, this.servedPort(), this.config.remoteAccess)) { socket.destroy(); return; }
+            wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+          };
+          this.hosted.httpServer.on('upgrade', this.hosted.onUpgrade);
+        } else {
+          this.wss = new WebSocketServer({
+            server: this.server!, maxPayload: 256 * 1024,
+            verifyClient: (info: { req: IncomingMessage }) => trustedRequest(info.req, this.servedPort(), this.config.remoteAccess),
+          });
+        }
 
         this.wss.on('connection', (ws: WebSocket) => {
           ws.on('error', (err) => {
@@ -1390,11 +1431,15 @@ export class GlideServer {
           reject(err);
         });
 
-        this.server.on('error', (err) => {
+        if (this.hosted) {
+          resolve();
+          return;
+        }
+        this.server!.on('error', (err) => {
           console.error('[Glide HTTP] Server error:', err);
         });
 
-        this.server.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
+        this.server!.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
           resolve();
         });
       } catch (err) {
@@ -1404,6 +1449,8 @@ export class GlideServer {
   }
 
   public async stop(): Promise<void> {
+    // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
+    if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
     if (this.watcher) {
       try {
         await this.watcher.close();

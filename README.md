@@ -137,6 +137,8 @@ If your team consumes packages from GitHub Packages:
 
 To enable click-to-element mapping, add the `glideSourceStamping` plugin to your Vite configuration. This stamps elements with source file locations during development.
 
+With the plugin installed you do not need the `glide` command: run your dev server as usual and open the address it prints, such as **http://localhost:5173/__glide/**. The editor is served by Vite itself, so the preview loads your app directly and hot module replacement works as it does without Glide. Pass `glideSourceStamping({ editor: false })` to keep using the `glide` command instead.
+
 **React (`vite.config.ts`):**
 ```ts
 import { defineConfig } from 'vite';
