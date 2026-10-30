@@ -2246,6 +2246,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let selectedElement = null;
           // Where class edits for the selection are written: its definition, a usage, or a cva variant.
           let editScope = null;
+          let editScopeKey = '';
           let editScopeRequest = 0;
           const sourceProps = (${createSourceProps.toString()})({
             container: document.getElementById('source-props'),
@@ -2848,8 +2849,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // The server says which usages pass className down to the element and which cva options apply.
           function requestEditScopes() {
             const owners = (selectedElement && selectedElement.owners) || [];
-            editScope = null;
-            document.getElementById('edit-scope-row').style.display = 'none';
             const levels = [];
             for (const source of [selectedElement && selectedElement.source, ...owners.map(owner => owner.source)]) {
               const parsed = source && parseSource(source);
@@ -2857,8 +2856,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const owner = owners[levels.length - 1];
               levels.push({ file: parsed.file, line: parsed.line, column: parsed.column, ...(owner ? { name: owner.name, props: owner.props } : {}) });
             }
-            if (levels.length < 2 || !socket || socket.readyState !== WebSocket.OPEN) return;
-            socket.send(JSON.stringify({ type: 'inspect-scopes', requestId: ++editScopeRequest, levels }));
+            const key = levels.length < 2 ? '' : JSON.stringify(levels);
+            // The bridge re-reports the selection on scroll and resize; keep the chosen scope while it is the same.
+            if (key && key === editScopeKey) return;
+            resetEditScope();
+            if (!key || !socket || socket.readyState !== WebSocket.OPEN) return;
+            editScopeKey = key;
+            socket.send(JSON.stringify({ type: 'inspect-scopes', requestId: editScopeRequest, levels }));
+          }
+
+          /** Forget the scope and ignore any reply still on its way. */
+          function resetEditScope() {
+            editScope = null;
+            editScopeKey = '';
+            editScopeRequest++;
+            document.getElementById('edit-scope-row').style.display = 'none';
           }
 
           function acceptEditScopes(message) {
@@ -2866,17 +2878,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
             const owners = selectedElement.owners;
             const where = source => { const parsed = parseSource(source); return parsed ? normalizePathSlash(parsed.file).split('/').pop() + ':' + parsed.line : ''; };
-            const scopes = [{ source: selectedElement.source, label: 'Every <' + owners[0].name + '> · ' + where(selectedElement.source) }];
+            const element = selectedElement.source;
+            const scopes = [{ element, source: element, label: 'Every <' + owners[0].name + '> · ' + where(element) }];
             const used = message.forwards.length;
             for (let level = 1; level <= used; level++) {
               const owner = owners[level - 1];
               const blocked = message.forwards.slice(0, level).findIndex(forwards => !forwards);
-              scopes.push({ source: owner.source,
+              scopes.push({ element, source: owner.source,
                 label: (level < used ? 'Every <' + owners[level].name + '>' : 'This <' + owner.name + '>') + ' · ' + where(owner.source),
                 reason: blocked < 0 ? '' : '<' + owners[blocked].name + '> does not pass className to the element inside it' });
             }
             for (const variant of message.variants || []) {
-              scopes.push({ source: selectedElement.source, variant: { group: variant.group, option: variant.option },
+              scopes.push({ element, source: element, variant: { group: variant.group, option: variant.option },
                 label: 'Every <' + owners[0].name + ' ' + variant.group + '="' + variant.option + '">'
                   + (variant.shared ? ' · all ' + variant.definition + ' users' : '') });
             }
@@ -2900,7 +2913,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           /** Class edits for the selection go to its chosen scope; other edits stay on the element. */
           function scopedEdit(source, change) {
-            if (!editScope || !selectedElement || source !== selectedElement.source
+            // A scope belongs to the element it was computed for, even if the selection changed without a new report.
+            if (!editScope || !selectedElement || source !== selectedElement.source || editScope.element !== source
               || (editScope.source === source && !editScope.variant)) return { source, change };
             if (!['class', 'multi-class', 'style'].includes(change.type)) return { source, change };
             // Inline styles land on the definition's element, so they cannot follow a usage or variant scope.
@@ -4885,6 +4899,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (selectedSources.length > 0) {
                 selectedElement = { source: selectedSources[selectedSources.length - 1] };
                 selectedRect = selectedRects[selectedRects.length - 1];
+                resetEditScope();
               } else {
                 selectedElement = null;
                 selectedRect = null;
@@ -5742,8 +5757,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           function showNoSelection() {
             selectionFeedback(false, false);
-            editScope = null;
-            document.getElementById('edit-scope-row').style.display = 'none';
+            resetEditScope();
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
@@ -6629,7 +6643,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // Helper: send style change by source
           function sendStyleChange(source, property, value) {
-            const scoped = scopedEdit(source, { type: 'class', property, value });
+            const scoped = scopedEdit(source, mutationScope.capture({ type: 'class', property, value }));
             if (!scoped) return;
             if (stagingModeActive) { stageEdit(scoped.source, scoped.change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -6865,7 +6879,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function sendMultiClassChange(source, styles) {
-            const scoped = scopedEdit(source, { type: 'multi-class', value: styles });
+            const scoped = scopedEdit(source, mutationScope.capture({ type: 'multi-class', value: styles }));
             if (!scoped) return;
             if (stagingModeActive) {
               stageEdit(scoped.source, scoped.change);

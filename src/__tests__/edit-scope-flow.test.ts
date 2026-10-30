@@ -1,10 +1,13 @@
 import vm from 'node:vm';
 import { parse } from '@babel/parser';
 import { afterEach, expect, test } from 'vitest';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import { buildBridgeScript, glideSourceStamping } from '../../packages/vite-plugin/src/index.js';
 import { getEditorHTML } from '../../packages/overlay/src/editor-html.js';
 import { createSourceMapping } from '../../packages/overlay/src/source-mapping.js';
+import { createMutationScope } from '../../packages/overlay/src/mutation-scope.js';
 import { DEFAULT_CONFIG } from '../../packages/core/src/index.js';
 import { closeTestProjects, request, startTestProject } from './server-fixture.js';
 
@@ -63,10 +66,13 @@ test('the page gets the bridge script verbatim, even where it contains replaceme
 
 function editor(owners: any[]) {
   const script = getEditorHTML().match(/<script>\s*([\s\S]*?)<\/script>/)![1];
-  const context = vm.createContext({ createSourceMapping, owners });
+  const context = vm.createContext({ createSourceMapping, createMutationScope, owners });
   vm.runInContext(`
     const sourceMapping = createSourceMapping(), sourceFileAliases = new Map(), fileDigests = new Map();
-    let currentFile = 'src/main.tsx', editScope = null, editScopeRequest = 0;
+    let currentFile = 'src/main.tsx', editScope = null, editScopeKey = '', editScopeRequest = 0;
+    let representation = '', stagingModeActive = false;
+    const iframeWidth = { current: 800 };
+    const mutationScope = createMutationScope(() => ({ authoringRepresentation: representation || undefined }));
     let selectedElement = { source: 'src/Button.tsx:3:10', owners };
     const sent = [], toasts = [], WebSocket = { OPEN: 1 };
     const socket = { readyState: 1, send(value) { sent.push(JSON.parse(value)); } };
@@ -74,7 +80,8 @@ function editor(owners: any[]) {
       replaceChildren(...options) { this.options = options; } } };
     const document = { getElementById: id => elements[id], createElement: () => ({}) };
     function showToast(kind, message) { toasts.push(message); }
-    ${functions(script, ['normalizePathSlash', 'sameSourceFile', 'parseSource', 'requestEditScopes', 'acceptEditScopes', 'scopedEdit'])}
+    ${functions(script, ['normalizePathSlash', 'sameSourceFile', 'parseSource', 'requestEditScopes', 'resetEditScope',
+      'acceptEditScopes', 'scopedEdit', 'sendStyleChange'])}
   `, context);
   return context;
 }
@@ -129,6 +136,59 @@ test('a usage the className does not reach is shown but cannot be chosen', () =>
   vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: 0, success: true, forwards: [], variants: [], files: [] })`, context);
   expect(vm.runInContext('elements["edit-scope"].value', context)).toBe('1');
 });
+
+test('a re-reported selection keeps its chosen scope; another selection never uses it', () => {
+  const context = editor(OWNERS);
+  const accept = (id: number) => vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: ${id}, success: true,
+    forwards: [true, true], variants: [], files: [] })`, context);
+  const target = (source: string) => vm.runInContext(`scopedEdit('${source}', { type: 'class', property: 'padding', value: 16 })`, context).source;
+  vm.runInContext('requestEditScopes()', context);
+  accept(1);
+  vm.runInContext('elements["edit-scope"].value = "1"; elements["edit-scope"].onchange()', context);
+  // Scroll and resize re-report the same element with the same owners.
+  vm.runInContext('selectedElement = { source: "src/Button.tsx:3:10", owners }; requestEditScopes()', context);
+  expect(vm.runInContext('sent.length', context)).toBe(1);
+  expect(target('src/Button.tsx:3:10')).toBe('src/Button.tsx:6:10');
+  // Shift-deselecting leaves another element selected without a new report.
+  vm.runInContext('selectedElement = { source: "src/Card.tsx:2:3" }', context);
+  expect(target('src/Card.tsx:2:3')).toBe('src/Card.tsx:2:3');
+  // A reply for a selection that has since been reset is ignored.
+  vm.runInContext('selectedElement = { source: "src/Button.tsx:3:10", owners: owners.slice(0, 1) }; requestEditScopes(); resetEditScope()', context);
+  expect(vm.runInContext('sent[1].requestId', context)).toBe(2);
+  accept(2);
+  expect(vm.runInContext('editScope', context)).toBeNull();
+  expect(vm.runInContext('elements["edit-scope-row"].style.display', context)).toBe('none');
+});
+
+test('quick style changes carry the format, so Inline is refused for a usage scope', () => {
+  const context = editor(OWNERS);
+  vm.runInContext('requestEditScopes()', context);
+  vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: 1, success: true, forwards: [true, true], variants: [], files: [] })`, context);
+  vm.runInContext('representation = "inline"; sendStyleChange("src/Button.tsx:3:10", "padding", "16px")', context);
+  expect(vm.runInContext('sent.length', context)).toBe(1);
+  expect(vm.runInContext('toasts[0]', context)).toContain('Inline styles cannot target this scope');
+  vm.runInContext('representation = ""; sendStyleChange("src/Button.tsx:3:10", "padding", "16px")', context);
+  expect(vm.runInContext('sent[1]', context)).toMatchObject({ type: 'edit', file: 'src/main.tsx', line: 8, column: 7,
+    change: { type: 'class', property: 'padding', value: '16px' } });
+});
+
+test('JSX is stamped with the configured source attribute, which the bridge reads', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-attr-'));
+  try {
+    fs.writeFileSync(path.join(root, 'glide.config.json'), JSON.stringify({ sourceAttribute: 'data-src' }));
+    const plugin: any = glideSourceStamping();
+    plugin.configResolved({ command: 'serve', root });
+    // The plugin loads glide.config.json asynchronously and then rebuilds the bridge.
+    for (let attempt = 0; attempt < 200 && !plugin.transformIndexHtml('<head></head>').includes("props['data-src']"); attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const stamped = plugin.transform('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;
+    expect(stamped).toMatch(/<Button size="lg" data-src="[^"]+App\.tsx:1:26" \/>/);
+    expect(stamped).not.toContain('data-gl-source');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 15000);
 
 test('the server reports className forwarding, active variants and digests across files', async () => {
   const button = `import { cva } from "class-variance-authority"

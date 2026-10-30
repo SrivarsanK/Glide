@@ -391,7 +391,7 @@ export function buildBridgeScript(
         var simple = {};
         Object.keys(props).forEach(function(name) {
           var value = props[name];
-          if (name !== 'children' && name.indexOf('data-gl-') !== 0
+          if (name !== 'children' && name !== '${sourceAttr}' && name.indexOf('data-gl-') !== 0
             && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) simple[name] = value;
         });
         owners.push({ name: glideComponentName(fiber.type), source: stamp, props: simple });
@@ -2039,8 +2039,9 @@ export function glideSourceStamping(): Plugin {
           parserOpts: {
             plugins: ['jsx', 'typescript'],
           },
+          // Stamp with the configured attribute, which the bridge reads on elements and component props.
           plugins: [
-            glideSourceStampingPlugin
+            [glideSourceStampingPlugin, { sourceAttribute: glideConfig.sourceAttribute }]
           ],
           sourceMaps: true,
         });
