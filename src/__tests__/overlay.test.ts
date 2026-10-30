@@ -1,6 +1,7 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 import { GlideOverlay } from '../../packages/overlay/src/overlay.js';
 import { getEditorHTML } from '../../packages/overlay/src/editor-html.js';
+import postcss from 'postcss';
 
 describe('GlideOverlay Canvas Layer', () => {
   let mockWindow: any;
@@ -142,4 +143,14 @@ describe('GlideOverlay Canvas Layer', () => {
     expect(html).toContain("message.type === 'resolved_component'");
     expect(html).toContain('jump-btn');
   });
+});
+
+test('the editor stylesheet has no rule left open around later rules', () => {
+  // An unclosed rule makes browsers nest every later rule inside it, so none of them apply.
+  const css = getEditorHTML().match(/<style>([\s\S]*?)<\/style>/)![1];
+  const nested: string[] = [];
+  postcss.parse(css).walkRules(rule => {
+    if (rule.parent?.type === 'rule') nested.push(`${(rule.parent as any).selector} > ${rule.selector}`);
+  });
+  expect(nested).toEqual([]);
 });

@@ -1306,6 +1306,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             padding: 8px 12px;
             border-radius: 6px;
             font-size: 12px;
+          }
           .modal-input:focus {
             border-color: var(--accent-color);
           }

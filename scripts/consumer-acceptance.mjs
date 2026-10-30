@@ -120,7 +120,8 @@ try {
     await page.locator('[data-canvas-zoom="1"]').click();
   }
   await frame.getByRole('button', { name: 'Consumer button' }).click();
-  const selectedSource = await page.evaluate(() => selectedElement.source);
+  // Selection reaches the editor by postMessage after the click resolves.
+  const selectedSource = await (await page.waitForFunction(() => selectedElement?.source)).jsonValue();
   await page.locator('#zoom-label').click();
   await page.locator('[data-canvas-zoom="selection"]').click();
   assert.equal(await page.evaluate(() => selectedElement.source), selectedSource, 'Zoom menu must retain selection');
