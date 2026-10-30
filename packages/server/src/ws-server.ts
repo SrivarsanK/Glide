@@ -6,7 +6,7 @@ import { getEditorHTML } from '@srivarsank/overlay';
 import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
-import { parseJSXElements, inspectJSXProps, listWorkspaceObjects } from '@srivarsank/ast-writer';
+import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassName, activeVariants } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { HistoryStore } from './history-manager.js';
@@ -1069,6 +1069,36 @@ export class GlideServer {
                     ...inspectJSXProps(code, message.line, message.column) }));
                 } catch (error: any) {
                   ws.send(JSON.stringify({ type: 'source-props', requestId: message.requestId, success: false, error: error.message }));
+                }
+                return;
+              }
+
+              // levels[0] is the selected element; each later level is where the component around it is used.
+              if (message.type === 'inspect-scopes') {
+                try {
+                  const levels: any[] = Array.isArray(message.levels) ? message.levels.slice(0, 8) : [];
+                  if (levels.length < 2 || levels.some(level => typeof level?.file !== 'string'
+                    || !Number.isInteger(level.line) || !Number.isInteger(level.column))) {
+                    throw new Error('INVALID_MESSAGE: Edit scopes need the element and at least one component usage.');
+                  }
+                  const codes = new Map<string, string>();
+                  const read = (requested: string) => {
+                    if (!codes.has(requested)) {
+                      const file = this.projectPaths.sourceFile(requested);
+                      if (!/\.[jt]sx?$/.test(file)) throw new Error('UNSUPPORTED_ADAPTER: Edit scopes currently require JSX or TSX.');
+                      codes.set(requested, fs.readFileSync(file, 'utf8'));
+                    }
+                    return codes.get(requested)!;
+                  };
+                  // A usage edit reaches the element only if every level below it passes className on.
+                  const forwards = levels.slice(0, -1).map(level => forwardsClassName(read(level.file), level.line, level.column));
+                  const props = levels[1].props && typeof levels[1].props === 'object' ? levels[1].props : {};
+                  const variants = activeVariants(read(levels[0].file), levels[0].line, levels[0].column, props);
+                  levels.forEach(level => read(level.file));
+                  ws.send(JSON.stringify({ type: 'edit-scopes', requestId: message.requestId, success: true, forwards, variants,
+                    files: [...codes].map(([file, code]) => ({ file, digest: contentDigest(code) })) }));
+                } catch (error: any) {
+                  ws.send(JSON.stringify({ type: 'edit-scopes', requestId: message.requestId, success: false, error: error.message }));
                 }
                 return;
               }

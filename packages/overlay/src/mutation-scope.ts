@@ -7,7 +7,8 @@ export function createMutationScope(read: () => MutationScope) {
     return { ...read(), ...change };
   }
   function key(change: any, property: string) {
-    return JSON.stringify([change.breakpoint || '', change.pseudoState || '', change.authoringRepresentation || '', property]);
+    const variant = change.variant ? `${change.variant.group}=${change.variant.option}` : '';
+    return JSON.stringify([change.breakpoint || '', change.pseudoState || '', change.authoringRepresentation || '', variant, property]);
   }
   function entries(change: any): { key: string; change: any }[] {
     change = capture(change);

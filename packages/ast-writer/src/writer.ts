@@ -10,7 +10,7 @@ import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
 import { mutateProp } from './props.js';
 import { layoutStyles } from './layout.js';
-import { readClassExpression, type BindingScope } from './class-expression.js';
+import { readClassExpression, type BindingScope, type ClassPiece, type VariantOption } from './class-expression.js';
 import { spliceChanges } from './splice.js';
 import { mutationVariants, splitClassVariants, defaultTailwindTheme, isColorValue, isFontSizeValue, colorToken,
   spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, type MutationScope, type TailwindTheme } from '@srivarsank/core';
@@ -351,7 +351,7 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
 }
 
 /** Whether a spread is the rest of an object that already took `name` out, as in `({ className, ...props })`. */
-function restWithout(spread: t.JSXSpreadAttribute, name: string, scope?: BindingScope): boolean {
+export function restWithout(spread: t.JSXSpreadAttribute, name: string, scope?: BindingScope): boolean {
   if (!t.isIdentifier(spread.argument)) return false;
   const rest = spread.argument.name;
   const binding = scope?.getBinding(rest);
@@ -394,9 +394,10 @@ function classLiteral(attr?: t.JSXAttribute): t.StringLiteral | undefined {
  * apply are changed; an edit a condition or variant would override is refused.
  */
 function mutateClassExpression(expression: t.Expression, property: string, value: any, breakpoint: string | undefined,
-  pseudoState: string | undefined, theme: TailwindTheme, scope: BindingScope): void {
+  pseudoState: string | undefined, theme: TailwindTheme, scope: BindingScope, variant?: VariantOption): void {
   if (property === 'className') throw new Error('UNSUPPORTED_OPERATION: Replacing every class needs a static className string.');
   const { pieces, prepend } = readClassExpression(expression, scope);
+  if (variant) return mutateVariant(pieces, property, value, breakpoint, pseudoState, theme, variant);
   const always = pieces.filter(piece => !piece.condition);
   const plan = planClassEdit(always.flatMap(piece => piece.tokens.filter(token => !token.partial).map(token => token.name)),
     property, value, breakpoint, pseudoState, theme);
@@ -438,9 +439,40 @@ function mutateClassExpression(expression: t.Expression, property: string, value
   if (!target) prepend!(plan.added);
 }
 
+/**
+ * Edit the class strings of one cva variant option, such as `size: "lg"`. Every
+ * element using that option changes. Refused when a class outside the option
+ * may win: one under a condition, in another variant group, or on the element itself.
+ */
+function mutateVariant(pieces: ClassPiece[], property: string, value: any, breakpoint: string | undefined,
+  pseudoState: string | undefined, theme: TailwindTheme, variant: VariantOption): void {
+  const own = pieces.filter(piece => piece.variant?.group === variant.group && piece.variant.option === variant.option);
+  if (!own.length) throw new Error(`UNSUPPORTED_OPERATION: The \`${variant.group}\` variant has no "${variant.option}" class string.`);
+  const plan = planClassEdit(own.flatMap(piece => piece.tokens.filter(token => !token.partial).map(token => token.name)),
+    property, value, breakpoint, pseudoState, theme);
+  if (!plan) return;
+  const label = property.replace(/[A-Z]/g, letter => ' ' + letter.toLowerCase());
+  for (const piece of pieces) {
+    if (own.includes(piece) || piece.variant?.group === variant.group) continue;
+    for (const token of piece.tokens) {
+      if (token.prefix !== undefined && plan.overlapsPartial(token.prefix)) {
+        throw new Error(`UNSUPPORTED_OPERATION: The ${label} depends on a class built at runtime (\`${token.prefix}…\`).`);
+      }
+      // The variant follows the cva base, so only other variants, conditions and the element's own classes can win.
+      if (!token.partial && (piece.condition || !piece.shared) && plan.overlaps(token.name)) {
+        throw new Error(`UNSUPPORTED_OPERATION: The ${label} is also set ${piece.condition ?? `by \`${token.name}\` on this element`}. Edit that case in source.`);
+      }
+    }
+  }
+  const target = own.find(piece => piece.tokens.some(token => !token.partial && plan.replaces(token.name)))
+    ?? own.find(piece => piece.canAdd);
+  if (!target) throw new Error(`UNSUPPORTED_OPERATION: The \`${variant.group}\` variant has no class string to add to.`);
+  for (const piece of own) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
+}
+
 /** With `scope`, className may be a cn/clsx/template/cva expression; without it, only a string. */
 function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string,
-  theme: TailwindTheme = DEFAULT_THEME, scope?: BindingScope): string {
+  theme: TailwindTheme = DEFAULT_THEME, scope?: BindingScope, variant?: VariantOption): string {
   if (property !== 'className' && !getNewClass(property, value, theme)) {
     throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
   }
@@ -448,9 +480,10 @@ function mutateClass(node: t.JSXElement, property: string, value: any, breakpoin
   const classAttr = getStaticAttribute(openingEl, 'className', scope);
   const expression = t.isJSXExpressionContainer(classAttr?.value) ? classAttr.value.expression : null;
   if (scope && expression && !t.isStringLiteral(expression) && !t.isJSXEmptyExpression(expression)) {
-    mutateClassExpression(expression, property, value, breakpoint, pseudoState, theme, scope);
+    mutateClassExpression(expression, property, value, breakpoint, pseudoState, theme, scope, variant);
     return '';
   }
+  if (variant) throw new Error('UNSUPPORTED_OPERATION: Variant edits need a cva className.');
   const literal = classLiteral(classAttr);
   const existingVal = literal?.value ?? '';
 
@@ -471,7 +504,9 @@ export interface JSXMutation extends MutationScope {
   line: number;
   column: number;
   hash?: string;
-  change: StructuralChange & MutationScope & { property?: string; value?: any; scope?: string; layoutPosition?: string };
+  change: StructuralChange & MutationScope & { property?: string; value?: any; scope?: string; layoutPosition?: string;
+    /** Edit one cva variant option instead of the element's own classes. */
+    variant?: VariantOption };
 }
 
 function jsxNodes(ast: any): t.JSXElement[] {
@@ -531,18 +566,18 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
         if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value }, scope);
-        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState, theme, scope);
+        else mutateClass(targets[index], change.property, change.value, change.breakpoint, change.pseudoState, theme, scope, change.variant);
         break;
       case 'style':
         if (change.authoringRepresentation === 'tailwind') {
-          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
+          for (const [property, value] of Object.entries(change.value || {})) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope, change.variant);
         } else mutateStyle(targets[index], change.value, scope);
         break;
       case 'layout': {
         const styles = layoutStyles(change.value, change.layoutPosition);
         if (variants.length || change.authoringRepresentation === 'tailwind') {
           if (change.authoringRepresentation !== 'tailwind') throw new Error('UNSUPPORTED_SCOPE: Scoped layout needs Tailwind authoring.');
-          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
+          for (const [property, value] of Object.entries(styles)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope, change.variant);
         } else mutateStyle(targets[index], styles, scope);
         break;
       }
@@ -555,7 +590,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
       case 'multi-class':
         if (!change.value || typeof change.value !== 'object' || Array.isArray(change.value)) throw new Error('INVALID_OPERATION: Expected class properties.');
         if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], change.value, scope);
-        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope);
+        else for (const [property, value] of Object.entries(change.value)) mutateClass(targets[index], property, value, change.breakpoint, change.pseudoState, theme, scope, change.variant);
         break;
       case 'text':
         if (typeof change.value !== 'string') throw new Error('INVALID_OPERATION: Text must be a string.');

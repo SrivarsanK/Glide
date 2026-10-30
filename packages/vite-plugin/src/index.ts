@@ -363,6 +363,43 @@ export function buildBridgeScript(
     }
   };
 
+  // Components whose root element is el, innermost first. React keeps each component's props on its
+  // fiber, and the ${sourceAttr} prop there is where that component is used, not where it is defined.
+  function glideComponentName(type) {
+    if (!type) return 'Component';
+    return type.displayName || type.name || (type.render && (type.render.displayName || type.render.name))
+      || (type.type && glideComponentName(type.type)) || 'Component';
+  }
+  function glideRootElement(fiber) {
+    for (var child = fiber.child; child; child = child.child) {
+      if (typeof child.type === 'string') return child.stateNode;
+    }
+    return null;
+  }
+  function glideOwners(el) {
+    var owners = [];
+    try {
+      var key = Object.keys(el).find(function(name) { return name.indexOf('__reactFiber$') === 0; });
+      if (!key) return owners;
+      for (var fiber = el[key].return, depth = 0; fiber && depth < 50 && owners.length < 6; fiber = fiber.return, depth++) {
+        if (typeof fiber.type === 'string') break;
+        var props = fiber.memoizedProps;
+        if (!fiber.type || !props || typeof props !== 'object') continue;
+        if (glideRootElement(fiber) !== el) break;
+        var stamp = props['${sourceAttr}'];
+        if (typeof stamp !== 'string' || (owners.length && owners[owners.length - 1].source === stamp)) continue;
+        var simple = {};
+        Object.keys(props).forEach(function(name) {
+          var value = props[name];
+          if (name !== 'children' && name !== '${sourceAttr}' && name.indexOf('data-gl-') !== 0
+            && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) simple[name] = value;
+        });
+        owners.push({ name: glideComponentName(fiber.type), source: stamp, props: simple });
+      }
+    } catch (e) { /* Owner data is optional; selection works without it. */ }
+    return owners;
+  }
+
   function sendMsg(type, el, isShift) {
     var src = (el.getAttribute && el.getAttribute('${sourceAttr}')) || getElId(el);
     var r = el.getBoundingClientRect();
@@ -443,6 +480,7 @@ export function buildBridgeScript(
         height: r.height
       },
       isHover: type === 'glide:element-hovered',
+      owners: type === 'glide:element-hovered' ? [] : glideOwners(el),
       computedStyles: computedStyles,
       textContent: getElementTextContent(el)
     }, '*');
@@ -1961,9 +1999,10 @@ export function glideSourceStamping(): Plugin {
      */
     transformIndexHtml(html) {
       if (!isDev) return html;
+      // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
       return html.replace(
         '<head>',
-        `<head><script>${bridgeScript}<\/script>`
+        () => `<head><script>${bridgeScript}<\/script>`
       );
     },
 
@@ -2000,8 +2039,9 @@ export function glideSourceStamping(): Plugin {
           parserOpts: {
             plugins: ['jsx', 'typescript'],
           },
+          // Stamp with the configured attribute, which the bridge reads on elements and component props.
           plugins: [
-            glideSourceStampingPlugin
+            [glideSourceStampingPlugin, { sourceAttribute: glideConfig.sourceAttribute }]
           ],
           sourceMaps: true,
         });
