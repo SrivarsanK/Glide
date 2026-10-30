@@ -8,7 +8,14 @@ import { createWorkspaceCanvas } from './workspace-canvas.js';
 import { editorChromeCSS } from './editor-chrome.js';
 import { editorNavigationHTML, createEditorNavigation } from './editor-navigation.js';
 
-export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
+/**
+ * The served editor. `hosted` means the dev server itself serves the editor at
+ * /__glide/, so the app loads from the same origin and the socket is /__glide/ws;
+ * otherwise the app loads through Glide's proxy and the socket is at the root.
+ */
+export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = '', options: { hosted?: boolean } = {}): string {
+  const appBase = options.hosted ? '' : '/__glide_proxy__';
+  const socketPath = options.hosted ? '/__glide/ws' : '';
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -2387,7 +2394,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function connectSocket() {
             updateConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(protocol + '//' + window.location.host);
+            socket = new WebSocket(protocol + '//' + window.location.host + ${JSON.stringify(socketPath)});
             socket.sendRaw = socket.send.bind(socket);
             if (!sourceTransport) sourceTransport = (${createMutationTransport.toString()})({
               send: data => socket.sendRaw(data),
@@ -5724,17 +5731,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               url = 'http://localhost:' + url;
             }
 
+            // Hosted by the dev server, the app is on this origin and needs no proxy prefix.
+            var appBase = ${JSON.stringify(appBase)};
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
               // Extract path from absolute URL and route via proxy
               try {
                 var parsed = new URL(url);
-                proxyUrl = '/__glide_proxy__' + (parsed.pathname || '/');
+                proxyUrl = appBase + (parsed.pathname || '/');
                 if (parsed.search) proxyUrl += parsed.search;
-              } catch(e) { proxyUrl = '/__glide_proxy__/'; }
-            } else if (!url.startsWith('/__glide_proxy__')) {
+              } catch(e) { proxyUrl = appBase + '/'; }
+            } else if (!appBase || !url.startsWith(appBase)) {
               // Relative path — prefix with proxy base
-              proxyUrl = '/__glide_proxy__/' + (url.startsWith('/') ? url.slice(1) : url);
+              proxyUrl = appBase + '/' + (url.startsWith('/') ? url.slice(1) : url);
             }
 
             // Sync text input to normalized URL if user typed pure port or full URL
@@ -5743,7 +5752,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               urlInput.value = url;
             }
 
-            if (statusEl) statusEl.textContent = 'Connecting via Glide proxy...';
+            if (statusEl) statusEl.textContent = ${JSON.stringify(options.hosted ? 'Loading app...' : 'Connecting via Glide proxy...')};
 
             // Remove stale retry button if present
             var oldBtn = document.getElementById('glide-retry-btn');
