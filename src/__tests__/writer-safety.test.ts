@@ -8,13 +8,17 @@ describe('Dynamic source protection', () => {
     'className={styles.button}',
     'className={cx("p-2", active)}',
     'className={`p-2 ${extra}`}',
-    '{...props} className="p-2"',
     'className="p-2" {...props}',
     'className="p-2" className="p-4"',
   ])('rejects dynamic or ambiguous classes: %s', (attributes) => {
     const code = `const A = () => <button ${attributes}>A</button>;`;
     expect(() => updateClassName(code, 1, code.indexOf('<button') + 1, 'padding', 16))
       .toThrow(/UNSUPPORTED_OPERATION:.*className/);
+  });
+
+  test('a spread before className cannot override it, so the edit is allowed', () => {
+    const code = 'const A = () => <button {...props} className="p-2">A</button>;';
+    expect(updateClassName(code, 1, code.indexOf('<button') + 1, 'padding', 16)).toContain('{...props} className="p-4"');
   });
 
   test.each([
