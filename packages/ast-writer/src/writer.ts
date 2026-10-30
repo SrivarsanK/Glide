@@ -417,7 +417,7 @@ function mutateClassExpression(expression: t.Expression, property: string, value
   if (locked) {
     throw new Error(`UNSUPPORTED_OPERATION: The ${label} comes from \`${locked.lockedBy}\`, which other code also uses. Edit it in source.`);
   }
-  const target = holders[0]
+  const target = holders.at(0)
     ?? always.find(piece => piece.canAdd && !piece.shared)
     ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
   if (!target && !prepend) {
@@ -430,6 +430,10 @@ function mutateClassExpression(expression: t.Expression, property: string, value
           ? 'UNSUPPORTED_OPERATION: Every class here depends on a condition, so there is no class string to add to.'
           : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
   }
+  // A prepended class comes before every other class, so one that sets part of the property would override it.
+  const later = !target && always.flatMap(piece => piece.tokens)
+    .find(token => !token.partial && plan.overlaps(token.name) && !plan.replaces(token.name));
+  if (later) throw new Error(`UNSUPPORTED_OPERATION: The ${label} is also set by \`${later.name}\`, which would override the new class.`);
   for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
   if (!target) prepend!(plan.added);
 }
