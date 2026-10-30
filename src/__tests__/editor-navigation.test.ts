@@ -28,7 +28,7 @@ function keyHandler(containing: string): string {
 const mainHandler = keyHandler('triggerGroup');
 const spaceHandler = keyHandler('spaceHeld = true');
 
-function harness() {
+function harness({ zoomMenuOpen = false } = {}) {
   const calls = {
     group: vi.fn(), ungroup: vi.fn(), fit: vi.fn(), selection: vi.fn(),
     help: vi.fn(), click: vi.fn(), send: vi.fn(), tool: vi.fn(), toast: vi.fn(),
@@ -37,7 +37,10 @@ function harness() {
     triggerGroup: calls.group, triggerUngroup: calls.ungroup,
     fitToScreen: calls.fit, fitSelection: calls.selection,
     editorNavigation: { showHelp: calls.help },
-    document: { getElementById: (id: string) => ({ click: () => calls.click(id), style: { display: 'none' } }) },
+    document: {
+      getElementById: (id: string) => ({ click: () => calls.click(id), style: { display: 'none' } }),
+      querySelector: (query: string) => zoomMenuOpen && query.includes(':popover-open') ? {} : null,
+    },
     socket: { readyState: 1, send: (value: string) => calls.send(JSON.parse(value)) },
     WebSocket: { OPEN: 1 }, showToast: calls.toast, setTool: calls.tool,
     selectedElement: null, selectedSources: [],
@@ -93,6 +96,16 @@ test.each(['input', 'textarea', 'select', '[contenteditable]:not([contenteditabl
     expect(calls.group).not.toHaveBeenCalled();
     expect(e.preventDefault).not.toHaveBeenCalled();
   });
+
+test('an open zoom menu keeps its keys from running editor shortcuts', () => {
+  const { calls, handle } = harness({ zoomMenuOpen: true });
+  const e = event('g', { ctrlKey: true });
+  handle(e);
+  handle(event('!', { shiftKey: true, code: 'Digit1' }));
+  expect(calls.group).not.toHaveBeenCalled();
+  expect(calls.fit).not.toHaveBeenCalled();
+  expect(e.preventDefault).not.toHaveBeenCalled();
+});
 
 test('Space in a textarea preserves text entry; canvas Space enables panning', () => {
   const { context } = harness();
