@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer, Server, request as httpRequest } from 'http';
+import { createServer, Server, request as httpRequest, type ClientRequest, type IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
@@ -772,6 +773,81 @@ function proxyToDevServer(
 }
 
 /**
+ * Glide's own socket is the editor's: path `/` with no subprotocol. Vite's HMR
+ * client also connects to the page's host (the editor port) at its HMR base,
+ * asking for the `vite-hmr` or `vite-ping` subprotocol, so those and sockets on
+ * any other path belong to the dev server.
+ */
+export function isDevServerUpgrade(req: IncomingMessage): boolean {
+  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  if (pathname !== '/') return true;
+  const protocols = String(req.headers['sec-websocket-protocol'] || '').split(',').map(p => p.trim());
+  return protocols.includes('vite-hmr') || protocols.includes('vite-ping');
+}
+
+function rawResponseHead(statusLine: string, rawHeaders: string[]): string {
+  const lines = [statusLine];
+  for (let i = 0; i < rawHeaders.length; i += 2) lines.push(`${rawHeaders[i]}: ${rawHeaders[i + 1]}`);
+  return lines.join('\r\n') + '\r\n\r\n';
+}
+
+/**
+ * Proxy a WebSocket upgrade to the user's dev server and pipe both sockets
+ * together. Without this the HMR socket reaches Glide's server, which drops it,
+ * and Vite's client reloads the preview every time it reconnects.
+ */
+function proxyUpgradeToDevServer(
+  targetPort: number,
+  proxyPath: string,
+  req: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+  openSockets: Set<Duplex>
+): void {
+  let proxyReq: ClientRequest | undefined;
+  let upstream: Duplex | undefined;
+  const close = () => {
+    openSockets.delete(socket);
+    proxyReq?.destroy();
+    upstream?.destroy();
+    socket.destroy();
+  };
+  openSockets.add(socket);
+  socket.on('error', close);
+  socket.on('close', close);
+
+  const connect = (hostname: string) => {
+    proxyReq = httpRequest({
+      hostname,
+      port: targetPort,
+      path: proxyPath,
+      method: 'GET',
+      headers: { ...req.headers, host: `${hostname}:${targetPort}` },
+    });
+    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      upstream = proxySocket;
+      proxySocket.on('error', close);
+      proxySocket.on('close', close);
+      socket.write(rawResponseHead('HTTP/1.1 101 Switching Protocols', proxyRes.rawHeaders));
+      if (proxyHead.length) socket.write(proxyHead);
+      if (head.length) proxySocket.write(head);
+      proxySocket.pipe(socket).pipe(proxySocket);
+    });
+    // The dev server refused the upgrade (bad token, unknown path): relay its answer.
+    proxyReq.on('response', (proxyRes) => {
+      socket.write(rawResponseHead(`HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}`, proxyRes.rawHeaders));
+      proxyRes.pipe(socket);
+    });
+    proxyReq.on('error', (err: any) => {
+      if (hostname === 'localhost' && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) connect('127.0.0.1');
+      else close();
+    });
+    proxyReq.end();
+  };
+  connect('localhost');
+}
+
+/**
  * Walk up from a file path to find the nearest directory containing a .git folder.
  * Returns the directory if found, otherwise falls back to process.cwd().
  */
@@ -838,6 +914,7 @@ export class GlideServer {
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private lastSelfWrites = new Map<string, string>();
+  private proxiedSockets = new Set<Duplex>();
 
   public recordSelfWrite(filePath: string) {
     const normPath = normalizePathKey(filePath);
@@ -988,12 +1065,29 @@ export class GlideServer {
         });
 
         this.wss = new WebSocketServer({
-          server: this.server, maxPayload: 256 * 1024,
+          noServer: true, maxPayload: 256 * 1024,
           verifyClient: (info: { req: import('node:http').IncomingMessage }) => {
             const address = this.server?.address();
             const port = address && typeof address === 'object' ? address.port : this.port;
             return trustedRequest(info.req, port, this.config.remoteAccess);
           },
+        });
+
+        // ── WebSocket routing: the editor's socket, or the dev server's (HMR) ──
+        this.server.on('upgrade', (req, socket, head) => {
+          if (!isDevServerUpgrade(req)) {
+            this.wss?.handleUpgrade(req, socket, head, ws => this.wss?.emit('connection', ws, req));
+            return;
+          }
+          const address = this.server?.address();
+          const port = address && typeof address === 'object' ? address.port : this.port;
+          if (!trustedRequest(req, port, this.config.remoteAccess)) {
+            socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+            return;
+          }
+          const url = req.url || '/';
+          const proxyPath = url.startsWith('/__glide_proxy__') ? url.slice('/__glide_proxy__'.length) || '/' : url;
+          proxyUpgradeToDevServer(this.targetPort, proxyPath, req, socket, head, this.proxiedSockets);
         });
 
         this.wss.on('connection', (ws: WebSocket) => {
@@ -1362,6 +1456,8 @@ export class GlideServer {
 
         this.server.on('error', (err) => {
           console.error('[Glide HTTP] Server error:', err);
+          // A listen failure such as EADDRINUSE; the WebSocket server no longer relays it.
+          reject(err);
         });
 
         this.server.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
@@ -1382,6 +1478,9 @@ export class GlideServer {
       }
       this.watcher = null;
     }
+    // Proxied dev server sockets would keep the HTTP server from closing.
+    for (const socket of this.proxiedSockets) socket.destroy();
+    this.proxiedSockets.clear();
     return new Promise((resolve, reject) => {
       if (this.wss) {
         if (this.wss.clients) {

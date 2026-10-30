@@ -98,12 +98,19 @@ try {
     if (!['127.0.0.1', 'localhost'].includes(url.hostname)) { outbound.push(url.href); return route.abort(); }
     return route.continue();
   });
+  // Vite's HMR client connects to the editor port; the proxy must hand it to Vite.
+  const hmrConnected = new Promise(resolve => page.on('websocket', socket => {
+    if (!socket.url().includes('token=')) return;
+    socket.on('framereceived', ({ payload }) => { if (String(payload).includes('"type":"connected"')) resolve(true); });
+  }));
   await page.goto(origin);
   await page.locator('#mode-btn-live').click();
   await page.waitForFunction(() => document.querySelectorAll('svg.lucide').length > 10);
   await page.evaluate(() => document.fonts.ready);
   const frame = page.frameLocator('#app-iframe');
   await frame.locator('main').waitFor();
+  assert.equal(await Promise.race([hmrConnected, new Promise(resolve => setTimeout(resolve, 10000, false))]), true,
+    'Preview HMR socket must reach the dev server through the editor port');
   assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).opacity), '1', 'Design mode must not freeze entrance animations at opacity zero');
   assert.equal(await frame.locator('main').evaluate(el => getComputedStyle(el).animationName), 'none');
   await page.locator('#btn-help-floating').click();
