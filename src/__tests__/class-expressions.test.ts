@@ -173,12 +173,30 @@ test('shadcn-style card and input edits change the class in place', () => {
     .toContain('className={cn("flex h-9 w-80 rounded-md border px-3 py-1", className)}');
 });
 
-test('shadcn-style button edits the cva base and refuses what a variant sets', () => {
-  const justified = edit(BUTTON, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' });
+test('a cva definition only this element uses is edited in place', () => {
+  // `typeof buttonVariants` names the type only, so the JSX call is the one use.
+  const local = BUTTON.replace('export { Button, buttonVariants }', 'export { Button }');
+  const justified = edit(local, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' });
   expect(justified).toContain('"inline-flex items-center justify-start gap-2 whitespace-nowrap rounded-md text-sm font-medium disabled:opacity-50",');
   expect(justified).toContain('default: "h-9 px-4 py-2 has-[>svg]:px-3",');
-  expect(edit(BUTTON, '<Comp', { type: 'class', property: 'width', value: '320px' }))
-    .toContain('className={cn("w-80", buttonVariants({ variant, size, className }))}');
+});
+
+test('shadcn-style button never changes an exported cva definition for one element', () => {
+  expect(() => edit(BUTTON, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' }))
+    .toThrow('The justify content comes from `buttonVariants`, which other code also uses.');
+  const linked = BUTTON.replace('export { Button, buttonVariants }',
+    'export { Button }\nexport const Link = () => <a className={buttonVariants()} />');
+  expect(() => edit(linked, '<Comp', { type: 'class', property: 'justifyContent', value: 'start' }))
+    .toThrow('which other code also uses');
+  expect(() => edit(linked, '<a', { type: 'class', property: 'marginTop', value: '16px' }))
+    .toThrow('The classes come from `buttonVariants`, which other code also uses.');
+  expect(edit(BUTTON, '<Comp', { type: 'class', property: 'marginTop', value: '16px' }))
+    .toContain('className={cn("mt-4", buttonVariants({ variant, size, className }))}');
+});
+
+test('shadcn-style button refuses what a variant sets', () => {
+  expect(() => edit(BUTTON, '<Comp', { type: 'class', property: 'width', value: '320px' }))
+    .toThrow('The width is also set by the `size` variant.');
   expect(() => edit(BUTTON, '<Comp', padding()))
     .toThrow('The padding is also set by the `size` variant.');
   expect(() => edit(BUTTON, '<Comp', { type: 'class', property: 'backgroundColor', value: '#000' }))
@@ -193,4 +211,22 @@ test('a condition blocks a color edit only when it may set a color', () => {
     .toContain('className={cn("text-[#ff0000]", active && "text-sm text-center")}');
   expect(() => edit(component('<p className={cn("text-gray-700", active && "text-brand")}>x</p>'), '<p', color))
     .toThrow('The color is also set when `active`.');
+});
+
+test('size, axis gap and axis margin classes count as setting part of a property', () => {
+  const blocked = (classes: string, change: Record<string, unknown>) =>
+    () => edit(component(`<div className={cn(${classes})}>x</div>`), '<div', change);
+  expect(blocked('"w-10", active && "size-9"', { type: 'class', property: 'height', value: '16px' }))
+    .toThrow('The height is also set when `active`.');
+  expect(blocked('"gap-2", active && "gap-x-6"', { type: 'class', property: 'gap', value: '16px' }))
+    .toThrow('The gap is also set when `active`.');
+  expect(blocked('"gap-y-2", active && "gap-6"', { type: 'class', property: 'rowGap', value: '16px' }))
+    .toThrow('The row gap is also set when `active`.');
+  expect(blocked('"ml-2", active && "-mx-6"', { type: 'class', property: 'marginLeft', value: '16px' }))
+    .toThrow('The margin left is also set when `active`.');
+  expect(() => edit(component('<div className={`w-10 size-${size}`}>x</div>'), '<div', { type: 'class', property: 'width', value: '16px' }))
+    .toThrow('The width depends on a class built at runtime (`size-…`)');
+  // A column gap does not set the row gap.
+  expect(edit(component('<div className={cn("gap-y-2", active && "gap-x-6")}>x</div>'), '<div', { type: 'class', property: 'rowGap', value: '16px' }))
+    .toContain('className={cn("gap-y-4", active && "gap-x-6")}');
 });

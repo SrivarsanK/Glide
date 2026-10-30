@@ -25,8 +25,10 @@ export interface ClassPiece {
   tokens: ClassToken[];
   /** When the piece applies, such as "when `active`" or "by the `size` variant". */
   condition?: string;
-  /** Part of a cva definition every caller shares. */
+  /** Part of a cva definition rather than this element's own expression. */
   shared: boolean;
+  /** A cva definition other code also uses, so its classes cannot change for one element. */
+  lockedBy?: string;
   /** Whether a new class can be written into this piece. */
   canAdd: boolean;
   /** Drop the classes `keep` rejects. `add` takes the first dropped class's place, or joins the piece. */
@@ -79,9 +81,12 @@ function setString(node: t.StringLiteral, value: string): void {
   node.value = value;
 }
 
-function literalPiece(node: t.StringLiteral, condition: string | undefined, shared: boolean, list?: any[]): ClassPiece {
+/** Where a piece sits: under a condition, inside a cva definition, or in one that other code uses. */
+interface Origin { condition?: string; shared: boolean; lockedBy?: string }
+
+function literalPiece(node: t.StringLiteral, origin: Origin, list?: any[]): ClassPiece {
   return {
-    tokens: tokensOf(node.value, false, false), condition, shared, canAdd: true,
+    tokens: tokensOf(node.value, false, false), ...origin, canAdd: true,
     rewrite(keep, add) {
       let { text, placed } = rewriteText(node.value, keep, add);
       if (!placed) text = text.trim() ? text.replace(/(\s*)$/, ` ${add}$1`) : add!;
@@ -93,12 +98,12 @@ function literalPiece(node: t.StringLiteral, condition: string | undefined, shar
   };
 }
 
-function quasiPiece(template: t.TemplateLiteral, index: number, condition: string | undefined, shared: boolean): ClassPiece {
+function quasiPiece(template: t.TemplateLiteral, index: number, origin: Origin): ClassPiece {
   const quasi = template.quasis[index];
   const first = index === 0, last = index === template.quasis.length - 1;
   const text = () => quasi.value.cooked ?? quasi.value.raw;
   return {
-    tokens: tokensOf(text(), !first, !last), condition, shared, canAdd: first,
+    tokens: tokensOf(text(), !first, !last), ...origin, canAdd: first,
     rewrite(keep, add) {
       const tokens = tokensOf(text(), !first, !last);
       let { text: next, placed } = rewriteText(text(), (name, i) => tokens[i].partial || keep(name), add);
@@ -109,12 +114,15 @@ function quasiPiece(template: t.TemplateLiteral, index: number, condition: strin
   };
 }
 
-/** The `cva(base, config)` call a same-file constant is bound to. */
-function cvaDefinition(name: string, scope?: BindingScope): t.CallExpression | null {
+/** The `cva(base, config)` call a same-file constant is bound to, and whether other code also uses it. */
+function cvaDefinition(name: string, scope?: BindingScope): { call: t.CallExpression; usedElsewhere: boolean } | null {
   const binding = scope?.getBinding(name);
   const node = binding?.constant ? binding.path?.node : null;
-  if (!t.isVariableDeclarator(node) || !t.isCallExpression(node.init)) return null;
-  return t.isIdentifier(node.init.callee, { name: 'cva' }) ? node.init : null;
+  if (!t.isVariableDeclarator(node) || !t.isCallExpression(node.init) || !t.isIdentifier(node.init.callee, { name: 'cva' })) return null;
+  // `VariantProps<typeof buttonVariants>` names the type only; every other reference, export included, uses the classes.
+  const uses = (binding.referencePaths ?? []).filter((ref: any) => !ref.parentPath?.isTSTypeQuery());
+  const exported = !!binding.path.parentPath?.parentPath?.isExportNamedDeclaration();
+  return { call: node.init, usedElsewhere: exported || uses.length !== 1 };
 }
 
 function propertyName(prop: t.ObjectProperty): string | null {
@@ -127,11 +135,13 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
   const result: ClassExpression = { pieces: [] };
   const seen = new Set<t.Node>();
 
-  const visitCva = (call: t.CallExpression, condition: string | undefined) => {
+  const visitCva = ({ call, usedElsewhere }: { call: t.CallExpression; usedElsewhere: boolean }, name: string,
+    condition: string | undefined) => {
     if (seen.has(call)) return;
     seen.add(call);
+    const at = (when?: string): Origin => ({ condition: when, shared: true, ...(usedElsewhere ? { lockedBy: name } : {}) });
     const [base, config] = call.arguments;
-    if (base) visit(base, condition, true);
+    if (base) visit(base, at(condition));
     if (!t.isObjectExpression(config)) return;
     for (const prop of config.properties) {
       if (!t.isObjectProperty(prop)) continue;
@@ -141,7 +151,7 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
           if (!t.isObjectProperty(group) || !t.isObjectExpression(group.value)) continue;
           const label = condition ?? `by the \`${propertyName(group) ?? source(group.key)}\` variant`;
           for (const option of group.value.properties) {
-            if (t.isObjectProperty(option)) visit(option.value, label, true);
+            if (t.isObjectProperty(option)) visit(option.value, at(label));
           }
         }
       } else if (key === 'compoundVariants' && t.isArrayExpression(prop.value)) {
@@ -149,7 +159,7 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
           if (!t.isObjectExpression(entry)) continue;
           for (const field of entry.properties) {
             if (t.isObjectProperty(field) && ['class', 'className'].includes(propertyName(field) ?? '')) {
-              visit(field.value, condition ?? 'by a compound variant', true);
+              visit(field.value, at(condition ?? 'by a compound variant'));
             }
           }
         }
@@ -157,43 +167,42 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
     }
   };
 
-  const visit = (node: t.Node | null | undefined, condition: string | undefined, shared: boolean, list?: any[]): void => {
+  const visit = (node: t.Node | null | undefined, origin: Origin, list?: any[]): void => {
     while (t.isTSAsExpression(node) || t.isTSNonNullExpression(node) || t.isParenthesizedExpression(node)) node = node.expression;
     if (!node) return;
+    const when = (test: t.Node): Origin => ({ ...origin, condition: origin.condition ?? `when \`${source(test)}\`` });
     if (t.isStringLiteral(node)) {
-      result.pieces.push(literalPiece(node, condition, shared, list));
+      result.pieces.push(literalPiece(node, origin, list));
     } else if (t.isTemplateLiteral(node)) {
-      node.quasis.forEach((_, index) => result.pieces.push(quasiPiece(node as t.TemplateLiteral, index, condition, shared)));
-      node.expressions.forEach(inner => visit(inner, condition, shared));
+      node.quasis.forEach((_, index) => result.pieces.push(quasiPiece(node as t.TemplateLiteral, index, origin)));
+      node.expressions.forEach(inner => visit(inner, origin));
     } else if (t.isCallExpression(node) && t.isIdentifier(node.callee) && CLASS_HELPERS.has(node.callee.name)) {
       const args = node.arguments;
-      if (!condition && !shared && !result.prepend) {
+      if (!origin.condition && !origin.shared && !result.prepend) {
         result.prepend = classes => { args.unshift(t.stringLiteral(classes)); };
       }
-      args.forEach(arg => visit(arg, condition, shared, args));
+      args.forEach(arg => visit(arg, origin, args));
     } else if (t.isArrayExpression(node)) {
-      node.elements.forEach(element => visit(element, condition, shared, node.elements as any[]));
+      node.elements.forEach(element => visit(element, origin, node.elements as any[]));
     } else if (t.isLogicalExpression(node)) {
-      const when = condition ?? `when \`${source(node.left)}\``;
-      if (node.operator !== '&&') visit(node.left, when, shared);
-      visit(node.right, when, shared);
+      if (node.operator !== '&&') visit(node.left, when(node.left));
+      visit(node.right, when(node.left));
     } else if (t.isConditionalExpression(node)) {
-      const when = condition ?? `when \`${source(node.test)}\``;
-      visit(node.consequent, when, shared);
-      visit(node.alternate, when, shared);
+      visit(node.consequent, when(node.test));
+      visit(node.alternate, when(node.test));
     } else if (t.isObjectExpression(node)) {
       // clsx objects: { "bg-red-500": hasError }
       for (const prop of node.properties) {
         if (t.isObjectProperty(prop) && !prop.computed && t.isStringLiteral(prop.key)) {
-          result.pieces.push(literalPiece(prop.key, condition ?? `when \`${source(prop.value)}\``, shared));
+          result.pieces.push(literalPiece(prop.key, when(prop.value)));
         }
       }
     } else if (t.isCallExpression(node) && t.isIdentifier(node.callee)) {
       const definition = cvaDefinition(node.callee.name, scope);
-      if (definition) visitCva(definition, condition);
+      if (definition) visitCva(definition, node.callee.name, origin.condition);
     }
   };
 
-  visit(expression, undefined, false);
+  visit(expression, { shared: false });
   return result;
 }

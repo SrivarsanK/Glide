@@ -261,6 +261,13 @@ function overlappingProperties(property: string): string[] {
   return Object.keys(SIDES).filter(other => other.startsWith(family) && [...SIDES[other]].some(side => sides.includes(side)));
 }
 
+/** Classes that set part of a property without being one of its own, such as `size-9` for width. */
+const ALSO_SETS: Record<string, RegExp> = {
+  width: /^size-/, height: /^size-/,
+  gap: /^gap-[xy]-/, rowGap: /^gap-(?!x-)/,
+  margin: /^m[xy]-/, marginTop: /^my-/, marginBottom: /^my-/, marginLeft: /^mx-/, marginRight: /^mx-/,
+};
+
 const NOT_COLOR: Record<string, RegExp> = {
   backgroundColor: /^bg-(\[(url|image|length|size|position)|(no-)?repeat|cover|contain|auto|fixed|local|scroll|center|top|bottom|left|right|clip-|origin-|blend-|gradient-|linear-|radial-|conic-|none$)/,
   color: /^text-(left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow)/,
@@ -316,13 +323,15 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   const related = overlappingProperties(property);
   const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
     || (p === 'fontSize' ? 'text-' : []));
+  const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(splitClassVariants(c).pop()!.replace(/^-/, ''));
   return {
     added: [...variants, newClass].join(':'),
     replaces,
-    overlaps: c => inScope(c) && (related.some(p => matchesProperty(c, p, theme)) || mayBeColor(c, property, theme)),
+    overlaps: c => inScope(c)
+      && (related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
     overlapsPartial: start => {
       const name = splitClassVariants(start).pop()!.replace(/^-/, '');
-      return inScope(start) && relatedPrefixes.some(p => name.startsWith(p));
+      return inScope(start) && (relatedPrefixes.some(p => name.startsWith(p)) || alsoSets(start));
     },
   };
 }
@@ -389,15 +398,23 @@ function mutateClassExpression(expression: t.Expression, property: string, value
       }
     }
   }
-  const target = always.find(piece => piece.tokens.some(token => !token.partial && plan.replaces(token.name)))
+  const holders = always.filter(piece => piece.tokens.some(token => !token.partial && plan.replaces(token.name)));
+  const locked = holders.find(piece => piece.lockedBy);
+  if (locked) {
+    throw new Error(`UNSUPPORTED_OPERATION: The ${label} comes from \`${locked.lockedBy}\`, which other code also uses. Edit it in source.`);
+  }
+  const target = holders[0]
     ?? always.find(piece => piece.canAdd && !piece.shared)
-    ?? (prepend ? undefined : always.find(piece => piece.canAdd));
+    ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
   if (!target && !prepend) {
+    const lockedBy = always.find(piece => piece.lockedBy)?.lockedBy;
     throw new Error(t.isIdentifier(expression, { name: 'className' })
       ? 'UNSUPPORTED_OPERATION: The classes are passed in through `className`. Edit them where the component is used.'
-      : pieces.length
-        ? 'UNSUPPORTED_OPERATION: Every class here depends on a condition, so there is no class string to add to.'
-        : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
+      : lockedBy
+        ? `UNSUPPORTED_OPERATION: The classes come from \`${lockedBy}\`, which other code also uses. Edit it in source.`
+        : pieces.length
+          ? 'UNSUPPORTED_OPERATION: Every class here depends on a condition, so there is no class string to add to.'
+          : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
   }
   for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
   if (!target) prepend!(plan.added);
