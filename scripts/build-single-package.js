@@ -54,7 +54,7 @@ const __dirname = __dirnameFunc(__filename);
 `;
 
 // ── Pre-build all internal packages (dependency order) ───────────────────────
-// esbuild resolves @srivarsank/* via node_modules symlinks pointing to packages/*/dist/
+// esbuild bundles @srivarsank/* from packages/*/dist/
 // Those dist/ dirs must exist before esbuild runs, so compile all packages with tsc first.
 
 const internalPackages = [
@@ -71,6 +71,43 @@ const internalPackages = [
   'vite-plugin',
 ];
 
+// ── Resolve @srivarsank/* from this checkout ─────────────────────────────────
+// Through node_modules, a git worktree (which has none of its own) would reach the
+// main checkout's links and silently build main's packages. So esbuild gets an alias
+// and TypeScript a paths mapping, both pointing at this checkout's packages/*.
+
+const workspacePackages = new Map(internalPackages.map(pkg => {
+  const pkgDir = path.join(projectRoot, 'packages', pkg);
+  const manifest = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+  return [manifest.name, { main: path.join(pkgDir, manifest.main), types: path.join(pkgDir, manifest.types) }];
+}));
+
+// An alias, unlike a path returned by a plugin, still reads each package.json "type".
+const workspaceAlias = Object.fromEntries([...workspacePackages].map(([name, pkg]) => [name, pkg.main]));
+
+// Plugins see imports before the alias does: let known names through, refuse the rest.
+const workspaceGuardPlugin = {
+  name: 'workspace-guard',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /^@srivarsank\// }, args => {
+      if (workspacePackages.has(args.path)) return undefined;
+      return { errors: [{ text: `${args.path} is not in internalPackages, so it cannot be bundled from this checkout` }] };
+    });
+  },
+};
+
+// tsc and dts-bundle-generator read a generated tsconfig beside the real one, so the
+// rest of it (relative paths, @types lookup) resolves exactly as before.
+const workspacePaths = Object.fromEntries([...workspacePackages].map(([name, pkg]) => [name, [pkg.types]]));
+const workspaceTsconfigs = new Set();
+
+function workspaceTsconfig(projectDir) {
+  const file = path.join(projectDir, 'tsconfig.workspace.json');
+  fs.writeFileSync(file, JSON.stringify({ extends: './tsconfig.json', compilerOptions: { paths: workspacePaths } }, null, 2));
+  workspaceTsconfigs.add(file);
+  return file;
+}
+
 async function runBuild() {
   for (const pkg of internalPackages) {
     const pkgDir = path.join(projectRoot, 'packages', pkg);
@@ -79,7 +116,7 @@ async function runBuild() {
       continue;
     }
     console.log(`Building packages/${pkg} with tsc...`);
-    execSync('npx tsc', { cwd: pkgDir, stdio: 'inherit' });
+    execSync(`npx tsc -p "${workspaceTsconfig(pkgDir)}"`, { cwd: pkgDir, stdio: 'inherit' });
   }
 
   console.log('Bundling ESM Javascript files with esbuild...');
@@ -96,6 +133,8 @@ async function runBuild() {
       js: esmBanner,
     },
     external: externals,
+    alias: workspaceAlias,
+    plugins: [workspaceGuardPlugin],
   });
 
   // 2. CLI entry point
@@ -110,6 +149,8 @@ async function runBuild() {
       js: esmBanner,
     },
     external: externals,
+    alias: workspaceAlias,
+    plugins: [workspaceGuardPlugin],
   });
 
   // Strip shebang from the bundled code and prepend a single shebang at the top
@@ -130,6 +171,8 @@ async function runBuild() {
       js: esmBanner,
     },
     external: externals,
+    alias: workspaceAlias,
+    plugins: [workspaceGuardPlugin],
   });
 
   // 4. Babel plugin entry point
@@ -144,14 +187,16 @@ async function runBuild() {
       js: esmBanner,
     },
     external: externals,
+    alias: workspaceAlias,
+    plugins: [workspaceGuardPlugin],
   });
 
   console.log('Bundling typings with dts-bundle-generator...');
   
-  execSync('npx dts-bundle-generator -o dist/index.d.ts src/index.ts', { stdio: 'inherit' });
-  execSync('npx dts-bundle-generator -o dist/cli.d.ts packages/cli/src/index.ts', { stdio: 'inherit' });
-  execSync('npx dts-bundle-generator -o dist/vite-plugin.d.ts packages/vite-plugin/src/index.ts', { stdio: 'inherit' });
-  execSync('npx dts-bundle-generator -o dist/babel-plugin.d.ts packages/babel-plugin/src/index.ts', { stdio: 'inherit' });
+  execSync(`npx dts-bundle-generator -o dist/index.d.ts src/index.ts --project "${workspaceTsconfig(projectRoot)}"`, { stdio: 'inherit' });
+  execSync(`npx dts-bundle-generator -o dist/cli.d.ts packages/cli/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/cli'))}"`, { stdio: 'inherit' });
+  execSync(`npx dts-bundle-generator -o dist/vite-plugin.d.ts packages/vite-plugin/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/vite-plugin'))}"`, { stdio: 'inherit' });
+  execSync(`npx dts-bundle-generator -o dist/babel-plugin.d.ts packages/babel-plugin/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/babel-plugin'))}"`, { stdio: 'inherit' });
 
   // 5. Package skills and synchronize to .agents/skills/
   console.log('Packaging AI agent skills...');
@@ -178,7 +223,11 @@ async function runBuild() {
   console.log('Build completed successfully!');
 }
 
-runBuild().catch(err => {
-  console.error('Build failed:', err);
-  process.exit(1);
-});
+runBuild()
+  .finally(() => {
+    for (const file of workspaceTsconfigs) fs.rmSync(file, { force: true });
+  })
+  .catch(err => {
+    console.error('Build failed:', err);
+    process.exit(1);
+  });
