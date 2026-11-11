@@ -176,6 +176,8 @@ export function stampHTMLTemplate(code: string, filepath: string, sourceAttribut
     }
 
     const index = match.index;
+    // `<svelte:head>` and other namespaced tags: an attribute placed after "svelte" would break the tag.
+    if (cleanCode[index + 1 + tagName.length] === ':') continue;
     const restOfTag = cleanCode.substring(index, index + 500);
     const tagEnd = restOfTag.indexOf('>');
     const tagContent = tagEnd !== -1 ? restOfTag.substring(0, tagEnd) : restOfTag;

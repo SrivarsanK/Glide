@@ -56,7 +56,7 @@ test('the page gets the bridge script verbatim, even where it contains replaceme
   const plugin: any = glideSourceStamping();
   plugin.configResolved({ command: 'serve', root: os.tmpdir() });
   const page = '<html><head><title>App</title></head><body>x</body></html>';
-  const html: string = plugin.transformIndexHtml(page);
+  const html: string = plugin.transformIndexHtml.handler(page);
   const script = html.match(/<head><script>([\s\S]*?)<\/script>/)![1];
   expect(script).toContain("'__reactFiber$'");
   expect(() => new vm.Script(script)).not.toThrow();
@@ -179,7 +179,7 @@ test('JSX is stamped with the configured source attribute, which the bridge read
     const plugin: any = glideSourceStamping();
     plugin.configResolved({ command: 'serve', root });
     // The plugin loads glide.config.json asynchronously and then rebuilds the bridge.
-    for (let attempt = 0; attempt < 200 && !plugin.transformIndexHtml('<head></head>').includes("props['data-src']"); attempt++) {
+    for (let attempt = 0; attempt < 200 && !plugin.transformIndexHtml.handler('<head></head>').includes("props['data-src']"); attempt++) {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     const stamped = plugin.transform('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;

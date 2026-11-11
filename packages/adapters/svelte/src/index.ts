@@ -1,5 +1,7 @@
 import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
 
+export { listSvelteElements, readSvelteClassAt, setSvelteClassAt, setSvelteStyleAt, setSvelteTextAt } from './template.js';
+
 export function updateSvelteClass(
   svelteCode: string,
   targetId: string,

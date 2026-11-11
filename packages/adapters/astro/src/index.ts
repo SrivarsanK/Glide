@@ -166,3 +166,5 @@ export function updateAstroText(
 
   return astroCode;
 }
+
+export { listAstroElements, readAstroClassAt, setAstroClassAt, setAstroStyleAt, setAstroTextAt } from './template.js';

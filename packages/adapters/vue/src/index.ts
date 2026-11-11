@@ -54,3 +54,22 @@ export function updateVueSFCText(code: string, id: string, text: string): string
   return replace(code, child.loc.start.offset, child.loc.end.offset,
     (raw.match(/^\s*/)?.[0] || '') + escape(text) + (raw.match(/\s*$/)?.[0] || ''));
 }
+
+/** The static class of the node at `id`, or null when no such node exists. */
+export function readVueClass(code: string, id: string): string | null {
+  const node = target(code, id);
+  if (node === null) return null;
+  return node.props.find((p: any) => p.type === 6 && p.name === 'class')?.value?.content ?? '';
+}
+
+/** Every template element in document order, with the one-based position of its opening tag. */
+export function listVueElements(code: string): { line: number; column: number }[] {
+  const ast = parse(code).descriptor.template?.ast;
+  const result: { line: number; column: number }[] = [];
+  const walk = (node: any) => {
+    if (node.type === 1) result.push({ line: node.loc.start.line, column: node.loc.start.column });
+    for (const child of node.children || []) walk(child);
+  };
+  if (ast) walk(ast);
+  return result;
+}

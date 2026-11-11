@@ -12,7 +12,9 @@ export function trustedRequest(req: IncomingMessage, port: number, remote?: Remo
   if (!host || !hosts.includes(host.toLowerCase())) return false;
   const origin = req.headers.origin;
   if (origin === undefined) return true;
-  return (remote?.allowedOrigins ?? [`http://${host}`]).includes(origin);
+  // A dev server running over TLS (Vite `server.https`) reports an https origin.
+  const scheme = (req.socket as { encrypted?: boolean } | undefined)?.encrypted ? 'https' : 'http';
+  return (remote?.allowedOrigins ?? [`${scheme}://${host}`]).includes(origin);
 }
 
 export function validateMessage(value: unknown): asserts value is Record<string, any> {

@@ -1,6 +1,6 @@
 # Surgical Tailwind Token Rewriting Guide
 
-Glide provides non-destructive Tailwind class rewriting via `rewriteTailwindToken` and `rewriteClassNameToken` in `packages/ast-writer/src/css.ts`.
+Glide rewrites Tailwind classes without touching unrelated classes. The editor's save path uses `updateClassString` and the class planner in `packages/ast-writer/src/writer.ts`; the same rules apply to JSX, Vue, Svelte, Astro and HTML.
 
 ---
 
@@ -9,7 +9,7 @@ Glide provides non-destructive Tailwind class rewriting via `rewriteTailwindToke
 When an agent or user changes a single property (e.g. changing background from blue to red), a naive replacement of the whole `className` risks removing responsive utilities, hover states, or layout classes.
 
 Glide's surgical rewriter:
-1. Parses the target JSX element's `className` attribute.
+1. Reads the target element's static class list.
 2. Identifies any existing token matching the property's prefix (e.g. `bg-`).
 3. If found, swaps only that token with the new token (`bg-indigo-600`).
 4. If not found, appends the new token to the class list.
@@ -49,4 +49,12 @@ The regex parser matches both standard tokens and arbitrary values:
 ```
 
 ### State & Responsive Variants
-Tokens with prefixes like `hover:bg-blue-600` or `md:w-1/2` are treated as separate variant classes. The default property rewriter targets only base classes unless a variant is explicitly requested.
+Tokens with prefixes like `hover:bg-blue-600` or `md:w-1/2` are separate variant classes. An edit replaces only tokens in its own scope: an unscoped edit changes base classes, and an edit with a breakpoint or pseudo-state changes only classes with exactly those variants.
+
+Supported pseudo-states: `hover`, `focus`, `focus-visible`, `active`, `disabled`. Breakpoints come from the project theme.
+
+### Theme Tokens
+Glide reads the project theme (Tailwind v3 config or v4 `@theme` CSS). A value that matches a theme token is written as that token (`p-4`, `bg-brand-500`); other values are written as arbitrary values (`p-[18px]`).
+
+### Class Expressions (JSX)
+In `cn(...)`, `clsx(...)`, `cva(...)` and template literals, only classes that always apply are edited. An edit is refused when a condition, a runtime-built class or a shared definition would override it.

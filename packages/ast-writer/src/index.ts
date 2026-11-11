@@ -5,6 +5,7 @@
 export { findJSXElementAt, updateClassName, updateJSXText, updateClassString, updateJSXStyleProp, computeNodeHash } from './writer.js';
 export { transformJSXBatch } from './writer.js';
 export { listWorkspaceObjects } from './workspace.js';
+export { layoutStyles } from './layout.js';
 export type { WorkspaceObject, WorkspacePreview } from './workspace.js';
 export { inspectJSXProps } from './props.js';
 export { forwardsClassName, activeVariants } from './edit-scope.js';
