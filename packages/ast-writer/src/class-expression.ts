@@ -29,11 +29,15 @@ export interface ClassPiece {
   shared: boolean;
   /** A cva definition other code also uses, so its classes cannot change for one element. */
   lockedBy?: string;
+  /** The cva variant option the piece belongs to, such as `size: "lg"`. */
+  variant?: VariantOption;
   /** Whether a new class can be written into this piece. */
   canAdd: boolean;
   /** Drop the classes `keep` rejects. `add` takes the first dropped class's place, or joins the piece. */
   rewrite(keep: (name: string) => boolean, add?: string): void;
 }
+
+export interface VariantOption { group: string; option: string }
 
 export interface ClassExpression {
   pieces: ClassPiece[];
@@ -82,7 +86,7 @@ function setString(node: t.StringLiteral, value: string): void {
 }
 
 /** Where a piece sits: under a condition, inside a cva definition, or in one that other code uses. */
-interface Origin { condition?: string; shared: boolean; lockedBy?: string }
+interface Origin { condition?: string; shared: boolean; lockedBy?: string; variant?: VariantOption }
 
 function literalPiece(node: t.StringLiteral, origin: Origin, list?: any[]): ClassPiece {
   return {
@@ -115,7 +119,7 @@ function quasiPiece(template: t.TemplateLiteral, index: number, origin: Origin):
 }
 
 /** The `cva(base, config)` call a same-file constant is bound to, and whether other code also uses it. */
-function cvaDefinition(name: string, scope?: BindingScope): { call: t.CallExpression; usedElsewhere: boolean } | null {
+export function cvaDefinition(name: string, scope?: BindingScope): { call: t.CallExpression; usedElsewhere: boolean } | null {
   const binding = scope?.getBinding(name);
   const node = binding?.constant ? binding.path?.node : null;
   if (!t.isVariableDeclarator(node) || !t.isCallExpression(node.init) || !t.isIdentifier(node.init.callee, { name: 'cva' })) return null;
@@ -125,7 +129,7 @@ function cvaDefinition(name: string, scope?: BindingScope): { call: t.CallExpres
   return { call: node.init, usedElsewhere: exported || uses.length !== 1 };
 }
 
-function propertyName(prop: t.ObjectProperty): string | null {
+export function propertyName(prop: t.ObjectProperty): string | null {
   if (prop.computed) return null;
   return t.isIdentifier(prop.key) ? prop.key.name : t.isStringLiteral(prop.key) ? prop.key.value : null;
 }
@@ -139,7 +143,8 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
     condition: string | undefined) => {
     if (seen.has(call)) return;
     seen.add(call);
-    const at = (when?: string): Origin => ({ condition: when, shared: true, ...(usedElsewhere ? { lockedBy: name } : {}) });
+    const at = (when?: string, variant?: VariantOption): Origin => ({ condition: when, shared: true,
+      ...(usedElsewhere ? { lockedBy: name } : {}), ...(variant ? { variant } : {}) });
     const [base, config] = call.arguments;
     if (base) visit(base, at(condition));
     if (!t.isObjectExpression(config)) return;
@@ -149,9 +154,13 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
       if (key === 'variants' && t.isObjectExpression(prop.value)) {
         for (const group of prop.value.properties) {
           if (!t.isObjectProperty(group) || !t.isObjectExpression(group.value)) continue;
-          const label = condition ?? `by the \`${propertyName(group) ?? source(group.key)}\` variant`;
+          const groupName = propertyName(group) ?? source(group.key);
+          const label = condition ?? `by the \`${groupName}\` variant`;
           for (const option of group.value.properties) {
-            if (t.isObjectProperty(option)) visit(option.value, at(label));
+            const optionName = t.isObjectProperty(option) ? propertyName(option) : null;
+            if (t.isObjectProperty(option)) {
+              visit(option.value, at(label, optionName === null ? undefined : { group: groupName, option: optionName }));
+            }
           }
         }
       } else if (key === 'compoundVariants' && t.isArrayExpression(prop.value)) {

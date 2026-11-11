@@ -1,58 +1,52 @@
 # Framework Adapters & Write-Back Guide
 
-Glide supports source write-back across five web application targets. Each target has specialized AST parsers and transformation strategies to ensure developer code formatting and structure are preserved.
+Glide saves edits to five file types. JSX/TSX has full support. Template files (Vue, Svelte, Astro, HTML) support class, inline style and text edits only.
+
+A writer **refuses** an edit that it cannot make exactly (`UNSUPPORTED_OPERATION`). In that case, edit the file in source.
 
 ---
 
-## 1. React / TSX (`packages/ast-writer/src/writer.ts`)
+## 1. React / JSX / TSX (`packages/ast-writer`)
 
-- **Underlying Engine**: `recast` with `@babel/parser` configured for TypeScript and JSX.
-- **Why Recast**: Unlike Babel generator, Recast preserves original indentation, comments, single vs double quotes, and line breaks.
-- **Operations Supported**:
-  - `updateClassName`: Modifies or adds `className="..."` string or JSX expression.
-  - `updateJSXStyleProp`: Modifies inline `style={{ ... }}` attributes.
-  - `updateJSXText`: Surgically replaces inner JSX text children without touching child elements.
-  - `reorderJSXElement`: Reorders sibling JSX elements or reparents across containers.
-  - `groupJSXElements` / `ungroupJSXElement`: Wraps elements in a container `<div>` or removes a wrapper.
+- **Engine**: `recast` with `@babel/parser` (TypeScript and JSX). Changed text is spliced into the original source, so formatting, comments and quotes stay as written.
+- **Entry point**: `transformJSXBatch(source, operations, { theme })`.
+- **Supported**:
+  - Class edits on a static `className`, and on `cn` / `clsx` / `cva` / template-literal class expressions.
+  - Inline `style={{ ... }}` edits.
+  - Text edits that keep child elements and expressions.
+  - Literal prop edits.
+  - Structural edits: insert, delete, duplicate, paste, reorder, reparent, group, ungroup, arrange, detach, attach.
+- **Refused**: `className` from a spread; a class that a condition or shared `cva` definition would override; moves across lexical scopes; copies of dynamic bindings.
 
 ---
 
-## 2. Vue Single File Components (SFC) (`packages/adapters/vue`)
+## 2. Vue Single File Components (`packages/adapters/vue`)
 
-- **Underlying Engine**: `@vue/compiler-sfc`.
-- **Strategy**:
-  - Extracts the `<template>` descriptor block.
-  - Identifies the target node matching `data-gl-source` coordinates.
-  - Updates `:class`, `class`, `:style`, `style`, or text content within the template.
-  - Reassembles the SFC, leaving `<script>`, `<script setup>`, and `<style>` blocks completely untouched.
+- **Engine**: `@vue/compiler-sfc`. The element is found by the exact position of its tag in the template.
+- **Supported**: static `class`, static `style`, one literal text segment. `<script>` and `<style>` blocks stay untouched.
+- **Refused**: `:class` / `:style` / `v-bind`; text controlled by `v-text` or `v-html`; template preprocessors such as Pug; structural edits.
 
 ---
 
 ## 3. Svelte Components (`packages/adapters/svelte`)
 
-- **Underlying Engine**: `svelte/compiler`.
-- **Strategy**:
-  - Isolates template markup by stripping `<script>` and `<style>` blocks.
-  - Parses Svelte AST to locate target elements.
-  - Replaces class attributes or text nodes.
-  - Re-injects the modified template between original script and style blocks.
+- **Engine**: `svelte/compiler` (`parse`). The result is parsed again after each edit.
+- **Supported**: static `class`, static `style`, one literal text segment.
+- **Refused**: `class="a {b}"` and other dynamic values; elements with `{...spread}`; components such as `<Card>`; structural edits.
 
 ---
 
-## 4. Astro SFCs (`packages/adapters/astro`)
+## 4. Astro Components (`packages/adapters/astro`)
 
-- **Strategy**:
-  - Detects frontmatter code fences (`---`).
-  - Separates frontmatter server logic from the component template markup.
-  - Applies element modifications to the template section.
-  - Re-attaches frontmatter block preserving server-side imports and logic.
+- **Engine**: a tag scanner that reads the opening tag at the exact stamped position. Frontmatter, comments, `<script>` and `<style>` are ignored.
+- **Supported**: static `class`, static `style`, text of an element that holds only literal text.
+- **Refused**: `class:list`, `class={...}`, `style={{...}}`, `set:html`, `set:text`, `{...spread}`; text with expressions or child elements; components; structural edits.
 
 ---
 
-## 5. Static HTML (`packages/adapters/html`)
+## 5. Static HTML (`.html`)
 
-- **Underlying Engine**: `html-dom-parser`.
-- **Strategy**:
-  - Parses HTML document or fragment.
-  - Targets elements matching `data-gl-source` or element structure.
-  - Updates class, style, or text attributes directly and serializes back to clean HTML.
+- **Engine**: the same tag scanner as Astro.
+- **Stamping**: HTML pages are stamped only in projects with no UI framework. In a React, Vue or Svelte project, `index.html` is a mount point and is not editable in Glide. `<html>`, `<head>` and `<body>` are never stamped; only the elements inside `<body>` are editable.
+- **Supported**: `class`, `style`, text of an element that holds only text.
+- **Refused**: text of an element with child tags; void tags such as `<img>`; structural edits.

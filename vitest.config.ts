@@ -14,6 +14,8 @@ export default defineConfig({
     })),
   },
   test: {
+    // Only this checkout's suite: nested git worktrees hold copies that would fight over the same ports.
+    include: ['src/__tests__/**/*.test.ts'],
     environment: 'node',
     globals: true,
   },

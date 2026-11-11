@@ -8,7 +8,14 @@ import { createWorkspaceCanvas } from './workspace-canvas.js';
 import { editorChromeCSS } from './editor-chrome.js';
 import { editorNavigationHTML, createEditorNavigation } from './editor-navigation.js';
 
-export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = ''): string {
+/**
+ * The served editor. `hosted` means the dev server itself serves the editor at
+ * /__glide/, so the app loads from the same origin and the socket is /__glide/ws;
+ * otherwise the app loads through Glide's proxy and the socket is at the root.
+ */
+export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken = '', options: { hosted?: boolean } = {}): string {
+  const appBase = options.hosted ? '' : '/__glide_proxy__';
+  const socketPath = options.hosted ? '/__glide/ws' : '';
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -1703,6 +1710,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 <option value="">Auto</option><option value="tailwind">Tailwind</option><option value="inline">Inline</option>
               </select>
             </div>
+            <div id="edit-scope-row" style="display: none; padding: 0 8px 8px;">
+              <select id="edit-scope" aria-label="Edit scope" title="Where class edits are written"></select>
+            </div>
             <div class="sidebar-header" style="display: flex; align-items: center; justify-content: space-between;">
               <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
                 <span>Properties</span>
@@ -2241,6 +2251,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const sourceMapping = (${createSourceMapping.toString()})();
           let currentFile = null;
           let selectedElement = null;
+          // Where class edits for the selection are written: its definition, a usage, or a cva variant.
+          let editScope = null;
+          let editScopeKey = '';
+          let editScopeRequest = 0;
           const sourceProps = (${createSourceProps.toString()})({
             container: document.getElementById('source-props'),
             selected: () => selectedElement?.source || null,
@@ -2380,7 +2394,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function connectSocket() {
             updateConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(protocol + '//' + window.location.host);
+            socket = new WebSocket(protocol + '//' + window.location.host + ${JSON.stringify(socketPath)});
             socket.sendRaw = socket.send.bind(socket);
             if (!sourceTransport) sourceTransport = (${createMutationTransport.toString()})({
               send: data => socket.sendRaw(data),
@@ -2430,6 +2444,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               try {
                 const message = JSON.parse(event.data);
                 sourceProps.accept(message);
+                acceptEditScopes(message);
                 if (message.type === 'authenticated') {
                   sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
@@ -2834,13 +2849,101 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             showToast('info', 'Waiting for source persistence');
           }
 
+          // ═══════════════════════════════════════════════════════════════
+          // EDIT SCOPE
+          // ═══════════════════════════════════════════════════════════════
+          // The bridge reports the components whose root is the selection, each with where it is used.
+          // The server says which usages pass className down to the element and which cva options apply.
+          function requestEditScopes() {
+            const owners = (selectedElement && selectedElement.owners) || [];
+            const levels = [];
+            for (const source of [selectedElement && selectedElement.source, ...owners.map(owner => owner.source)]) {
+              const parsed = source && parseSource(source);
+              if (!parsed || parsed.cstSelector) break;
+              const owner = owners[levels.length - 1];
+              levels.push({ file: parsed.file, line: parsed.line, column: parsed.column, ...(owner ? { name: owner.name, props: owner.props } : {}) });
+            }
+            const key = levels.length < 2 ? '' : JSON.stringify(levels);
+            // The bridge re-reports the selection on scroll and resize; keep the chosen scope while it is the same.
+            if (key && key === editScopeKey) return;
+            resetEditScope();
+            if (!key || !socket || socket.readyState !== WebSocket.OPEN) return;
+            editScopeKey = key;
+            socket.send(JSON.stringify({ type: 'inspect-scopes', requestId: editScopeRequest, levels }));
+          }
+
+          /** Forget the scope and ignore any reply still on its way. */
+          function resetEditScope() {
+            editScope = null;
+            editScopeKey = '';
+            editScopeRequest++;
+            document.getElementById('edit-scope-row').style.display = 'none';
+          }
+
+          function acceptEditScopes(message) {
+            if (message.type !== 'edit-scopes' || message.requestId !== editScopeRequest || !selectedElement || !message.success) return;
+            (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
+            const owners = selectedElement.owners;
+            const where = source => { const parsed = parseSource(source); return parsed ? normalizePathSlash(parsed.file).split('/').pop() + ':' + parsed.line : ''; };
+            const element = selectedElement.source;
+            const scopes = [{ element, source: element, label: 'Every <' + owners[0].name + '> · ' + where(element) }];
+            const used = message.forwards.length;
+            for (let level = 1; level <= used; level++) {
+              const owner = owners[level - 1];
+              const blocked = message.forwards.slice(0, level).findIndex(forwards => !forwards);
+              scopes.push({ element, source: owner.source,
+                label: (level < used ? 'Every <' + owners[level].name + '>' : 'This <' + owner.name + '>') + ' · ' + where(owner.source),
+                reason: blocked < 0 ? '' : '<' + owners[blocked].name + '> does not pass className to the element inside it' });
+            }
+            for (const variant of message.variants || []) {
+              scopes.push({ element, source: element, variant: { group: variant.group, option: variant.option },
+                label: 'Every <' + owners[0].name + ' ' + variant.group + '="' + variant.option + '">'
+                  + (variant.shared ? ' · all ' + variant.definition + ' users' : '') });
+            }
+            const select = document.getElementById('edit-scope');
+            select.replaceChildren(...scopes.map((scope, index) => {
+              const option = document.createElement('option');
+              option.value = String(index);
+              option.textContent = scope.reason ? scope.label + ' (not passed down)' : scope.label;
+              option.disabled = !!scope.reason;
+              if (scope.reason) option.title = scope.reason;
+              return option;
+            }));
+            // Like a Figma instance, default to the outermost usage that reaches the element.
+            let chosen = 0;
+            scopes.forEach((scope, index) => { if (index && !scope.variant && !scope.reason) chosen = index; });
+            select.value = String(chosen);
+            select.onchange = () => { editScope = scopes[Number(select.value)]; };
+            editScope = scopes[chosen];
+            document.getElementById('edit-scope-row').style.display = 'block';
+          }
+
+          /** Class edits for the selection go to its chosen scope; other edits stay on the element. */
+          function scopedEdit(source, change) {
+            // A scope belongs to the element it was computed for, even if the selection changed without a new report.
+            if (!editScope || !selectedElement || source !== selectedElement.source || editScope.element !== source
+              || (editScope.source === source && !editScope.variant)) return { source, change };
+            if (!['class', 'multi-class', 'style'].includes(change.type)) return { source, change };
+            // Inline styles land on the definition's element, so they cannot follow a usage or variant scope.
+            if (change.authoringRepresentation === 'inline') {
+              showToast('info', 'Inline styles cannot target this scope. Choose Tailwind, or edit every <' + selectedElement.owners[0].name + '>.');
+              return null;
+            }
+            const routed = change.type === 'style' ? { ...change, authoringRepresentation: 'tailwind' } : change;
+            return { source: editScope.source, change: editScope.variant ? { ...routed, variant: editScope.variant } : routed };
+          }
+
           function sendEdit(change) {
             if (!selectedElement) return;
             change = mutationScope.capture(change);
+            const scoped = scopedEdit(selectedElement.source, change);
+            if (!scoped) return;
+            const target = scoped.source;
+            change = scoped.change;
 
             // Intercept style & class edits when Staged Mode is enabled
             if (stagingModeActive && change.type !== 'position' && change.type !== 'bake-position') {
-              stageEdit(selectedElement.source, change);
+              stageEdit(target, change);
               return;
             }
 
@@ -2861,7 +2964,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               }
             }
 
-            _pendingEdits.push({ source: selectedElement.source, change });
+            _pendingEdits.push({ source: target, change });
 
             if (_editTimer) clearTimeout(_editTimer);
             _editTimer = setTimeout(() => {
@@ -4776,7 +4879,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                 }
 
-                selectedElement = { source: source };
+                selectedElement = { source: source, owners: data.owners || [] };
                 selectedRect = rect;
                 selectedComputedStyles = data.computedStyles;
                 populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
@@ -4803,6 +4906,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (selectedSources.length > 0) {
                 selectedElement = { source: selectedSources[selectedSources.length - 1] };
                 selectedRect = selectedRects[selectedRects.length - 1];
+                resetEditScope();
               } else {
                 selectedElement = null;
                 selectedRect = null;
@@ -5627,17 +5731,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               url = 'http://localhost:' + url;
             }
 
+            // Hosted by the dev server, the app is on this origin and needs no proxy prefix.
+            var appBase = ${JSON.stringify(appBase)};
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
               // Extract path from absolute URL and route via proxy
               try {
                 var parsed = new URL(url);
-                proxyUrl = '/__glide_proxy__' + (parsed.pathname || '/');
+                proxyUrl = appBase + (parsed.pathname || '/');
                 if (parsed.search) proxyUrl += parsed.search;
-              } catch(e) { proxyUrl = '/__glide_proxy__/'; }
-            } else if (!url.startsWith('/__glide_proxy__')) {
+              } catch(e) { proxyUrl = appBase + '/'; }
+            } else if (!appBase || !url.startsWith(appBase)) {
               // Relative path — prefix with proxy base
-              proxyUrl = '/__glide_proxy__/' + (url.startsWith('/') ? url.slice(1) : url);
+              proxyUrl = appBase + '/' + (url.startsWith('/') ? url.slice(1) : url);
             }
 
             // Sync text input to normalized URL if user typed pure port or full URL
@@ -5646,7 +5752,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               urlInput.value = url;
             }
 
-            if (statusEl) statusEl.textContent = 'Connecting via Glide proxy...';
+            if (statusEl) statusEl.textContent = ${JSON.stringify(options.hosted ? 'Loading app...' : 'Connecting via Glide proxy...')};
 
             // Remove stale retry button if present
             var oldBtn = document.getElementById('glide-retry-btn');
@@ -5660,6 +5766,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           function showNoSelection() {
             selectionFeedback(false, false);
+            resetEditScope();
             document.getElementById('no-selection-msg').style.display = 'flex';
             document.getElementById('props-content').style.display = 'none';
             document.getElementById('selected-tag').textContent = '';
@@ -5675,7 +5782,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               try {
                 const nodes = document.getElementById('app-iframe').contentDocument.querySelectorAll('[data-gl-source]');
                 const count = Array.from(nodes).filter(node => isSourceMatch(node.getAttribute('data-gl-source'), selectedElement.source)).length;
-                if (count > 1) {
+                // With component owners, the edit scope picker states where edits go instead.
+                if (count > 1 && !(selectedElement.owners && selectedElement.owners.length)) {
                   const banner = document.getElementById('source-mapping-error');
                   banner.hidden = false;
                   banner.textContent = 'Shared source: edits affect all ' + count + ' rendered instances. Individual instances cannot be moved between layers.';
@@ -5683,6 +5791,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               } catch (_) { /* Cross-origin previews cannot expose instance counts. */ }
             }
             sourceProps.request();
+            requestEditScopes();
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
@@ -6543,9 +6652,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // Helper: send style change by source
           function sendStyleChange(source, property, value) {
-            if (stagingModeActive) { stageEdit(source, { type: 'class', property, value }); return; }
+            const scoped = scopedEdit(source, mutationScope.capture({ type: 'class', property, value }));
+            if (!scoped) return;
+            if (stagingModeActive) { stageEdit(scoped.source, scoped.change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(source);
+            const parsed = parseSource(scoped.source);
             if (!parsed) return;
             const targetFile = parsed.file || currentFile;
             socket.send(JSON.stringify({
@@ -6554,7 +6665,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               line: parsed.line,
               column: parsed.column,
               viewportWidth: iframeWidth.current,
-              change: { type: 'class', property, value }
+              change: scoped.change
             }));
           }
 
@@ -6745,15 +6856,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           let _styleTimer = null;
           function sendStylePropsChange(source, styles) {
-            const change = mutationScope.capture({ type: 'style', value: styles });
-            if (stagingModeActive) { stageEdit(source, change); return; }
+            const scoped = scopedEdit(source, mutationScope.capture({ type: 'style', value: styles }));
+            if (!scoped) return;
+            const change = scoped.change;
+            if (stagingModeActive) { stageEdit(scoped.source, change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
             applyOptimisticStyle(source, styles);
 
             if (_styleTimer) clearTimeout(_styleTimer);
-            const capturedSource = source;
+            const capturedSource = scoped.source;
             const capturedStyles = styles;
             _styleTimer = setTimeout(() => {
               _styleTimer = null;
@@ -6775,12 +6888,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function sendMultiClassChange(source, styles) {
+            const scoped = scopedEdit(source, mutationScope.capture({ type: 'multi-class', value: styles }));
+            if (!scoped) return;
             if (stagingModeActive) {
-              stageEdit(source, { type: 'multi-class', value: styles });
+              stageEdit(scoped.source, scoped.change);
               return;
             }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const parsed = parseSource(source);
+            const parsed = parseSource(scoped.source);
             if (!parsed) return;
             const targetFile = parsed.file || currentFile;
             socket.send(JSON.stringify({
@@ -6791,7 +6906,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               hash: parsed.hash,
               generation: currentGeneration,
               viewportWidth: iframeWidth.current,
-              change: { type: 'multi-class', value: styles }
+              change: scoped.change
             }));
           }
 

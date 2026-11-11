@@ -97,3 +97,14 @@ test('blocks mutation callbacks before a session handshake', async () => {
   expect(calls).toBe(0);
   client.terminate();
 });
+
+import { trustedRequest } from '../../packages/server/src/session-security.js';
+
+test('a dev server over TLS accepts its own https origin and still refuses others', () => {
+  const req = (origin: string, encrypted: boolean) =>
+    ({ headers: { host: 'localhost:5173', origin }, socket: { encrypted } }) as any;
+  expect(trustedRequest(req('https://localhost:5173', true), 5173)).toBe(true);
+  expect(trustedRequest(req('http://localhost:5173', false), 5173)).toBe(true);
+  expect(trustedRequest(req('https://localhost:5173', false), 5173)).toBe(false);
+  expect(trustedRequest(req('https://evil.test', true), 5173)).toBe(false);
+});

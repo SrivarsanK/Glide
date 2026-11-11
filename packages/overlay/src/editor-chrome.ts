@@ -67,7 +67,7 @@ export const editorChromeCSS = `
   .props-input, .props-select { min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
   .props-select option { background: var(--bg-panel); color: var(--text-primary); }
   .icon-btn { min-height: 28px; background: var(--chrome-field); border-radius: 5px; }
-  #edit-breakpoint, #edit-pseudo-state, #edit-representation {
+  #edit-breakpoint, #edit-pseudo-state, #edit-representation, #edit-scope {
     min-width: 0; flex: 1; height: 28px; padding: 0 4px; border: 1px solid var(--border-color);
     border-radius: 5px; color: var(--text-primary); background: var(--chrome-field); font: inherit;
   }

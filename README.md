@@ -22,61 +22,73 @@
 
 Glide is a local visual editor for frontend projects. It runs in your browser and connects to your local dev server, letting you select elements on screen, move them, and change their styling.
 
-Unlike design tools that export mockups or save into closed formats, Glide modifies your actual source files. When you change a color, adjust padding, or drag an element into a new container, Glide runs an AST codemod on your JSX, TSX, Vue, Svelte, Astro, or HTML files. Your code remains clean, formatting stays intact, and you stay in control of version control.
+Unlike design tools that export mockups or save into closed formats, Glide modifies your actual source files. When you change a color, adjust padding, or drag an element into a new container, Glide edits that element in your JSX, TSX, Vue, Svelte, Astro, or HTML file. Your code remains clean, formatting stays intact, and you stay in control of version control.
 
 ---
 
 ## How it works
 
-Glide uses an iframe proxy on port 7777 to display your running app. A local WebSocket server coordinates visual interactions with your files.
+Glide shows your running app in an iframe. A local WebSocket server receives each visual edit and writes it to your source files.
 
 ```mermaid
 flowchart LR
-    App["Your dev server\n(port 5173 or custom)"]
-    Server["Glide server\n(port 7777)"]
-    Canvas["Visual canvas\n(browser at localhost:7777)"]
+    App["Your dev server\n(Vite)"]
+    Canvas["Glide editor\n(/__glide/ or port 7777)"]
+    Server["Glide server"]
     Files["Source files\n(TSX, Vue, Svelte, Astro, HTML)"]
 
-    App -->|"proxied into"| Canvas
+    App -->|"shown in"| Canvas
     Canvas -->|"visual edits"| Server
-    Server -->|"AST codemods"| Files
+    Server -->|"source edits"| Files
     Files -->|"Vite HMR"| App
 ```
 
-1. Run your dev server as usual (for example, `npm run dev` on port 5173).
-2. Start Glide with `npx @srivarsank/glide 5173`.
-3. Open `http://localhost:7777`. Glide proxies your app and overlays an editing chrome.
-4. Click elements on the canvas to inspect their properties, adjust styles, or drag them.
-5. Glide updates your source code with targeted AST modifications.
-6. Changes you make outside Glide in your code editor automatically update the canvas through bidirectional sync, without reloading the iframe.
+1. Add the `glideSourceStamping()` plugin to your Vite config. In dev mode, it marks each element with its file, line and column.
+2. Run your dev server as usual (`npm run dev`).
+3. Open the editor at `http://localhost:5173/__glide/` (use your own port).
+4. Click elements on the canvas to inspect their properties, change styles, or drag them.
+5. Glide writes each change to the exact element in your source file.
+6. When you change a file in your code editor, the canvas updates without an iframe reload.
+
+You can also run Glide as a separate command: `npx @srivarsank/glide 5173`, then open `http://localhost:7777`. In this mode Glide shows your app through a proxy.
+
+### What Glide can save
+
+| File type | Class, inline style, text, drag and resize | Structural edits (insert, delete, move, group) |
+|---|---|---|
+| JSX / TSX | Yes | Yes |
+| Vue, Svelte, Astro | Yes | No |
+| HTML | Yes, in projects with no UI framework | No |
+
+Glide refuses an edit that it cannot make exactly, for example a dynamic `:class` binding or a `{...spread}`. The message gives the reason, and the file stays unchanged.
 
 ---
 
-## Architecture: The Figma and v0 model
-
-Glide combines the spatial responsiveness of canvas tools with bidirectional AST synchronization:
+## Architecture
 
 ```
-Canvas edits                          External code edits
-     │                                         │
-     ▼                                         ▼
-In-memory scene graph (cached bounds)   Chokidar file watcher
-     │                                         │
-     ▼                                         ▼
-WebSocket codemod dispatch              JSX coordinate parser
-     │                                         │
-     ▼                                         ▼
-Property delta queue (LWW)              Scene update event
-     │                                         │
-     ▼                                         ▼
-Source file recast and write-back       Overlay patches scene graph
+Canvas edits                               External code edits
+     │                                              │
+     ▼                                              ▼
+Editor sends one transaction                File watcher
+(with a digest of the file)                 (ignores Glide's own writes)
+     │                                              │
+     ▼                                              ▼
+Server checks session, path, digest         Tree and scene update events
+     │                                              │
+     ▼                                              ▼
+Source edit in memory → temp file → rename  Editor refreshes the canvas
 ```
 
-- **In-memory scene graph:** Instead of calling browser `document.elementFromPoint`, which can break under CSS transforms and canvas zoom, Glide caches an in-memory spatial index of element bounds. This delivers reliable hit-testing under arbitrary scaling.
-- **Surgical Tailwind updates:** When updating utility classes, Glide replaces only the targeted property prefix (such as `bg-` or `text-`). Surrounding layout, flex, and responsive classes remain untouched.
-- **Property-level conflict resolution:** Edits track logical timestamps per property (`nodeId:propKey`). If one person or tool adjusts width while another adjusts color on the same element, neither edit clobbers the other.
-- **Staged edits buffer:** You can batch visual adjustments across multiple components and review them in a staging bar before committing changes to disk.
-- **Zero-flicker dragging:** Real-time drag positions write to `glide-positions.json` during motion, avoiding rapid Vite HMR restarts on every mouse move.
+- **Exact targeting:** Each element is found by its file, line and column. JSX elements also have a content hash, so an edit to a changed element is refused (`STALE_NODE`).
+- **Safe writes:** Each transaction carries a SHA-256 digest of the file. If the file changed since you selected the element, Glide refuses the edit (`STALE_DIGEST`). A transaction writes all of its files or none of them.
+- **Minimal diffs:** Glide changes only the edited text. Formatting, comments and quotes stay as you wrote them.
+- **Surgical Tailwind updates:** Glide replaces only the classes for the edited property, such as `bg-` or `text-`. Responsive and state variants stay. Values that match your Tailwind theme are written as theme tokens.
+- **Class expressions:** In JSX, Glide edits classes inside `cn(...)`, `clsx(...)`, `cva(...)` and template literals. It refuses an edit that a condition or shared definition would override.
+- **Edit scopes:** For an element inside a component, you can apply a class to the component definition, to one usage, or to one `cva` variant.
+- **Staged edits:** You can preview many changes and write them in one transaction from the staging bar.
+- **Drag and resize:** The result is written to source as layout styles. Elements in normal flow get `position: relative`, so flex and grid layout stays.
+- **Session security:** The server listens on `127.0.0.1` only, checks the `Host` and `Origin` of each request, and accepts a socket only after a session token handshake.
 
 ---
 
@@ -136,6 +148,8 @@ If your team consumes packages from GitHub Packages:
 ## Vite plugin configuration
 
 To enable click-to-element mapping, add the `glideSourceStamping` plugin to your Vite configuration. This stamps elements with source file locations during development.
+
+With the plugin installed you do not need the `glide` command: run your dev server as usual and open the address it prints, such as **http://localhost:5173/__glide/**. The editor is served by Vite itself, so the preview loads your app directly and hot module replacement works as it does without Glide. Pass `glideSourceStamping({ editor: false })` to keep using the `glide` command instead.
 
 **React (`vite.config.ts`):**
 ```ts
@@ -235,12 +249,11 @@ When Glide starts, it indexes every component in your project into `glide-compon
 }
 ```
 
-The file automatically updates within 300 ms whenever you create, rename, or delete components.
+The file updates within 300 ms when you create, rename, or delete components. The `glide` command writes this file; the editor at `/__glide/` does not.
 
-Add these cache files to your `.gitignore`:
+Add the registry to your `.gitignore`:
 ```gitignore
 glide-components.json
-glide-positions.json
 ```
 
 ### Agent workflow
@@ -263,16 +276,16 @@ When an AI assistant needs to modify a component visually, it follows these step
 | Feature | Description |
 |---|---|
 | Visual canvas | Select, drag, resize, zoom, and pan elements on a live canvas |
-| In-memory scene graph | Fast spatial index with zoom- and transform-aware hit testing |
-| Bidirectional sync | External code changes update the canvas without reloading the page |
+| Code-to-canvas sync | External code changes update the canvas without reloading the page |
 | Smart snapping | Snaps to sibling edges, centers, and grid lines with visual guides |
-| Universal code write-back | Direct source editing across React, Vue, Svelte, Astro, and HTML |
+| Source write-back | Class, style, text and layout edits for JSX/TSX, Vue, Svelte, Astro, and HTML |
 | Surgical Tailwind rewriter | Replaces specific utility tokens while preserving other classes |
+| Class expressions | Edits classes in `cn`, `clsx`, `cva` and template literals (JSX) |
+| Edit scopes | Apply a class to a component definition, one usage, or one `cva` variant |
 | Canvas reparenting | Drag elements between containers to update parent-child JSX structure |
+| Canvas pasteboard | Detach elements to the canvas; they stay in source and do not render |
 | Component definition jump | Jump from an instantiated sub-component to its origin file in one click |
-| Property-level delta queue | Independent clocks per property prevent conflicting writes |
-| Astro framework support | Full `.astro` component editing with frontmatter preservation |
-| Smooth dragging | Interim drag positions write to `glide-positions.json` without HMR restarts |
+| Conflict safety | File digest checks and all-or-nothing transactions prevent lost or partial writes |
 | Layers panel | Hierarchical element tree with visibility and selection controls |
 | Properties panel | Control dimensions, margins, padding, borders, shadows, and typography |
 | Color picker | Custom popup picker with hex input and preset palettes |
@@ -315,17 +328,18 @@ You can select from 16 presets, type a hex color code, or use the eyedropper too
 Glide/
 ├── packages/
 │   ├── cli/            # CLI launcher (npx @srivarsank/glide)
-│   ├── overlay/        # Visual canvas overlay (served at localhost:7777)
-│   ├── server/         # WebSocket and HTTP proxy server
-│   ├── core/           # Shared types, AST scanner, and component registry
-│   ├── ast-writer/     # Recast and Babel source file codemods
-│   ├── adapters/       # Framework adapters (React, Vue, Svelte, Astro, HTML)
-│   └── vite-plugin/    # Source stamping plugin (glideSourceStamping)
+│   ├── overlay/        # Editor UI (served at /__glide/ or localhost:7777)
+│   ├── server/         # WebSocket server, proxy, transactions, history
+│   ├── core/           # Shared types, config, component registry, Tailwind theme
+│   ├── ast-writer/     # JSX source edits (Recast and Babel)
+│   ├── adapters/       # Template writers (Vue, Svelte, Astro/HTML)
+│   ├── babel-plugin/   # JSX source stamping
+│   └── vite-plugin/    # Stamping, bridge injection, editor hosting (glideSourceStamping)
 ├── docs/               # Architecture specs, design docs, and guides
 │   ├── reports/        # Audit, completion, and remaining work reports
 │   └── INSTALL.md      # Detailed manual & agent installation guide
 ├── src/                # Package root entrypoints & version resolution
-│   └── __tests__/      # Centralized Vitest workspace test suite (44 files)
+│   └── __tests__/      # Centralized Vitest test suite
 ├── skills/             # Bundled AI agent skills
 │   ├── glide/
 │   ├── glide-component-segregator/
@@ -342,7 +356,7 @@ Contributions are welcome.
 - Review the [Contributing Guide](CONTRIBUTING.md) for local architecture details and testing procedures.
 - We follow conventional commit conventions for atomic commits.
 - Check [docs/](docs/) for architecture guides, specs, and [audit reports](docs/reports/GLIDE_AUDIT_REPORT.md).
-- Check [skills/glide/references/](skills/glide/references/) for background on AST codemods, framework adapters, and spatial scene graph design.
+- Check [skills/glide/references/](skills/glide/references/) for the architecture, the WebSocket protocol, and the write-back rules for each file type.
 
 ---
 
