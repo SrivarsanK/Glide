@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@srivarsank/adapter-astro": "^1.0.1",
+    "@srivarsank/adapter-astro": "^1.0.0",
     "@srivarsank/adapter-svelte": "^1.0.1",
     "@srivarsank/adapter-vue": "^1.0.1",
     "@srivarsank/ast-writer": "^1.0.1",
