@@ -195,6 +195,8 @@ export class MutationService {
         deletedSourceIds,
       };
       this.completed.set(transactionId, { signature, result });
+      // Results are kept only so a retried request gets the same answer; drop the oldest in a long session.
+      if (this.completed.size > 200) this.completed.delete(this.completed.keys().next().value!);
       return result;
     } catch (error) {
       let reason = error instanceof Error ? error.message : String(error);

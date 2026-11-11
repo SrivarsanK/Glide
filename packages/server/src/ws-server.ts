@@ -743,10 +743,11 @@ function proxyToDevServer(
           `new WebSocket('ws://localhost:${targetPort}`
         );
         // Inject bridge before </head> (or at top of <body> as fallback)
+        // Replacer functions insert the script literally; a replacement string would expand `$&` and `$'`.
         if (html.includes('</head>')) {
-          html = html.replace('</head>', bridgeScript + '</head>');
+          html = html.replace('</head>', () => bridgeScript + '</head>');
         } else if (html.includes('<body')) {
-          html = html.replace(/<body([^>]*)>/, `<body$1>${bridgeScript}`);
+          html = html.replace(/<body([^>]*)>/, (_tag, attributes) => `<body${attributes}>${bridgeScript}`);
         } else {
           html = bridgeScript + html;
         }
@@ -790,8 +791,6 @@ function findGitRoot(startPath: string): string {
   return process.cwd();
 }
 
-// Tracks the git root of the user's target project (populated on first file operation)
-let activeProjectGitRoot: string = process.cwd();
 
 
 export interface EditChange extends MutationScope {
@@ -1074,8 +1073,6 @@ export class GlideServer {
                 let file: string | null = null;
                 try { file = this.projectPaths.sourceFile(requestedFile || findProjectEntryFile(this.projectPaths.root)!); } catch {}
                 if (file) {
-                  // Track the user's project git root for git commands
-                  try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
                   const tree = buildComponentTree(code, file);
                   const normPath = normalizePathKey(file);
@@ -1156,18 +1153,18 @@ export class GlideServer {
                   return;
                 }
                 if (!file) {
-                  file = findProjectEntryFile(process.cwd());
+                  file = findProjectEntryFile(this.projectPaths.root);
                 }
                 const targetFile = file && fs.existsSync(file)
                   ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
 
                 if (targetFile && this.projectPaths.contains(targetFile)) {
                   try {
                     const def = resolveComponentDefinition({
                       filepath: targetFile,
                       componentName,
-                      projectRoot: process.cwd()
+                      projectRoot: this.projectPaths.root
                     });
 
                     if (def) {
@@ -1212,13 +1209,13 @@ export class GlideServer {
                     }));
                   }
                 } else {
-                  // Fallback without targetFile: try resolving in default src/App.tsx with process.cwd()
+                  // Fallback without targetFile: try resolving in default src/App.tsx with this.projectPaths.root
                   try {
-                    const candidateEntry = findProjectEntryFile(process.cwd()) || path.join(process.cwd(), 'src', 'App.tsx');
+                    const candidateEntry = findProjectEntryFile(this.projectPaths.root) || path.join(this.projectPaths.root, 'src', 'App.tsx');
                     const def = resolveComponentDefinition({
                       filepath: candidateEntry,
                       componentName,
-                      projectRoot: process.cwd()
+                      projectRoot: this.projectPaths.root
                     });
                     if (def) {
                       ws.send(JSON.stringify({
@@ -1250,7 +1247,7 @@ export class GlideServer {
                 const { file, line, column } = message;
                 const targetFile = file && fs.existsSync(file)
                   ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
 
                 if (targetFile && this.projectPaths.contains(targetFile)) {
                   let opened = false;
@@ -1295,7 +1292,7 @@ export class GlideServer {
                 }
                 const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
-                  : activeProjectGitRoot;
+                  : findGitRoot(this.projectPaths.root);
                 console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                 try {
                   await execFileAsync('git', ['checkout', '-b', branchName], { cwd });
@@ -1330,7 +1327,7 @@ export class GlideServer {
                 }
                 const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
-                  : activeProjectGitRoot;
+                  : findGitRoot(this.projectPaths.root);
                 console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
                 try {
                   const state = this.history.getState();
@@ -1420,7 +1417,8 @@ export class GlideServer {
                 JSON.stringify({
                   type: 'status',
                   success: false,
-                  error: `Malformed JSON: ${err.message}`,
+                  // Only a parse failure is malformed JSON; other failures keep their own reason.
+                  error: err instanceof SyntaxError ? `Malformed JSON: ${err.message}` : String(err?.message ?? err),
                 })
               );
             }
@@ -1530,6 +1528,7 @@ export class GlideServer {
     const result = await this.mutations.execute(transactionId, operations);
     if (result.success && !this.notifiedTransactions.has(transactionId)) {
       this.notifiedTransactions.add(transactionId);
+      if (this.notifiedTransactions.size > 200) this.notifiedTransactions.delete(this.notifiedTransactions.values().next().value!);
       for (const op of operations) for (const callback of this.editCallbacks) {
         // Observers run after persistence and cannot turn a committed result into a failure.
         try { await callback(op.filePath, op.line, op.column, op.change as EditChange, op.hash); }
