@@ -109,3 +109,22 @@ test('attached to a dev server, Glide writes the component registry that the gli
   await new Promise(resolve => setTimeout(resolve, 900));
   expect(fs.readFileSync(path.join(root, 'glide-components.json'), 'utf8')).toBe(before);
 });
+
+test('the Vite plugin stops the editor when Vite closes, even if the server never listened', async () => {
+  const { glideSourceStamping } = await import('../../packages/vite-plugin/src/index.js');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-close-'));
+  cleanups.push(() => { fs.rmSync(root, { recursive: true, force: true }); });
+  fs.writeFileSync(path.join(root, 'App.tsx'), 'export const App = () => <main>A</main>;\n');
+  const plugin = glideSourceStamping() as any;
+  plugin.configResolved({ command: 'serve', root });
+  const http = createServer();
+  let stops = 0;
+  const original = GlideServer.prototype.stop;
+  GlideServer.prototype.stop = async function (this: GlideServer) { stops++; return original.call(this); };
+  cleanups.push(() => { GlideServer.prototype.stop = original; });
+  plugin.configureServer({ httpServer: http, middlewares: { use() {} }, config: { server: { port: 0 }, logger: { info() {}, error() {} } } });
+  await plugin.closeBundle();
+  http.emit('close');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(stops).toBe(1);
+});

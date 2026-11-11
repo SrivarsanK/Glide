@@ -1854,6 +1854,8 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
   let mainEntryInjected = false;
   let stampPages = false;
   let viteServer: any = null;
+  /** Stops the attached editor once; set while one is running. */
+  let stopEditor: (() => Promise<void>) | null = null;
   let glideConfig: GlideConfig = DEFAULT_CONFIG;
   let bridgeScript: string = buildBridgeScript(
     DEFAULT_CONFIG.sourceAttribute,
@@ -1987,7 +1989,11 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
           const port = address && typeof address === 'object' ? address.port : server.config.server.port;
           server.config.logger.info(`  [Glide] Editor: http://localhost:${port}/__glide/`);
         });
-        httpServer.once('close', () => { glide.then(instance => instance.stop()).catch(() => {}); });
+        // Vite's server.close() does not always emit 'close' on the HTTP server (for example
+        // when it never listened), so closeBundle below stops the editor as well.
+        let stopped: Promise<void> | null = null;
+        stopEditor = () => stopped ??= glide.then(instance => instance.stop()).catch(() => {});
+        httpServer.once('close', () => { stopEditor?.(); });
       }
 
       // ── IFRAME EMBEDDING FIX ─────────────────────────────────────────────
@@ -2045,6 +2051,13 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
      * Inject the development bridge. Layout is persisted in authored source.
      * This runs entirely in the browser with no Node.js imports.
      */
+    /** Vite runs this when the dev server closes; stop the editor's watchers with it. */
+    async closeBundle() {
+      const stop = stopEditor;
+      stopEditor = null;
+      await stop?.();
+    },
+
     transformIndexHtml: {
       // 'pre' gives the page as it is on disk, so stamped positions match the source file.
       order: 'pre',
