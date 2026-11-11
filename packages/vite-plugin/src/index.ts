@@ -1883,6 +1883,8 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
       }
 
       const index = match.index;
+      // `<svelte:head>` and other namespaced tags: an attribute placed after "svelte" would break the tag.
+      if (cleanCode[index + 1 + tagName.length] === ':') continue;
 
       // Check if tag already has data-gl-source
       const restOfTag = cleanCode.substring(index, index + 500);
