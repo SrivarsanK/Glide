@@ -3,7 +3,6 @@ import traverseModule from '@babel/traverse';
 import _generate from '@babel/generator';
 import * as t from '@babel/types';
 import * as crypto from 'crypto';
-import ts from 'typescript';
 import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
@@ -46,12 +45,12 @@ export function computeNodeHash(sourceCodeSlice: string): string {
   return crypto.createHash('sha1').update(sourceCodeSlice.trim()).digest('hex').substring(0, 8);
 }
 
+/** The edited file must still parse. Babel does this check, so the TypeScript compiler is not bundled into dist. */
 function validateTypeScript(code: string) {
-  const result = ts.createSourceFile('temp.tsx', code, ts.ScriptTarget.Latest, true);
-  const diagnostics = (result as any).parseDiagnostics;
-  if (diagnostics && diagnostics.length > 0) {
-    const msg = diagnostics[0].messageText;
-    throw new Error(`TypeScript syntax validation failed: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+  try {
+    babelParse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
+  } catch (error) {
+    throw new Error(`TypeScript syntax validation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
