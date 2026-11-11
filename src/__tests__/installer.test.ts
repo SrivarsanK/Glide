@@ -78,8 +78,8 @@ describe('Glide AI Skill Installer', () => {
     // Verify content of installed skill
     const content = fs.readFileSync(path.join(targetDir, 'glide', 'SKILL.md'), 'utf-8');
     expect(content).toContain('name: glide');
-    expect(content).toContain('In-Memory SceneGraph');
-    expect(content).toContain('Property-Level LWW Delta Queue');
+    expect(content).toContain('What Glide Can Save');
+    expect(content).not.toContain('LWW');
   });
 
   it('should skip already installed skills unless force is true', () => {
