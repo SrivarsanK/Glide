@@ -1921,7 +1921,8 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
             'X-Frame-Options': '',          // empty = header not sent
             'Content-Security-Policy': '',  // Glide doesn't need CSP on dev server
           },
-          cors: true,                       // allow Glide editor (port 7777) to fetch from dev server
+          // Vite's default CORS policy already admits localhost origins such as the editor on port 7777.
+          // `cors: true` would let any website read the project's source from the dev server.
         },
       };
     },
