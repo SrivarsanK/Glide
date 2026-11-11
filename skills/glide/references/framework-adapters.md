@@ -47,6 +47,6 @@ A writer **refuses** an edit that it cannot make exactly (`UNSUPPORTED_OPERATION
 ## 5. Static HTML (`.html`)
 
 - **Engine**: the same tag scanner as Astro.
-- **Stamping**: HTML pages are stamped only in projects with no UI framework. In a React, Vue or Svelte project, `index.html` is a mount point and is not editable in Glide.
+- **Stamping**: HTML pages are stamped only in projects with no UI framework. In a React, Vue or Svelte project, `index.html` is a mount point and is not editable in Glide. `<html>`, `<head>` and `<body>` are never stamped; only the elements inside `<body>` are editable.
 - **Supported**: `class`, `style`, text of an element that holds only text.
 - **Refused**: text of an element with child tags; void tags such as `<img>`; structural edits.

@@ -83,6 +83,10 @@ test('in a project with no framework, the dev server stamps the page at its sour
   }
   expect(page).toContain('__glide_initialized__');
   expect(page).not.toContain('class="fake" data-gl-source');
+  // Scripts add elements to <html>, <head> and <body>; a stamp there would hide that those have no source.
+  expect(page).toContain('<html lang="en">');
+  expect(page).toContain('<body>');
+  expect(page).not.toMatch(/<(head|title) data-gl-source/);
 });
 
 test('with a framework, index.html is a mount point and gets no stamps', () => {

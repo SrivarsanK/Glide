@@ -1911,6 +1911,19 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
     return result;
   }
 
+  /**
+   * Stamp the authored elements of a page, but not <html>, <head> or <body>. Scripts add
+   * elements to those at runtime; with a stamp there, each such element would look like
+   * an authored one and the editor could not tell the user that it has no source.
+   */
+  function stampPage(html: string, filepath: string): string {
+    const stamped = stampHTMLTemplate(html, filepath);
+    const end = (pattern: RegExp) => { const match = pattern.exec(stamped); return match ? match.index + match[0].length : 0; };
+    const scaffold = end(/<body\b[^>]*>/i) || end(/<\/head\s*>/i) || end(/<html\b[^>]*>/i);
+    const stamp = new RegExp(` ${glideConfig.sourceAttribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}="[^"]*"`, 'g');
+    return stamped.slice(0, scaffold).replace(stamp, '') + stamped.slice(scaffold);
+  }
+
   return {
     name: 'vite-plugin-glide-source-stamping',
     enforce: 'pre',
@@ -2038,7 +2051,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
       handler(html: string, ctx?: { filename?: string }) {
         if (!isDev) return html;
         // Stamp before the bridge goes in: the bridge script would move every later line.
-        const page = stampPages && ctx?.filename ? stampHTMLTemplate(html, normalizePath(ctx.filename, rootDir)) : html;
+        const page = stampPages && ctx?.filename ? stampPage(html, normalizePath(ctx.filename, rootDir)) : html;
         // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
         return page.replace(/<head(\s[^>]*)?>/, tag => `${tag}<script>${bridgeScript}<\/script>`);
       },
