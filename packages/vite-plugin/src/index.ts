@@ -3,7 +3,7 @@ import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
 import { GlideServer } from '@srivarsank/server';
 
 function normalizePath(filePath: string, rootDir: string): string {
@@ -1852,6 +1852,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
   let configReady: Promise<unknown> = Promise.resolve();
   let rootDir = process.cwd();
   let mainEntryInjected = false;
+  let stampPages = false;
   let viteServer: any = null;
   let glideConfig: GlideConfig = DEFAULT_CONFIG;
   let bridgeScript: string = buildBridgeScript(
@@ -1932,6 +1933,9 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
     configResolved(config) {
       isDev = config.command === 'serve';
       rootDir = config.root || process.cwd();
+      // In a project with no UI framework the HTML pages are the source, so their elements get stamps.
+      // With a framework, index.html is only a mount point and stays unmapped.
+      try { stampPages = detectProjectMeta(rootDir).framework === 'unknown'; } catch { stampPages = false; }
       mainEntryInjected = false;
       // Load glide.config.ts from the user's project root synchronously.
       // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
@@ -2028,13 +2032,16 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
      * Inject the development bridge. Layout is persisted in authored source.
      * This runs entirely in the browser with no Node.js imports.
      */
-    transformIndexHtml(html) {
-      if (!isDev) return html;
-      // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
-      return html.replace(
-        '<head>',
-        () => `<head><script>${bridgeScript}<\/script>`
-      );
+    transformIndexHtml: {
+      // 'pre' gives the page as it is on disk, so stamped positions match the source file.
+      order: 'pre',
+      handler(html: string, ctx?: { filename?: string }) {
+        if (!isDev) return html;
+        // Stamp before the bridge goes in: the bridge script would move every later line.
+        const page = stampPages && ctx?.filename ? stampHTMLTemplate(html, normalizePath(ctx.filename, rootDir)) : html;
+        // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
+        return page.replace(/<head(\s[^>]*)?>/, tag => `${tag}<script>${bridgeScript}<\/script>`);
+      },
     },
 
     transform(code, id) {

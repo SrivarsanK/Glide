@@ -6,6 +6,7 @@ import { loadTailwindTheme, type TailwindTheme } from '@srivarsank/core';
 import { parse } from '@babel/parser';
 import type { HistoryStore } from './history-manager.js';
 import { ProjectPaths } from './project-paths.js';
+import { isTemplateFile, transformTemplateBatch } from './template-mutations.js';
 
 export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
@@ -86,8 +87,8 @@ export class MutationService {
 
   private resolveFile(file: string): string {
     const resolved = this.paths.sourceFile(file);
-    if (!/\.(tsx|jsx|ts|js)$/.test(resolved)) {
-      throw new Error('UNSUPPORTED_OPERATION: This adapter does not support transactions.');
+    if (!/\.(tsx|jsx|ts|js|vue|svelte|astro|html)$/.test(resolved)) {
+      throw new Error('UNSUPPORTED_OPERATION: Glide cannot save edits to this file type yet. Edit it in source.');
     }
     return resolved;
   }
@@ -134,7 +135,7 @@ export class MutationService {
       for (const buffer of buffers.values()) {
         if (restoration) {
           buffer.after = restoration.contents[targets.indexOf(buffer)];
-          parse(buffer.after, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
+          if (!isTemplateFile(buffer.file)) parse(buffer.after, { sourceType: 'module', plugins: ['jsx', 'typescript'] });
           continue;
         }
         const edits = operations.filter((_, index) => targets[index] === buffer);
@@ -152,7 +153,10 @@ export class MutationService {
             if (path.relative(this.resolveFile(match[1]), buffer.file) !== '') throw new Error('INVALID_TARGET: Structural references must belong to the same file.');
           }
         }
-        const transformed = transformJSXBatch(buffer.before, edits, { theme: this.options.theme?.() ?? loadTailwindTheme(this.projectRoot) });
+        const theme = this.options.theme?.() ?? loadTailwindTheme(this.projectRoot);
+        const transformed = isTemplateFile(buffer.file)
+          ? transformTemplateBatch(buffer.file, buffer.before, edits, theme)
+          : transformJSXBatch(buffer.before, edits, { theme });
         buffer.after = transformed.code;
         const newDigest = contentDigest(buffer.after);
         const aliases = new Set([buffer.file, ...edits.map(edit => edit.filePath)].map(file => file.replace(/\\/g, '/')));
