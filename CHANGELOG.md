@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Astro and HTML use a tag scanner that respects quotes and `{}` expressions.
   - Structural edits (insert, delete, move, group) stay JSX/TSX only.
   - Dynamic values (`:class`, `class={...}`, `class:list`, `{...spread}`) are refused with a reason.
-- **HTML page stamping**: in projects with no UI framework, the Vite plugin stamps elements in HTML pages, so plain HTML sites can be edited.
+- **HTML page stamping**: in projects with no UI framework, the Vite plugin stamps the elements inside `<body>` of HTML pages, so plain HTML sites can be edited. `<html>`, `<head>` and `<body>` are not stamped.
+- **Component registry from the dev server**: the editor at `/__glide/` now writes and updates `glide-components.json`, as the `glide` command does.
 - **Class expressions (JSX)**: class edits work in `cn`, `clsx`, `cx`, `classnames`, `twMerge`, `cva` and template literals. Glide refuses an edit that a condition, a runtime-built class or a shared `cva` definition would override.
 - **Edit scopes**: for an element inside a component, choose where a class edit goes: the component definition, one usage, or one `cva` variant option.
 - **Project Tailwind theme**: class edits use the project's own tokens (Tailwind v3 config or v4 `@theme`).
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - JSX edits are spliced into the original source, so return statements are no longer reprinted with new semicolons or indentation.
+- The package is about 10 times smaller (33 MB to 3.3 MB of JavaScript). The TypeScript compiler is no longer bundled into each entry point; edited JSX is checked with the Babel parser.
 - The Vite plugin no longer sets `cors: true` on the dev server. Vite's default policy already admits the editor on localhost.
 - The error for an unsupported file type is now "Glide cannot save edits to this file type yet."
 - The skills shipped to AI agents (`skills/`) are rewritten to match the code. They no longer describe the LWW queue or `glide-positions.json`.
