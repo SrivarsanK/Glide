@@ -53,8 +53,8 @@ describe('glideSourceStamping Vite Plugin', () => {
 
     const html = '<html><head></head><body></body></html>';
 
-    if (plugin.transformIndexHtml && typeof plugin.transformIndexHtml === 'function') {
-      const result = (plugin.transformIndexHtml as any)(html);
+    if (plugin.transformIndexHtml) {
+      const result = (plugin.transformIndexHtml as any).handler(html);
       expect(result).toContain('__glide_initialized__');
       expect(result).toContain('data-gl-source');
       expect(result).toContain('<script>');
@@ -140,9 +140,9 @@ describe('glideSourceStamping Vite Plugin', () => {
     }
 
     try {
-      if (plugin.transformIndexHtml && typeof plugin.transformIndexHtml === 'function') {
+      if (plugin.transformIndexHtml) {
         const html = '<html><head></head><body></body></html>';
-        const result = (plugin.transformIndexHtml as any)(html);
+        const result = (plugin.transformIndexHtml as any).handler(html);
 
         expect(result).not.toContain('src/App.tsx:10:5');
         expect(result).not.toContain('__glide_positions__');

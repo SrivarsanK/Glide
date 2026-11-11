@@ -5,49 +5,59 @@ description: >
   design applications using Glide (@srivarsank/glide). Always trigger this skill whenever
   the user mentions Glide, visual design, visual editing, WYSIWYG editing, canvas direct manipulation,
   editing UI visually, styling components visually, dragging/resizing elements, adjusting Tailwind
-  classes visually, or when inspecting glide-components.json, glide-positions.json, or working with
-  Glide's In-Memory SceneGraph and bidirectional AST engine across React, Vue, Svelte, Astro, or HTML projects.
+  classes visually, or when inspecting glide-components.json or working with Glide's source
+  write-back across React, Vue, Svelte, Astro, or HTML projects.
 ---
 
 # Glide — AI Agent Visual Design & Architecture Skill
 
-Glide is a **code-native visual design tool** that bridges direct manipulation on a browser canvas directly with source code.
+Glide is a **code-native visual design tool**. The user edits a live page on a canvas, and Glide writes each change into the source file.
 There is **no secondary JSON AST or proprietary schema** — the user's source code is the only source of truth.
 
 ---
 
 ## 1. Quick Reference & Core Workflow
 
-When asked to inspect, modify, or design UI with Glide, follow this 5-step loop:
+When asked to inspect, modify, or design UI in a Glide project, follow this loop:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │  1. READ REGISTRY      cat glide-components.json                       │
 │  2. TARGET ELEMENT     Locate bucket by component name, get element.id │
-│  3. APPLY CODEMOD      Tailwind surgical rewrite or inline style update│
-│  4. VERIFY SCENE       In-Memory SceneGraph patches via scene_update   │
-│  5. STAGE OR COMMIT    Review staged batch or commit to source code    │
+│  3. EDIT SOURCE        Change the class, style or text in the file     │
+│  4. VERIFY             Glide sees the file change and updates canvas   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+An agent edits the source file directly. Glide watches the project, so the canvas updates without a page reload.
+
 ### Deterministic Helper Scripts
-The skill bundles executable scripts for fast, deterministic queries:
 - **Query components**: `node skills/glide/scripts/query-components.js --name <ComponentName>`
 - **Verify project setup**: `node skills/glide/scripts/verify-setup.js`
 
 ---
 
-## 2. Component Discovery via `glide-components.json`
+## 2. How Glide Runs
+
+| Mode | Start | Editor address |
+|:---|:---|:---|
+| Inside Vite (default with the plugin) | `npm run dev` | `http://localhost:5173/__glide/` |
+| Standalone | `npx @srivarsank/glide 5173` | `http://localhost:7777` |
+
+The Vite plugin `glideSourceStamping()` is necessary for editing. It stamps each element with `data-gl-source="file:line:col"` in dev mode. Without stamps, elements can be selected but not edited.
+
+---
+
+## 3. Component Discovery via `glide-components.json`
 
 Never guess file paths or crawl the workspace manually.
-On startup, Glide auto-generates **`glide-components.json`** in the project root and updates it with a 300 ms debounce whenever source files change.
-
-### Registry Schema
+The `glide` command writes **`glide-components.json`** in the project root and updates it with a 300 ms debounce when source files change.
 
 ```ts
 interface ComponentRegistry {
   projectRoot: string;
-  framework: 'react' | 'vue' | 'svelte' | 'astro' | 'html';
+  generatedAt: string;
+  framework: 'react' | 'vue' | 'svelte' | 'astro' | 'html' | 'unknown';
   buckets: ComponentBucket[];
 }
 
@@ -56,6 +66,7 @@ interface ComponentBucket {
   file: string;           // Absolute path to source file
   exportType: "default" | "named" | "anonymous" | "sfc" | "html";
   line: number;           // Line of declaration
+  column: number;
   elements: RegistryElement[];
   cssFiles: string[];     // Associated stylesheets (e.g. Card.module.css)
 }
@@ -72,73 +83,72 @@ interface RegistryElement {
 ```
 
 ### Element Targeting Rules
-1. **Root / Background Element**: Look for `element.isRoot === true`. Use this for background color, outer padding, container sizing.
+1. **Root / Background Element**: `element.isRoot === true`. Use this for background color, outer padding, container sizing.
 2. **Interactive Elements**: Filter `elements` by `tagName === 'button'`, `tagName === 'input'`, or specific class tokens.
-3. **Sub-Components**: If an element's `tagName` is capitalized (e.g. `<UserAvatar />`), it is an imported sub-component. Use Glide's component definition resolution to inspect its origin file (see [architecture.md](references/architecture.md)).
+3. **Sub-Components**: A capitalized `tagName` (e.g. `<UserAvatar />`) is an imported component. Find its own bucket by name to edit its definition.
 
 ---
 
-## 3. Visual Styling & Tailwind Codemods
+## 4. What Glide Can Save
 
-Glide supports surgical editing of Tailwind CSS utility classes and inline styles without clobbering surrounding code.
+| File type | Class, inline style, text | Structural edits |
+|:---|:---|:---|
+| JSX / TSX | Yes | Yes |
+| Vue (`.vue`) | Yes | No |
+| Svelte (`.svelte`) | Yes | No |
+| Astro (`.astro`) | Yes | No |
+| HTML (`.html`) | Yes, in projects with no UI framework | No |
 
-### Surgical Tailwind Token Replacement
-When changing styling on elements using Tailwind:
-- **Prefix Isolation**: Replace only tokens matching the target CSS property (`bg-`, `text-`, `p-`, `m-`, `w-`, `h-`, `rounded-`, `border-`).
-- **Arbitrary Values**: Preserve bracketed arbitrary values like `bg-[#1a1a2e]` or `w-[420px]`.
-- **Non-Destructive**: Do not replace the entire `className` string. Keep flex, grid, positioning, and responsive variants (`md:`, `hover:`) intact.
-- Detailed codemod rules: [tailwind-rewriting.md](references/tailwind-rewriting.md).
+Structural edits are: insert, delete, duplicate, paste, reorder, reparent, group, ungroup, arrange, detach.
 
-### Inline Styles & CSS Modules
-- If the component uses CSS Modules, edit the file listed in `bucket.cssFiles[0]`.
-- If the component uses inline styles or Vue/Svelte/Astro styles, apply changes to the respective template adapter.
+Glide **refuses** an edit that it cannot make exactly. The error starts with `UNSUPPORTED_OPERATION` and gives the reason. Typical causes:
+- The class or style is dynamic (`:class`, `class={...}`, `class:list`, `{...spread}`).
+- The text has expressions or child elements.
+- A condition or a shared `cva` definition would override the new class.
 
----
-
-## 4. Canvas Reparenting & Cross-Parent Drag
-
-In Glide v1.1.0+, elements can be visually dragged from one container and dropped into another:
-- The overlay detects the new parent and target sibling index.
-- The server executes `reorderJSXElement(sourceFile, sourceLoc, newParentLoc, newIndex)`.
-- Recast codemod detaches the JSX child from the source parent and splices it into the destination parent children array.
+When Glide refuses, edit the source file directly.
 
 ---
 
-## 5. Conflict Resolution & Staged Edits Buffer
+## 5. Tailwind Rules
 
-### Property-Level LWW Delta Queue
-When multiple edits occur rapidly (e.g. slider adjustments or concurrent prop changes):
-- Conflicts resolve per `(nodeId, propKey)` with independent logical clocks.
-- Edits to `width` never clobber edits to `backgroundColor`.
-- Outdated timestamps are rejected with `STALE_PROPERTY_WRITE`.
+- **Replace only the related token.** A background change replaces `bg-*` only.
+- **Keep variants.** `md:`, `hover:` and other scoped classes are separate; do not remove them.
+- **Keep arbitrary values** such as `bg-[#1a1a2e]` or `w-[420px]`.
+- **Use project theme tokens** where they exist (Tailwind v3 config or v4 `@theme`).
+- Details: [tailwind-rewriting.md](references/tailwind-rewriting.md).
 
-### Staged Edits Buffer
-- To batch changes across multiple components without triggering continuous Vite HMR cycles, use the staged edits buffer.
-- Live preview renders instantaneously via DOM patch.
-- Review pending count in the staging bar, then execute batch commit to disk.
+If the component uses CSS Modules, edit the file listed in `bucket.cssFiles[0]`.
 
 ---
 
-## 6. Multi-Framework Support
+## 6. Edit Modes and Conflict Safety
 
-Glide provides native AST adapters across 5 major web frameworks:
-- **React / TSX**: Recast + Babel parser for fine-grained JSX AST transforms.
-- **Vue SFC**: `@vue/compiler-sfc` preserving script/style blocks and rewriting `<template>`.
-- **Svelte**: `svelte/compiler` template rewrite with script/style isolation.
-- **Astro**: Frontmatter fence (`---`) preservation with template AST write-back.
-- **HTML**: Static HTML DOM attribute and class manipulation.
+- **Instant mode**: each canvas edit is written to the source file immediately.
+- **Staged mode**: edits are previewed and buffered. "Apply Changes" writes them as one transaction; "Discard" drops them.
+- **File digest check**: each transaction carries a SHA-256 digest of the file. If the file changed in the meantime, the server refuses with `STALE_DIGEST` and writes nothing.
+- **Element check (JSX)**: a content hash on the element gives `STALE_NODE` if that element changed.
+- **All or nothing**: a transaction that fails in any file is rolled back in all files.
+- **Undo / redo**: the session history restores full file contents.
 
-Refer to [framework-adapters.md](references/framework-adapters.md) for framework-specific nuances and examples.
+If an agent edits a file while the user has edits pending, the user's next save can get `STALE_DIGEST`. The user must then select the element again.
 
 ---
 
-## 7. Progressive Disclosure References
+## 7. Canvas Features (JSX / TSX)
 
-Load these reference documents into context only when dealing with their specific domains:
+- **Reparent by drag**: an element dropped into a different container moves in the JSX.
+- **Detach to canvas**: a detached element stays in source as `{false && <El data-gl-workspace-id=... />}`. Do not delete these blocks; they are the user's pasteboard.
+- **Drag and resize**: the result is written to source as layout styles. There is no position sidecar file.
+- **Edit scopes**: for an element inside a component, the user can apply a class to the definition, to one usage, or to one `cva` variant option.
+
+---
+
+## 8. References
 
 | Reference | When to Consult |
 |:---|:---|
-| [references/architecture.md](references/architecture.md) | Deep dive on In-Memory SceneGraph, WebSocket protocol, LWW DeltaQueue, and AST engine |
-| [references/framework-adapters.md](references/framework-adapters.md) | Framework-specific write-back rules for React, Vue, Svelte, Astro, and HTML |
-| [references/tailwind-rewriting.md](references/tailwind-rewriting.md) | Complete utility prefix map and AST regex patterns for Tailwind class editing |
-| [references/staged-edits.md](references/staged-edits.md) | Transactional batch staging bar and zero-flicker live drag coordination |
+| [references/architecture.md](references/architecture.md) | Transactions, file watcher sync, WebSocket protocol |
+| [references/framework-adapters.md](references/framework-adapters.md) | Write-back rules and limits for each file type |
+| [references/tailwind-rewriting.md](references/tailwind-rewriting.md) | Utility prefix map and class edit rules |
+| [references/staged-edits.md](references/staged-edits.md) | Staged mode and how drag results are saved |

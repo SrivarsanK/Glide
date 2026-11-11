@@ -1,100 +1,106 @@
-# Glide Architectural Engine Deep Dive
+# Glide Architecture
 
-This document details the internal mechanisms of Glide's bidirectional visual engine, inspired by the spatial rendering architecture of Figma and the generative AST coupling of Vercel v0.
-
----
-
-## 1. In-Memory SceneGraph (`packages/overlay/src/scene-graph.ts`)
-
-Traditional browser-based visual tools rely on `document.elementFromPoint(x, y)` to detect the clicked element under the cursor. In a production visual designer, this fails because:
-1. Canvas zoom (`scale(N)`) and pan transforms distort DOM screen coordinates.
-2. Transparent overlays, click-through handles, or selection halos obscure elements.
-3. SVG paths, canvas elements, and deeply nested flex layouts frequently miss hit-tests.
-
-### SceneGraph Solution
-Glide builds an in-memory spatial tree mirroring the document hierarchy:
-
-```ts
-interface SceneNode {
-  id: string;          // data-gl-source (e.g. "src/App.tsx:12:4")
-  file: string;
-  line: number;
-  col: number;
-  rect: DOMRect;       // Cached bounding rect in canvas space
-  children: SceneNode[];
-  parent: SceneNode | null;
-}
-```
-
-- **Spatial Index**: Evaluates hit tests in O(log n) time against cached bounding boxes.
-- **Matrix Awareness**: Normalizes click coordinates through the canvas viewport transform matrix before querying nodes.
-- **Dynamic Invalidation**: When an element is resized, scrolled, or updated, only affected subtrees are re-measured.
+This document describes how Glide connects the canvas to the source files.
 
 ---
 
-## 2. Bidirectional Code-to-Canvas Synchronization
+## 1. Parts
 
-Glide maintains a closed-loop synchronization loop between external code edits and the active canvas:
+| Part | Role | Location |
+|:---|:---|:---|
+| Vite plugin | Stamps elements with `data-gl-source`, injects the bridge, serves the editor at `/__glide/` | `packages/vite-plugin` |
+| Bridge | Script in the app page. Reports selection, geometry and styles to the editor | `packages/vite-plugin`, `packages/server` |
+| Editor | The canvas UI, served as one HTML page | `packages/overlay/src/editor-html.ts` |
+| Server | WebSocket hub, file watcher, transactions, history | `packages/server` |
+| Writers | Source edits for JSX and for templates | `packages/ast-writer`, `packages/adapters/*` |
+
+Element identity is the stamp: `file:line:col`. JSX elements also have a short content hash.
+
+---
+
+## 2. One Edit, End to End
 
 ```
-External File Saved in IDE
+User changes a property on the canvas
             │
             ▼
-Chokidar File Watcher in ws-server.ts
+Editor sends one `batch-edit` with the file digest (one at a time)
             │
             ▼
-parseJSXElements extracts { id, line, col }
+Server checks the session, the path and the digest
             │
             ▼
-WS Broadcast: { type: 'scene_update', nodes: [...] }
+Writer changes the source in memory (JSX: AST; templates: exact tag position)
             │
             ▼
-Overlay sceneGraph.patch(nodes) updates spatial tree
-(No iframe reload, zero visual flicker)
+Temp file → check file is unchanged → rename → history entry
+            │
+            ▼
+`status` with new element positions → editor keeps its selection
+            │
+            ▼
+Vite HMR renders the new source
 ```
 
 ---
 
-## 3. Property-Level Delta Queue & LWW (`packages/server/src/delta-queue.ts`)
+## 3. Code-to-Canvas Synchronization
 
-In collaborative or rapid local editing environments, whole-node or whole-file Last-Writer-Wins (LWW) leads to lost updates (e.g., changing width clobbering an incoming background color update).
-
-Glide solves this with a **Property-Level Delta Queue**:
-- Every edit is identified by a composite key: `(nodeId, propKey)`.
-- Each property maintains an independent logical timestamp clock:
-  ```ts
-  class PropertyDeltaQueue {
-    private clocks: Map<string, number> = new Map(); // "nodeId::prop" -> timestamp
-    private pending: Map<string, PendingOp> = new Map();
-  }
-  ```
-- **Stale Write Rejection**: If an edit arrives with `timestamp < currentClock`, the server rejects the edit with `STALE_PROPERTY_WRITE`.
-- **Optimistic ACKs**: Edits queued locally are acknowledged with an `ACK_OP` message once AST write-back succeeds.
-
----
-
-## 4. Component Definition Resolution (`packages/core/src/resolve.ts`)
-
-When an element on canvas is an instantiated sub-component (e.g. `<HeroCard title="Welcome" />`), modifying its internal layout requires opening its defining file rather than the caller file.
-
-`resolveComponentDefinition` performs this trace:
-1. Parses the caller file AST using Babel traverse.
-2. Identifies the import declaration matching the component name (`import { HeroCard } from './HeroCard'`).
-3. Resolves the imported relative path against project aliases and extension rules (`.tsx`, `.jsx`, `.ts`, `.js`).
-4. Locates the component's declaration coordinate in the target file.
-5. Emits `open_component` over WebSocket to open the file in the developer's editor.
+```
+File saved in the IDE (or by an agent)
+            │
+            ▼
+File watcher in ws-server.ts (Glide's own writes are ignored by digest)
+            │
+            ▼
+For JSX/TSX: `scene_update` and `tree` are broadcast with a new generation
+            │
+            ▼
+Editor requests fresh geometry from the page (no iframe reload)
+```
 
 ---
 
-## 5. WebSocket Protocol Reference
+## 4. Transactions (`packages/server/src/mutation-service.ts`)
 
-| Message Type | Direction | Payload | Description |
-|:---|:---|:---|:---|
-| `edit` | Client → Server | `{ file, line, col, change, timestamp }` | Apply AST modification |
-| `reparent` | Client → Server | `{ sourceId, newParentId, newIndex }` | Move element into new parent |
-| `resolve_component` | Client → Server | `{ file, line, col, componentName }` | Trace sub-component definition |
-| `open_component` | Client → Server | `{ file, line, col }` | Request editor to open definition file |
-| `scene_update` | Server → Client | `{ file, nodes: SceneNodeUpdate[] }` | Hot-patch overlay SceneGraph |
-| `ACK_OP` | Server → Client | `{ nodeId, prop, timestamp }` | Confirm successful property write |
-| `GET_PENDING_OPS` | Client → Server | `{}` | Query active pending operation snapshot |
-| `file_changed` | Server → Client | `{ file }` | General file watcher modification notice |
+- **One at a time.** Transactions run in sequence.
+- **Idempotent.** A repeated transaction ID returns the first result. The same ID with different content gives `TRANSACTION_CONFLICT`.
+- **Digest gate.** Each operation has `expectedDigest` (SHA-256 of the file). A mismatch gives `STALE_DIGEST`.
+- **Element gate (JSX).** An optional hash on the element gives `STALE_NODE` if the element changed.
+- **Atomic write.** Each file is written to a temp file, checked again, then renamed. A failure restores the files already written.
+- **Path safety.** Files must be in the project, not in `.git` or `node_modules`, and not a symlink escape or a hard link.
+
+Common error codes: `STALE_DIGEST`, `STALE_NODE`, `NODE_NOT_FOUND`, `INVALID_TARGET`, `INVALID_OPERATION`, `UNSUPPORTED_OPERATION`, `INVALID_PATH`.
+
+---
+
+## 5. Component Definition Resolution (`packages/core/src/resolve.ts`)
+
+For an element that is a component instance (e.g. `<HeroCard />`), `resolveComponentDefinition`:
+1. Parses the caller file.
+2. Finds the import for the component name.
+3. Resolves the path with project aliases and extension rules.
+4. Finds the declaration position in the target file.
+
+The editor can then open that file in VS Code or Cursor.
+
+---
+
+## 6. WebSocket Protocol Reference
+
+The first message must be `hello` with the session token from the editor page. Other connections are closed.
+
+| Message | Direction | Description |
+|:---|:---|:---|
+| `hello` `{ token }` | Client → Server | Session handshake; reply is `authenticated` |
+| `batch-edit` `{ batchId, edits[] }` | Client → Server | One transaction. Each edit: `{ file, line, column, hash?, expectedDigest, change }` |
+| `edit`, `insert`, `reorder`, `reparent`, `group`, `ungroup`, `arrange` | Client → Server | Single operations; handled as a transaction |
+| `status` | Server → Client | Result: `success`, `error`, `changedFiles`, `selectionRemaps`, `deletedSourceIds` |
+| `get-tree` `{ file }` | Client → Server | Reply `tree` with the layer tree, `digest` and `generation` |
+| `scene_update` `{ file, elements, generation }` | Server → Client | A JSX file changed outside the editor |
+| `inspect-props` / `source-props` | Both | Literal props of a JSX element |
+| `inspect-scopes` / `edit-scopes` | Both | Whether `className` is forwarded; active `cva` variants |
+| `resolve_component` / `resolved_component` | Both | Find a component definition |
+| `open_component` / `open_component_status` | Both | Open a file in the code editor |
+| `undo`, `redo`, `JUMP_TO_HISTORY`, `GET_HISTORY` | Client → Server | History; reply `HISTORY_UPDATE` |
+| `git-branch-create`, `git-branch-finalize` | Client → Server | Git sandbox; reply `git-status` |

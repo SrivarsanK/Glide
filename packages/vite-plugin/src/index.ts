@@ -3,7 +3,8 @@ import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
+import { GlideServer } from '@srivarsank/server';
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
@@ -1842,11 +1843,19 @@ export function buildBridgeScript(
 `;
 }
 
-export function glideSourceStamping(): Plugin {
+/**
+ * `editor: false` skips serving the editor at /__glide/, for projects that run
+ * the glide command instead.
+ */
+export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin {
   let isDev = false;
+  let configReady: Promise<unknown> = Promise.resolve();
   let rootDir = process.cwd();
   let mainEntryInjected = false;
+  let stampPages = false;
   let viteServer: any = null;
+  /** Stops the attached editor once; set while one is running. */
+  let stopEditor: (() => Promise<void>) | null = null;
   let glideConfig: GlideConfig = DEFAULT_CONFIG;
   let bridgeScript: string = buildBridgeScript(
     DEFAULT_CONFIG.sourceAttribute,
@@ -1877,6 +1886,8 @@ export function glideSourceStamping(): Plugin {
       }
 
       const index = match.index;
+      // `<svelte:head>` and other namespaced tags: an attribute placed after "svelte" would break the tag.
+      if (cleanCode[index + 1 + tagName.length] === ':') continue;
 
       // Check if tag already has data-gl-source
       const restOfTag = cleanCode.substring(index, index + 500);
@@ -1902,6 +1913,19 @@ export function glideSourceStamping(): Plugin {
     return result;
   }
 
+  /**
+   * Stamp the authored elements of a page, but not <html>, <head> or <body>. Scripts add
+   * elements to those at runtime; with a stamp there, each such element would look like
+   * an authored one and the editor could not tell the user that it has no source.
+   */
+  function stampPage(html: string, filepath: string): string {
+    const stamped = stampHTMLTemplate(html, filepath);
+    const end = (pattern: RegExp) => { const match = pattern.exec(stamped); return match ? match.index + match[0].length : 0; };
+    const scaffold = end(/<body\b[^>]*>/i) || end(/<\/head\s*>/i) || end(/<html\b[^>]*>/i);
+    const stamp = new RegExp(` ${glideConfig.sourceAttribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}="[^"]*"`, 'g');
+    return stamped.slice(0, scaffold).replace(stamp, '') + stamped.slice(scaffold);
+  }
+
   return {
     name: 'vite-plugin-glide-source-stamping',
     enforce: 'pre',
@@ -1915,7 +1939,8 @@ export function glideSourceStamping(): Plugin {
             'X-Frame-Options': '',          // empty = header not sent
             'Content-Security-Policy': '',  // Glide doesn't need CSP on dev server
           },
-          cors: true,                       // allow Glide editor (port 7777) to fetch from dev server
+          // Vite's default CORS policy already admits localhost origins such as the editor on port 7777.
+          // `cors: true` would let any website read the project's source from the dev server.
         },
       };
     },
@@ -1923,11 +1948,14 @@ export function glideSourceStamping(): Plugin {
     configResolved(config) {
       isDev = config.command === 'serve';
       rootDir = config.root || process.cwd();
+      // In a project with no UI framework the HTML pages are the source, so their elements get stamps.
+      // With a framework, index.html is only a mount point and stays unmapped.
+      try { stampPages = detectProjectMeta(rootDir).framework === 'unknown'; } catch { stampPages = false; }
       mainEntryInjected = false;
       // Load glide.config.ts from the user's project root synchronously.
       // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
       try {
-        loadConfigFromDisk(rootDir).then(cfg => {
+        configReady = loadConfigFromDisk(rootDir).then(cfg => {
           glideConfig = cfg;
           bridgeScript = buildBridgeScript(
             cfg.sourceAttribute,
@@ -1941,6 +1969,32 @@ export function glideSourceStamping(): Plugin {
 
     configureServer(server) {
       viteServer = server;
+
+      // ── EDITOR AT /__glide/ ──────────────────────────────────────────────
+      // Glide's server attaches to this dev server: the editor, its assets and
+      // its socket share the app's origin, so the preview needs no proxy and
+      // Vite's HMR socket works as it does without Glide.
+      if (options.editor !== false && server.httpServer) {
+        const httpServer = server.httpServer as import('http').Server;
+        let handle: ((req: any, res: any, next: () => void) => void) | null = null;
+        const glide = configReady.then(() => {
+          const port = Number(server.config.server.port) || 5173;
+          return new GlideServer(port, port, glideConfig, rootDir);
+        });
+        glide.then(instance => instance.attach(httpServer)).then(middleware => { handle = middleware; })
+          .catch(error => server.config.logger.error(`[Glide] Editor failed to start: ${error?.message ?? error}`));
+        server.middlewares.use((req, res, next) => handle ? handle(req, res, next) : next());
+        httpServer.once('listening', () => {
+          const address = httpServer.address();
+          const port = address && typeof address === 'object' ? address.port : server.config.server.port;
+          server.config.logger.info(`  [Glide] Editor: http://localhost:${port}/__glide/`);
+        });
+        // Vite's server.close() does not always emit 'close' on the HTTP server (for example
+        // when it never listened), so closeBundle below stops the editor as well.
+        let stopped: Promise<void> | null = null;
+        stopEditor = () => stopped ??= glide.then(instance => instance.stop()).catch(() => {});
+        httpServer.once('close', () => { stopEditor?.(); });
+      }
 
       // ── IFRAME EMBEDDING FIX ─────────────────────────────────────────────
       // Glide embeds the user's app in an iframe from a different origin
@@ -1997,13 +2051,23 @@ export function glideSourceStamping(): Plugin {
      * Inject the development bridge. Layout is persisted in authored source.
      * This runs entirely in the browser with no Node.js imports.
      */
-    transformIndexHtml(html) {
-      if (!isDev) return html;
-      // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
-      return html.replace(
-        '<head>',
-        () => `<head><script>${bridgeScript}<\/script>`
-      );
+    /** Vite runs this when the dev server closes; stop the editor's watchers with it. */
+    async closeBundle() {
+      const stop = stopEditor;
+      stopEditor = null;
+      await stop?.();
+    },
+
+    transformIndexHtml: {
+      // 'pre' gives the page as it is on disk, so stamped positions match the source file.
+      order: 'pre',
+      handler(html: string, ctx?: { filename?: string }) {
+        if (!isDev) return html;
+        // Stamp before the bridge goes in: the bridge script would move every later line.
+        const page = stampPages && ctx?.filename ? stampPage(html, normalizePath(ctx.filename, rootDir)) : html;
+        // A replacer function inserts the script literally; a replacement string would expand `$'` and `$&`.
+        return page.replace(/<head(\s[^>]*)?>/, tag => `${tag}<script>${bridgeScript}<\/script>`);
+      },
     },
 
     transform(code, id) {

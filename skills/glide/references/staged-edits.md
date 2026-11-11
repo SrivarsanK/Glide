@@ -1,32 +1,36 @@
-# Staged Edits Buffer & Zero-Flicker Drag
+# Staged Edits & Saved Drag Results
 
-This document covers Glide's transaction mode and drag coordinate caching mechanisms.
-
----
-
-## 1. Staged Edits Buffer (`packages/server/src/staged-edits.ts`)
-
-When making multiple design adjustments across several elements or components, writing each intermediate edit directly to disk causes:
-- Frequent disk I/O.
-- Continuous Vite HMR rebuilds.
-- Layout instability and flicker on the canvas.
-
-### Workflow
-1. **Interactive Preview**: In Staged Mode, edits made in the canvas or property panel are immediately applied to the DOM in the browser iframe.
-2. **Buffer Queue**: Edits are collected in an in-memory transactional buffer on the client/server.
-3. **Staging Bar**: A bottom-docked review bar displays the pending edit count (e.g. `3 changes staged`).
-4. **Batch Commit**: Clicking "Commit Changes" sends the entire transaction batch to `GlideServer`, which applies each AST codemod in sequence and writes to disk in one atomic pass.
-5. **Rollback**: Clicking "Discard All" clears the buffer and rolls back preview styles to the saved state.
+This document covers Glide's two write modes and how drag and resize results are saved.
 
 ---
 
-## 2. Zero-Flicker Live Dragging (`glide-positions.json`)
+## 1. Write Modes
 
-During mouse drag operations, an element's X/Y coordinates update at 60 FPS.
-Writing AST coordinates to TSX on every mousemove frame would overwhelm the dev server with HMR cycles.
+| Mode | Behavior |
+|:---|:---|
+| Instant | Each edit is previewed on the page, then written to source after a short delay |
+| Staged | Edits are previewed and held in the editor until the user applies them |
 
-### Coordinate Caching
-- When an element is dragged, Glide writes interim `{ x, y }` coordinates to **`glide-positions.json`** in the project root.
-- The canvas overlay reads positions from this cache, delivering butter-smooth 60 FPS dragging.
-- On drag release (`mouseup`), the final position can be committed to the source file or left in `glide-positions.json`.
-- `glide-positions.json` should always be included in `.gitignore`.
+The user selects the mode in the editor. The selection is kept in the browser.
+
+### Staged Mode Workflow
+1. **Preview**: an edit is applied to the page in the iframe. No file is written.
+2. **Buffer**: edits are collected in the editor, by element and property.
+3. **Staging bar**: shows the count (e.g. `3 changes staged`) and a Before / After preview toggle.
+4. **Apply Changes**: sends all edits as one `batch-edit` transaction. The server writes all files or none.
+5. **Discard**: clears the buffer and removes the preview styles.
+
+If the transaction fails (for example `STALE_DIGEST`), no file is changed.
+
+---
+
+## 2. Drag and Resize
+
+- During the gesture, the page shows a live preview. No file is written.
+- On release, Glide writes the result to source as a `layout` edit:
+  - `left` / `top` / `width` / `height` in pixels.
+  - An element in normal flow gets `position: relative`, so its place in flex or grid layout is kept.
+  - Sticky elements cannot be dragged.
+- With Tailwind authoring, the values are written as classes; otherwise as inline styles.
+
+There is no `glide-positions.json` sidecar file. A project that still has one can delete it.

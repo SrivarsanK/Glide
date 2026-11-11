@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer, Server, request as httpRequest } from 'http';
+import { createServer, Server, request as httpRequest, type IncomingMessage, type ServerResponse } from 'http';
+import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
@@ -16,6 +17,7 @@ import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 import { finalizeEditorChanges } from './editor-git.js';
 import { getEditorAsset } from './editor-assets.js';
+import { maintainRegistryFile } from './registry-file.js';
 import type { MutationScope } from '@srivarsank/core';
 
 const execFileAsync = promisify(execFile);
@@ -742,10 +744,11 @@ function proxyToDevServer(
           `new WebSocket('ws://localhost:${targetPort}`
         );
         // Inject bridge before </head> (or at top of <body> as fallback)
+        // Replacer functions insert the script literally; a replacement string would expand `$&` and `$'`.
         if (html.includes('</head>')) {
-          html = html.replace('</head>', bridgeScript + '</head>');
+          html = html.replace('</head>', () => bridgeScript + '</head>');
         } else if (html.includes('<body')) {
-          html = html.replace(/<body([^>]*)>/, `<body$1>${bridgeScript}`);
+          html = html.replace(/<body([^>]*)>/, (_tag, attributes) => `<body${attributes}>${bridgeScript}`);
         } else {
           html = bridgeScript + html;
         }
@@ -789,8 +792,6 @@ function findGitRoot(startPath: string): string {
   return process.cwd();
 }
 
-// Tracks the git root of the user's target project (populated on first file operation)
-let activeProjectGitRoot: string = process.cwd();
 
 
 export interface EditChange extends MutationScope {
@@ -838,6 +839,10 @@ export class GlideServer {
   private fileGenerations = new Map<string, number>();
   private watcher: any = null;
   private lastSelfWrites = new Map<string, string>();
+  /** Set by attach(): a dev server that serves Glide alongside the app, with no proxy. */
+  private hosted: { httpServer: Server; onUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => void } | null = null;
+  private requestHandler: ((req: IncomingMessage, res: ServerResponse, next?: () => void) => void) | null = null;
+  private stopRegistry: (() => Promise<void>) | null = null;
 
   public recordSelfWrite(filePath: string) {
     const normPath = normalizePathKey(filePath);
@@ -871,21 +876,46 @@ export class GlideServer {
     };
   }
 
+  /**
+   * Serve Glide from an existing dev server instead of its own port: the editor at
+   * /__glide/, its assets, and the editor socket at /__glide/ws. The dev server keeps
+   * serving the app, so the preview loads it directly and its HMR socket is untouched.
+   * Returns middleware for every other request to fall through.
+   */
+  public async attach(httpServer: Server): Promise<(req: IncomingMessage, res: ServerResponse, next: () => void) => void> {
+    this.hosted = { httpServer };
+    await this.start();
+    // The glide command writes the component registry itself; attached, nothing else would.
+    this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
+    return (req, res, next) => this.requestHandler!(req, res, next);
+  }
+
+  /** The port browsers reach Glide on: its own server's, or the dev server's when attached. */
+  private servedPort(): number {
+    const address = (this.hosted?.httpServer ?? this.server)?.address();
+    return address && typeof address === 'object' ? address.port : this.port;
+  }
+
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.history.setLimit(this.config.historyLimit);
 
-        this.server = createServer((req, res) => {
-          const address = this.server?.address();
-          const port = address && typeof address === 'object' ? address.port : this.port;
+        this.requestHandler = (req, res, next) => {
+          const url = req.url || '/';
+          const pathname = new URL(url, 'http://localhost').pathname;
+          // Attached, Glide answers only its own paths; the dev server handles the rest.
+          if (this.hosted && next && !pathname.startsWith('/__glide/') && pathname !== '/__glide'
+            && !pathname.startsWith('/__glide_assets__/')) {
+            next();
+            return;
+          }
+          const port = this.servedPort();
           if (!trustedRequest(req, port, this.config.remoteAccess)) {
             res.writeHead(403);
             res.end('Request origin or host is not allowed.');
             return;
           }
-          const url = req.url || '/';
-          const pathname = new URL(url, 'http://localhost').pathname;
           if (pathname.startsWith('/__glide_assets__/')) {
             try {
               const asset = getEditorAsset(pathname);
@@ -901,10 +931,16 @@ export class GlideServer {
             return;
           }
 
-          // ── Editor shell: only served at root '/' or '/index.html' ──
-          if (pathname === '/' || pathname === '/index.html') {
+          // ── Editor shell: '/' on Glide's own server, '/__glide/' when attached ──
+          const shell = this.hosted ? ['/__glide', '/__glide/', '/__glide/index.html'] : ['/', '/index.html'];
+          if (shell.includes(pathname)) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store' });
-            res.end(getEditorHTML(this.config, this.sessionToken));
+            res.end(getEditorHTML(this.config, this.sessionToken, { hosted: !!this.hosted }));
+            return;
+          }
+          if (this.hosted) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not found.');
             return;
           }
 
@@ -920,7 +956,8 @@ export class GlideServer {
           // Any other URL requested by the browser/iframe (e.g. /_astro/..., /@id/..., /src/..., /api/...)
           // is forwarded directly to the dev server without bridge injection.
           proxyToDevServer(this.targetPort, url, req, res, '');
-        });
+        };
+        if (!this.hosted) this.server = createServer((req, res) => this.requestHandler!(req, res));
 
 
         // Start file watcher for drift detection
@@ -987,14 +1024,21 @@ export class GlideServer {
           console.error('[Glide Watcher] Watcher error:', err);
         });
 
-        this.wss = new WebSocketServer({
-          server: this.server, maxPayload: 256 * 1024,
-          verifyClient: (info: { req: import('node:http').IncomingMessage }) => {
-            const address = this.server?.address();
-            const port = address && typeof address === 'object' ? address.port : this.port;
-            return trustedRequest(info.req, port, this.config.remoteAccess);
-          },
-        });
+        if (this.hosted) {
+          // Share the dev server: take upgrades on /__glide/ws only, leaving its HMR socket alone.
+          const wss = this.wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+          this.hosted.onUpgrade = (req, socket, head) => {
+            if (new URL(req.url || '/', 'http://localhost').pathname !== '/__glide/ws') return;
+            if (!trustedRequest(req, this.servedPort(), this.config.remoteAccess)) { socket.destroy(); return; }
+            wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+          };
+          this.hosted.httpServer.on('upgrade', this.hosted.onUpgrade);
+        } else {
+          this.wss = new WebSocketServer({
+            server: this.server!, maxPayload: 256 * 1024,
+            verifyClient: (info: { req: IncomingMessage }) => trustedRequest(info.req, this.servedPort(), this.config.remoteAccess),
+          });
+        }
 
         this.wss.on('connection', (ws: WebSocket) => {
           ws.on('error', (err) => {
@@ -1033,8 +1077,6 @@ export class GlideServer {
                 let file: string | null = null;
                 try { file = this.projectPaths.sourceFile(requestedFile || findProjectEntryFile(this.projectPaths.root)!); } catch {}
                 if (file) {
-                  // Track the user's project git root for git commands
-                  try { activeProjectGitRoot = findGitRoot(file); } catch {}
                   const code = fs.readFileSync(file, 'utf-8');
                   const tree = buildComponentTree(code, file);
                   const normPath = normalizePathKey(file);
@@ -1115,18 +1157,18 @@ export class GlideServer {
                   return;
                 }
                 if (!file) {
-                  file = findProjectEntryFile(process.cwd());
+                  file = findProjectEntryFile(this.projectPaths.root);
                 }
                 const targetFile = file && fs.existsSync(file)
                   ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
 
                 if (targetFile && this.projectPaths.contains(targetFile)) {
                   try {
                     const def = resolveComponentDefinition({
                       filepath: targetFile,
                       componentName,
-                      projectRoot: process.cwd()
+                      projectRoot: this.projectPaths.root
                     });
 
                     if (def) {
@@ -1171,13 +1213,13 @@ export class GlideServer {
                     }));
                   }
                 } else {
-                  // Fallback without targetFile: try resolving in default src/App.tsx with process.cwd()
+                  // Fallback without targetFile: try resolving in default src/App.tsx with this.projectPaths.root
                   try {
-                    const candidateEntry = findProjectEntryFile(process.cwd()) || path.join(process.cwd(), 'src', 'App.tsx');
+                    const candidateEntry = findProjectEntryFile(this.projectPaths.root) || path.join(this.projectPaths.root, 'src', 'App.tsx');
                     const def = resolveComponentDefinition({
                       filepath: candidateEntry,
                       componentName,
-                      projectRoot: process.cwd()
+                      projectRoot: this.projectPaths.root
                     });
                     if (def) {
                       ws.send(JSON.stringify({
@@ -1209,7 +1251,7 @@ export class GlideServer {
                 const { file, line, column } = message;
                 const targetFile = file && fs.existsSync(file)
                   ? file
-                  : (file && fs.existsSync(path.resolve(process.cwd(), file)) ? path.resolve(process.cwd(), file) : null);
+                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
 
                 if (targetFile && this.projectPaths.contains(targetFile)) {
                   let opened = false;
@@ -1254,7 +1296,7 @@ export class GlideServer {
                 }
                 const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
-                  : activeProjectGitRoot;
+                  : findGitRoot(this.projectPaths.root);
                 console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                 try {
                   await execFileAsync('git', ['checkout', '-b', branchName], { cwd });
@@ -1289,7 +1331,7 @@ export class GlideServer {
                 }
                 const cwd = (projectDir && this.projectPaths.contains(projectDir))
                   ? findGitRoot(projectDir)
-                  : activeProjectGitRoot;
+                  : findGitRoot(this.projectPaths.root);
                 console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
                 try {
                   const state = this.history.getState();
@@ -1379,7 +1421,8 @@ export class GlideServer {
                 JSON.stringify({
                   type: 'status',
                   success: false,
-                  error: `Malformed JSON: ${err.message}`,
+                  // Only a parse failure is malformed JSON; other failures keep their own reason.
+                  error: err instanceof SyntaxError ? `Malformed JSON: ${err.message}` : String(err?.message ?? err),
                 })
               );
             }
@@ -1390,11 +1433,15 @@ export class GlideServer {
           reject(err);
         });
 
-        this.server.on('error', (err) => {
+        if (this.hosted) {
+          resolve();
+          return;
+        }
+        this.server!.on('error', (err) => {
           console.error('[Glide HTTP] Server error:', err);
         });
 
-        this.server.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
+        this.server!.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
           resolve();
         });
       } catch (err) {
@@ -1404,6 +1451,12 @@ export class GlideServer {
   }
 
   public async stop(): Promise<void> {
+    // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
+    if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
+    if (this.stopRegistry) {
+      try { await this.stopRegistry(); } catch (err) { console.error('[Glide] Error closing registry watcher:', err); }
+      this.stopRegistry = null;
+    }
     if (this.watcher) {
       try {
         await this.watcher.close();
@@ -1483,6 +1536,7 @@ export class GlideServer {
     const result = await this.mutations.execute(transactionId, operations);
     if (result.success && !this.notifiedTransactions.has(transactionId)) {
       this.notifiedTransactions.add(transactionId);
+      if (this.notifiedTransactions.size > 200) this.notifiedTransactions.delete(this.notifiedTransactions.values().next().value!);
       for (const op of operations) for (const callback of this.editCallbacks) {
         // Observers run after persistence and cannot turn a committed result into a failure.
         try { await callback(op.filePath, op.line, op.column, op.change as EditChange, op.hash); }

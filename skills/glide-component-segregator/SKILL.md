@@ -5,15 +5,14 @@ description: >
   how to read `glide-components.json` to discover, locate, and edit components by
   name instead of raw file:line:col coordinates. Covers 300ms auto-watch behavior,
   adding new components, co-located CSS detection, root element targeting,
-  multi-framework support (React, Vue, Svelte, Astro, HTML), and coordination with
-  Glide's In-Memory SceneGraph and LWW delta queue.
+  and multi-framework support (React, Vue, Svelte, Astro, HTML).
 ---
 
 # Glide Component Segregator
 
 ## What Is This?
 
-When `glide` starts (via `npx @srivarsank/glide` or `glide`), it scans the target project's source tree and writes **`glide-components.json`** to the project root. It watches for source file changes and rebuilds incrementally with a 300 ms debounce.
+When the `glide` command starts (via `npx @srivarsank/glide` or `glide`), it scans the target project's source tree and writes **`glide-components.json`** to the project root. It watches for source file changes and rebuilds incrementally with a 300 ms debounce.
 
 Every component in the app — including layout wrappers, backgrounds, and sub-elements — is indexed in a `ComponentBucket` within that file.
 
@@ -81,23 +80,21 @@ const root = bucket.elements.find(e => e.isRoot);
 // root.tagName = "div", root.classNames = ["card-container"], root.id = "src/Card.tsx:13:8"
 ```
 
-Use `root.id` as the `data-gl-source` target when sending style or layout edits via the Glide WebSocket protocol.
+`root.id` is the `data-gl-source` value of that element. Use `root.line` and `root.column` to find it in `bucket.file`.
 
 ### 3. Target a specific nested element
 
 Find by tagName, className, or text:
 ```js
 const btn = bucket.elements.find(e => e.tagName === 'button' && e.classNames.includes('submit'));
-// btn.id → use this as the edit target
+// btn.line / btn.column → the position of the tag in bucket.file
 ```
 
 ### 4. Jump to imported sub-component definitions
 
 If an element has a capitalized `tagName` (e.g. `<Button />`, `<Avatar />`), it is a custom component instantiation.
-In Glide v1.1.0+:
-- The server provides `resolveComponentDefinition` to locate the origin file of that component.
-- The Properties panel header and Layers tree include a **Jump to Component** button.
-- Query `registry.buckets.find(b => b.name === tagName)` to jump directly to its definition.
+- In the editor, the Properties panel header and Layers tree include a **Jump to Component** button.
+- As an agent, query `registry.buckets.find(b => b.name === tagName)` to jump directly to its definition.
 
 ### 5. Edit co-located CSS
 
@@ -119,9 +116,10 @@ if (bucket.cssFiles.length > 0) {
 | **Svelte** (`.svelte`) | Strips `<script>` and `<style>` blocks; scans template; `exportType = "sfc"` |
 | **Astro** (`.astro`) | Preserves `---` frontmatter; scans template; `exportType = "sfc"` |
 | **Static HTML** (`.html`) | Excludes `<head>`, `<script>`, `<style>`; `exportType = "html"` |
-| **Co-located CSS** | Scans directory for `.css`, `.module.css`, `.scss`, `.sass` matching component stem |
+| **Co-located CSS** | Scans directory for `.css`, `.module.css`, `.scss`, `.module.scss`, `.less` matching component stem |
 | **File added / deleted** | Registry auto-rebuilds in 300 ms via `watchRegistry` |
-| **Simultaneous edits** | Server `PropertyDeltaQueue` enforces LWW conflict resolution per `(nodeId, propKey)` |
+| **File changed during a canvas edit** | The server refuses the user's save with `STALE_DIGEST`; the user selects the element again |
+| **Registry is missing** | Only the `glide` command writes it. With the editor at `/__glide/` only, run `npx @srivarsank/glide` once or read the source files |
 
 ---
 
@@ -131,7 +129,7 @@ if (bucket.cssFiles.length > 0) {
 1. Read glide-components.json
 2. Find bucket by component name (e.g. "Card", "Header")
 3. Inspect elements — target by isRoot / tagName / classNames
-4. Use element.id as the target data-gl-source
+4. Edit the tag at element.line / element.column in bucket.file
 5. For CSS edits — open file listed in bucket.cssFiles
 6. If adding a new component — wait 300 ms, then re-read registry
 ```
