@@ -36,7 +36,7 @@ async function devServer() {
     http.close(() => resolve());
   }));
   cleanups.push(() => glide.stop());
-  return { http, glide, port, origin: `http://localhost:${port}` };
+  return { http, glide, port, root, origin: `http://localhost:${port}` };
 }
 
 function get(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
@@ -96,4 +96,16 @@ test('stopping Glide leaves the dev server and its HMR socket running', async ()
   const hmr = await open(origin.replace('http', 'ws') + '/', origin);
   expect(await hmr.first).toBe('hmr-connected');
   hmr.close();
+});
+
+test('attached to a dev server, Glide writes the component registry that the glide command would', async () => {
+  const { root, glide } = await devServer();
+  const registry = JSON.parse(fs.readFileSync(path.join(root, 'glide-components.json'), 'utf8'));
+  expect(registry.buckets.map((bucket: { name: string }) => bucket.name)).toContain('App');
+  // Stopping Glide stops the registry watcher too: a later source change leaves the file as it is.
+  await glide.stop();
+  const before = fs.readFileSync(path.join(root, 'glide-components.json'), 'utf8');
+  fs.writeFileSync(path.join(root, 'Other.tsx'), 'export const Other = () => <p>B</p>;\n');
+  await new Promise(resolve => setTimeout(resolve, 900));
+  expect(fs.readFileSync(path.join(root, 'glide-components.json'), 'utf8')).toBe(before);
 });

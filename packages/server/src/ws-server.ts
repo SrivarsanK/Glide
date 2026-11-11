@@ -17,6 +17,7 @@ import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 import { finalizeEditorChanges } from './editor-git.js';
 import { getEditorAsset } from './editor-assets.js';
+import { maintainRegistryFile } from './registry-file.js';
 import type { MutationScope } from '@srivarsank/core';
 
 const execFileAsync = promisify(execFile);
@@ -841,6 +842,7 @@ export class GlideServer {
   /** Set by attach(): a dev server that serves Glide alongside the app, with no proxy. */
   private hosted: { httpServer: Server; onUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => void } | null = null;
   private requestHandler: ((req: IncomingMessage, res: ServerResponse, next?: () => void) => void) | null = null;
+  private stopRegistry: (() => Promise<void>) | null = null;
 
   public recordSelfWrite(filePath: string) {
     const normPath = normalizePathKey(filePath);
@@ -883,6 +885,8 @@ export class GlideServer {
   public async attach(httpServer: Server): Promise<(req: IncomingMessage, res: ServerResponse, next: () => void) => void> {
     this.hosted = { httpServer };
     await this.start();
+    // The glide command writes the component registry itself; attached, nothing else would.
+    this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
     return (req, res, next) => this.requestHandler!(req, res, next);
   }
 
@@ -1449,6 +1453,10 @@ export class GlideServer {
   public async stop(): Promise<void> {
     // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
     if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
+    if (this.stopRegistry) {
+      try { await this.stopRegistry(); } catch (err) { console.error('[Glide] Error closing registry watcher:', err); }
+      this.stopRegistry = null;
+    }
     if (this.watcher) {
       try {
         await this.watcher.close();
