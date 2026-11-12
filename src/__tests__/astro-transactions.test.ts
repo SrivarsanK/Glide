@@ -82,3 +82,18 @@ test('unsupported Astro edits are refused and write nothing', async () => {
   expect(missing.error).toContain('NODE_NOT_FOUND');
   expect(f.read()).toBe(source);
 });
+
+test('the dev server puts the bridge into the Astro file that has the <head>, after stamping', async () => {
+  const { glideSourceStamping } = await import('../../packages/vite-plugin/src/index.js');
+  const plugin = glideSourceStamping({ editor: false }) as any;
+  plugin.configResolved({ command: 'serve', root: '/project' });
+  const page = '---\nconst a = 1;\n---\n<html>\n  <head><title>T</title></head>\n  <body><main class="p-2">Hi</main></body>\n</html>\n';
+  const out: string = plugin.transform.handler(page, '/project/src/pages/index.astro').code;
+  expect(out).toContain('<head><script is:inline>');
+  expect(out).toContain('__glide_initialized__');
+  // The stamp holds the position in the file on disk, not in the file with the bridge in it.
+  expect(out).toContain('<main data-gl-source="src/pages/index.astro:6:9" class="p-2">');
+  expect(out).not.toMatch(/<(html|head|body|title) data-gl-source/);
+  const component: string = plugin.transform.handler('<article class="p-2">x</article>\n', '/project/src/components/Card.astro').code;
+  expect(component).not.toContain('<script');
+});

@@ -29,8 +29,8 @@ describe('glideSourceStamping Vite Plugin', () => {
 
     const filePath = '/project/src/App.tsx';
 
-    if (plugin.transform && typeof plugin.transform === 'function') {
-      const result = plugin.transform.call({} as any, code, filePath);
+    if (plugin.transform) {
+      const result = (plugin.transform as any).handler.call({} as any, code, filePath);
       expect(result).not.toBeNull();
 
       const transformedCode = (result as any).code;
@@ -83,8 +83,8 @@ describe('glideSourceStamping Vite Plugin', () => {
 
     const filePath = '/project/src/App.tsx';
 
-    if (plugin.transform && typeof plugin.transform === 'function') {
-      const result = plugin.transform.call({} as any, code, filePath);
+    if (plugin.transform) {
+      const result = (plugin.transform as any).handler.call({} as any, code, filePath);
       expect(result).toBeNull();
     }
   });
@@ -99,8 +99,8 @@ describe('glideSourceStamping Vite Plugin', () => {
     const code = `<div>Test</div>`;
     const filePath = '/project/node_modules/library/App.tsx';
 
-    if (plugin.transform && typeof plugin.transform === 'function') {
-      const result = plugin.transform.call({} as any, code, filePath);
+    if (plugin.transform) {
+      const result = (plugin.transform as any).handler.call({} as any, code, filePath);
       expect(result).toBeNull();
     }
   });
@@ -115,8 +115,8 @@ describe('glideSourceStamping Vite Plugin', () => {
     const code = `const a = 1;`;
     const filePath = '/project/src/index.ts';
 
-    if (plugin.transform && typeof plugin.transform === 'function') {
-      const result = plugin.transform.call({} as any, code, filePath);
+    if (plugin.transform) {
+      const result = (plugin.transform as any).handler.call({} as any, code, filePath);
       expect(result).toBeNull();
     }
   });

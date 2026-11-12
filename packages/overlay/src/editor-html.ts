@@ -8207,6 +8207,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             loadApp(defaultUrl);
           }
           applyTransform();
+          // Start with the whole preview in view. At 100% a desktop-size preview is larger than
+          // the canvas area, and the top of the page would be out of view.
+          fitToScreen();
 
           // Initialize Lucide icons on page load with zero-dependency SVG fallback
           (function initIcons() {

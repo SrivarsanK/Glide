@@ -29,6 +29,15 @@ Also removed, with no public export:
 - The CSS and Tailwind value scanner (`scanProject`, `scanFile`), the `FrameworkAdapter` interface, and the second copy of the template stamper.
 - The dependencies `@chenglou/pretext` and `html-react-parser`.
 
+### Fixed
+Found with real React, Vue, Svelte, Astro and HTML test apps:
+- **Svelte apps did not load.** The stamper put an attribute on `<title>` inside `<svelte:head>`, which the Svelte compiler rejects. Document metadata and the content of `<svelte:head>` get no stamp now.
+- **Astro elements could not be edited.** Astro's own plugin compiled the file before Glide stamped it, so each stamp held a position in compiled JavaScript. The stamp now runs first.
+- **Astro pages had no bridge**, so nothing could be selected. Astro does not call `transformIndexHtml`; the bridge now goes into the page or layout that has the `<head>`.
+- **Vue component roots pointed at the usage.** A stamp on a component tag (`<PlanCard>`) fell through to the component's root element and replaced its own stamp. Component tags in templates get no stamp now.
+- **The top of the page was out of view at first load.** The editor now starts with the whole preview in view.
+- `<html>`, `<head>` and `<body>` get no stamp in any template file, not only in HTML pages.
+
 ### Changed (breaking)
 - Node.js 20 or later is necessary. The build already targeted Node 20; `engines` now states it.
 
