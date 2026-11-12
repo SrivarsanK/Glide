@@ -1,5 +1,9 @@
 # Glide — PORTING SAFETY SPEC
-## Anti-Hallucination Prompt for Feature-Safe Code Migration
+## Historical migration specification
+
+> This specification predates the current editor. React history components and
+> Jotai atoms referenced below were disconnected prototypes and have been removed.
+> See [the contributor guide](../CONTRIBUTING.md) for current architecture.
 
 > **Purpose:** This document is fed to any AI coding agent performing porting,
 > refactoring, migration, or dependency changes on the Glide codebase.

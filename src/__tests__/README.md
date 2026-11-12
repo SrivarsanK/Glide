@@ -10,7 +10,10 @@ Glide maintains a centralized test suite under `src/__tests__/` executing across
 
 ---
 
-## Test Suites by Package Domain (44 Files / 398 Tests)
+## Test Suites by Package Domain
+
+This is a guide to representative suites. Run `npm test` for the current complete
+file and test counts; the Vitest include pattern is `src/__tests__/**/*.test.ts`.
 
 ### 1. Core (`packages/core`)
 - `component-registry.test.ts` — Component discovery, project metadata, and file watching.
@@ -46,10 +49,10 @@ Glide maintains a centralized test suite under `src/__tests__/` executing across
 
 ### 4. Overlay & Browser Runtime (`packages/overlay`)
 - `bridge.test.ts` — Iframe communication bridge and event routing.
-- `mutation-transport.ts` — Serialized mutation queue, transaction tracking, and ACK remapping.
+- `mutation-transport.test.ts` — Serialized mutation queue, transaction tracking, and ACK remapping.
 - `overlay.test.ts` — Canvas overlays, selection boundaries, and hover highlights.
 - `scene-graph.test.ts` — Visual scene graph and element coordinate caching.
-- `selection-feedback.test.ts` — Uninstrumented runtime node feedback and inspector guarding.
+- `canvas-selection-regressions.test.ts` — Uninstrumented runtime node feedback and inspector guarding.
 - `snap.test.ts` — Smart guide snapping algorithms and Kd-tree queries.
 - `source-mapping.test.ts` — `data-gl-source` parsing and coordinate remapping after AST writes.
 - `staged-edits.test.ts` — Staging buffer, review workflow, and multi-element batches.

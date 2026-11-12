@@ -1,5 +1,9 @@
 # Glide — Coding Agent Build Prompt
-## Complete Implementation Instructions Based on Wireframes
+## Historical implementation prompt
+
+> This scaffold proposal is retained for context. Its React/Jotai editor and
+> Turbo/pnpm setup do not describe the current npm workspace build. Start with
+> [CONTRIBUTING](../CONTRIBUTING.md) for development.
 
 ---
 

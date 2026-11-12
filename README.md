@@ -357,7 +357,7 @@ Contributions are welcome.
 
 - Review the [Contributing Guide](CONTRIBUTING.md) for local architecture details and testing procedures.
 - We follow conventional commit conventions for atomic commits.
-- Check [docs/](docs/) for architecture guides, specs, and [audit reports](docs/reports/GLIDE_AUDIT_REPORT.md).
+- Use the [documentation index](docs/README.md) to distinguish current guides from historical specifications and audit reports.
 - Check [skills/glide/references/](skills/glide/references/) for the architecture, the WebSocket protocol, and the write-back rules for each file type.
 
 ---
