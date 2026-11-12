@@ -64,7 +64,6 @@ const internalPackages = [
   'adapters/svelte',
   'adapters/astro',
   'adapters/html',
-  'adapters/react',
   'overlay',
   'server',
   'babel-plugin',
