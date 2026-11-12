@@ -1,5 +1,9 @@
 # Glide — HISTORY FEATURE SPEC
-## Anti-Hallucination Reference for AI Agents
+## Historical history-panel proposal
+
+> The disconnected React/Jotai prototype described here was removed. The working
+> editor history lives in `packages/overlay/src/editor-html.ts`, with server
+> history in `packages/server/src/history-manager.ts`. See [the index](README.md).
 
 > **Purpose:** This document exists to prevent hallucination when implementing
 > the Glide history panel. Every mechanism, type, file path, and API is exact.

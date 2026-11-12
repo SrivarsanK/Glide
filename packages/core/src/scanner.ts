@@ -258,16 +258,6 @@ function buildTailwindTable(projectRoot: string): Map<string, { value: string; r
   };
   const colors = mergeScale(theme.colors ?? defaultColors, extend.colors);
 
-  function lookupColor(colorPath: string): string | undefined {
-    const parts = colorPath.split('-');
-    let cur: any = colors;
-    for (const p of parts) {
-      if (cur == null) return undefined;
-      cur = typeof cur === 'object' ? cur[p] : undefined;
-    }
-    return typeof cur === 'string' ? cur : undefined;
-  }
-
   // Register spacing-based utilities
   const spacingUtilPrefixes: [string, string][] = [
     ['p', 'padding'], ['px', 'padding-left,padding-right'],
@@ -283,7 +273,7 @@ function buildTailwindTable(projectRoot: string): Map<string, { value: string; r
     ['text', 'font-size'], ['rounded', 'border-radius'],
   ];
 
-  for (const [prefix, cssProp] of spacingUtilPrefixes) {
+  for (const [prefix] of spacingUtilPrefixes) {
     for (const [key, val] of Object.entries(spacing)) {
       const cls = `${prefix}-${key}`;
       twTable!.set(cls, { value: val as string, resolvedFrom: `theme.spacing[${key}]` });
@@ -314,7 +304,7 @@ function buildTailwindTable(projectRoot: string): Map<string, { value: string; r
     }
     return out;
   }
-  for (const [utilPrefix, cssProp] of colorPrefixes) {
+  for (const [utilPrefix] of colorPrefixes) {
     for (const [colorKey, colorVal] of flatColors(colors, '')) {
       const cls = `${utilPrefix}-${colorKey}`;
       twTable!.set(cls, { value: colorVal as string, resolvedFrom: `theme.colors.${colorKey}` });

@@ -1,5 +1,9 @@
 # Glide — FEATURES.md
-## Authoritative Technical Specification for AI Agents
+## Historical technical specification
+
+> Historical design, not the current implementation contract. References to
+> Jotai, React history components and Turbo are obsolete. See [the documentation
+> index](README.md) and [contributor guide](../CONTRIBUTING.md).
 
 > **Purpose:** This document exists to prevent hallucination. Every feature listed here
 > describes the EXACT mechanism, the EXACT API, and the EXACT file/package involved.

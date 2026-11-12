@@ -1,4 +1,3 @@
-import { parse as babelParse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import * as t from '@babel/types';
 import { parse as recastParse, print as recastPrint } from 'recast';
@@ -302,7 +301,7 @@ export function groupJSXElements(code: string, selectedIds: string[]): string {
   const groupedChildrenNodes = childIndices.map(idx => parentNode.children[idx]);
 
   // Remove selected children from parent
-  parentNode.children = parentNode.children.filter((child: any, idx: number) => !childIndices.includes(idx));
+  parentNode.children = parentNode.children.filter((_child: any, idx: number) => !childIndices.includes(idx));
 
   // Create new Group div element
   const styleAttr = t.jsxAttribute(

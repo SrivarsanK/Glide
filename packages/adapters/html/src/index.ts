@@ -1,6 +1,5 @@
 import parseDOMModule from 'html-dom-parser';
 import parseReactModule from 'html-react-parser';
-import * as React from 'react';
 import { mergeInlineStyle, parseTargetId, findTagAtLineCol } from '@srivarsank/core';
 
 const parseDOM = (parseDOMModule as any).default || parseDOMModule;

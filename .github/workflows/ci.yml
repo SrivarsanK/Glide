@@ -31,7 +31,10 @@ jobs:
         run: npm run build
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Run test suite
         run: npm test
+
+      - name: Verify bundled editor
+        run: npm run test:artifact

@@ -1,7 +1,6 @@
 import { Plugin } from 'vite';
 import * as babel from '@babel/core';
 import * as path from 'path';
-import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
 import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries, type GlideConfig } from '@srivarsank/core';
 import { GlideServer } from '@srivarsank/server';
@@ -1862,9 +1861,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
   let isDev = false;
   let configReady: Promise<unknown> = Promise.resolve();
   let rootDir = process.cwd();
-  let mainEntryInjected = false;
   let stampPages = false;
-  let viteServer: any = null;
   /** Stops the attached editor once; set while one is running. */
   let stopEditor: (() => Promise<void>) | null = null;
   let glideConfig: GlideConfig = DEFAULT_CONFIG;
@@ -1962,7 +1959,6 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
       // In a project with no UI framework the HTML pages are the source, so their elements get stamps.
       // With a framework, index.html is only a mount point and stays unmapped.
       try { stampPages = detectProjectMeta(rootDir).framework === 'unknown'; } catch { stampPages = false; }
-      mainEntryInjected = false;
       // Load glide.config.ts from the user's project root synchronously.
       // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
       try {
@@ -1979,8 +1975,6 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
     },
 
     configureServer(server) {
-      viteServer = server;
-
       // ── EDITOR AT /__glide/ ──────────────────────────────────────────────
       // Glide's server attaches to this dev server: the editor, its assets and
       // its socket share the app's origin, so the preview needs no proxy and

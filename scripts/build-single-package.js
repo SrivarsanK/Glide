@@ -64,7 +64,6 @@ const internalPackages = [
   'adapters/svelte',
   'adapters/astro',
   'adapters/html',
-  'adapters/react',
   'overlay',
   'server',
   'babel-plugin',
@@ -116,6 +115,8 @@ async function runBuild() {
       continue;
     }
     console.log(`Building packages/${pkg} with tsc...`);
+    // tsc does not remove output for deleted source files.
+    fs.rmSync(path.join(pkgDir, 'dist'), { recursive: true, force: true });
     execSync(`npx tsc -p "${workspaceTsconfig(pkgDir)}"`, { cwd: pkgDir, stdio: 'inherit' });
   }
 

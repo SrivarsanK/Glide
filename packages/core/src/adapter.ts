@@ -1,5 +1,6 @@
 /**
- * FrameworkAdapter interface — each adapter (react, vue, svelte, html) implements this.
+ * Legacy adapter extension contract retained for compatibility.
+ * Current mutation routes use the AST writer and framework-specific functions.
  */
 
 import type { StyleChange } from './types.js';
