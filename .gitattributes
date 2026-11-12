@@ -1,0 +1,8 @@
+# Text files are stored with LF in the repository and checked out with LF on every platform,
+# so Windows and Linux contributors produce the same diffs.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.docx binary
