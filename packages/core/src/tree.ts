@@ -14,33 +14,6 @@ const parseDOM = (parseDOMModule as any).default || parseDOMModule;
 
 export type { ComponentTreeNode } from './types.js';
 
-function findReturnedJSX(functionPath: any, code: string): any | null {
-  let returnedJSX: any = null;
-  functionPath.traverse({
-    ReturnStatement(subPath: any) {
-      // Find the first return statement at the function's scope level
-      let p = subPath.parentPath;
-      while (p && p !== functionPath) {
-        if (p.isFunction()) return; // inside a nested function, ignore
-        p = p.parentPath;
-      }
-      const arg = subPath.node.argument;
-      if (arg && (arg.type === 'JSXElement' || arg.type === 'JSXFragment')) {
-        returnedJSX = arg;
-      }
-    }
-  });
-  return returnedJSX;
-}
-
-function getJSXFromFunction(functionPath: any, code: string): any | null {
-  const body = functionPath.node.body;
-  if (body && (body.type === 'JSXElement' || body.type === 'JSXFragment')) {
-    return body;
-  }
-  return findReturnedJSX(functionPath, code);
-}
-
 export function buildComponentTree(code: string, filepath?: string): import('./types.js').ComponentTreeNode[] {
   const isHTML = filepath?.endsWith('.html');
   const isVue = filepath?.endsWith('.vue');

@@ -22,22 +22,6 @@ import type { MutationScope } from '@srivarsank/core';
 
 const execFileAsync = promisify(execFile);
 
-function extractModifiedProps(change: any): string[] {
-  if (!change) return ['unknown'];
-  if (change.type === 'style' && change.value && typeof change.value === 'object') {
-    const keys = Object.keys(change.value);
-    return keys.length > 0 ? keys : ['style'];
-  }
-  if (change.type === 'multi-class' && change.value && typeof change.value === 'object') {
-    const keys = Object.keys(change.value);
-    return keys.length > 0 ? keys : ['class'];
-  }
-  if (change.property) return [change.property];
-  if (change.type === 'text') return ['textContent'];
-  if (change.type === 'position') return ['position'];
-  return [change.type || 'unknown'];
-}
-
 function findProjectEntryFile(projectDir: string): string | null {
   try {
     const regPath = path.join(projectDir, 'glide-components.json');
@@ -82,7 +66,6 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   const sourceAttr = cfg.sourceAttribute || 'data-gl-source';
   const hoverAttr  = cfg.hoverAttribute  || 'data-glide-hover';
   const selectedAttr = cfg.selectedAttribute || 'data-glide-selected';
-  const snap = cfg.snapThresholdPx ?? 5;
   // Inline the bridge via the vite-plugin's buildBridgeScript equivalent,
   // but using plain string template to avoid any import dependency.
   return `<script data-glide-bridge="1">
