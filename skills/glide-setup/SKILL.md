@@ -17,7 +17,7 @@ description: >
 
 ## Prerequisites (Check Before Install)
 
-1. **Node.js ≥ 18** — verify with `node -v`
+1. **Node.js ≥ 20** — verify with `node -v`
 2. **Vite-based project** — Glide integrates with Vite dev servers. Confirm `vite` is in dependencies.
 3. **Package manager** — detect from lockfile:
    - `package-lock.json` → `npm`
