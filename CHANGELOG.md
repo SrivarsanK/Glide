@@ -6,7 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [Unreleased] — planned as 2.0.0
+
+### Removed (breaking)
+
+These exports were not used by the editor, the CLI or the Vite plugin. A program that imports them from `@srivarsank/glide` must change.
+
+| Removed | Use instead |
+|---|---|
+| `reorderJSXElement`, `insertJSXElement`, `groupJSXElements`, `ungroupJSXElement`, `arrangeJSXElement` | `transformJSXBatch` with a structural change (`reorder`, `insert`, `group`, `ungroup`, `arrange`) |
+| `updateCSSModuleRule`, `parseTailwindClasses`, `updateTailwindClasses` | `updateClassString`, or `transformJSXBatch` with a `class` change |
+| `updateSvelteClass`, `updateSvelteStyle`, `updateSvelteText` | `setSvelteClassAt`, `setSvelteStyleAt`, `setSvelteTextAt` (find the element by line and column) |
+| `updateAstroClass`, `updateAstroStyle`, `updateAstroText` | `setAstroClassAt`, `setAstroStyleAt`, `setAstroTextAt` |
+| `updateHTMLClass`, `updateHTMLStyle`, `updateHTMLText`, `getElementClass` | `setAstroClassAt`, `setAstroStyleAt`, `setAstroTextAt` (the same scanner handles HTML) |
+| `parseHTMLToReact` | No replacement. Use `html-react-parser` directly. |
+| `GlideBridge`, `GlideOverlay`, `snapToGrid`, `measureTextLayout`, `resolveActiveBreakpoint` | No replacement. The editor page (`getEditorHTML`) has its own implementation. |
+| `generateVSCodeConfig` | No replacement. |
+
+Also removed, with no public export:
+- The property-level LWW delta queue and its `GET_PENDING_OPS` and `ACK_OP` socket messages. File digests have handled conflicts since 1.1.2.
+- The CSS and Tailwind value scanner (`scanProject`, `scanFile`), the `FrameworkAdapter` interface, and the second copy of the template stamper.
+- The dependencies `@chenglou/pretext` and `html-react-parser`.
+
+### Changed (breaking)
+- Node.js 20 or later is necessary. The build already targeted Node 20; `engines` now states it.
+
+### Added
+- `transformJSXBatch` and the position-based template writers are exported from the package root.
+- `.gitattributes` (LF line endings on all platforms), `.editorconfig`, `.nvmrc`, `SECURITY.md` and `CODEOWNERS`.
 
 ### Added
 - **Editor inside the Vite dev server**: with `glideSourceStamping()`, the editor opens at `/__glide/` on the dev server. The app loads from its own origin with no proxy, and Vite HMR works as usual. Use `glideSourceStamping({ editor: false })` to keep the separate `glide` command.

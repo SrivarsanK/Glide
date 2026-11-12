@@ -1,22 +1,6 @@
 /**
- * stress.test.ts — Glide Stress & Bug Regression Suite
- *
- * Coverage targets:
- *   1. Concurrent WebSocket connections (50 clients simultaneous)
- *   2. Rapid-fire LWW flood (500 sequential edits, same property)
- *   3. Cross-property independence under load (10 properties × 100 edits)
- *   4. SceneGraph build/hitTest performance on 1 000-node tree
- *   5. SceneGraph deep nesting (depth 20, ensures no stack overflow)
- *   6. Path traversal blocked by isSafeFilePath (regression)
- *   7. HistoryStore: push beyond maxHistory cap keeps consistent index
- *   8. HistoryStore: squash collapses rapid edits to same key
- *   9. DeltaQueue: concurrent race — same prop, two clients, last wins
- *  10. DeltaQueue: deferred queue drains in order after burst of acks
- *  11. Server: burst 200 rapid edits processed without hang (timeout guard)
- *  12. Server: 50 parallel clients all get scene_update broadcast
- *  13. SceneGraph: patchMany 500 updates under 5 ms
- *  14. PropertyDeltaQueue: 1 000 concurrent properties never collide
- *  15. Server: path traversal payload rejected (SECURITY regression)
+ * Stress and edge-case tests for the server: concurrent source writes, path traversal,
+ * history limits, broadcast to many clients, and unknown messages.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
@@ -24,14 +8,7 @@ import WebSocket from 'ws';
 import { connectLocal } from './ws-client.js';
 import { startTestProject, closeTestProjects, request } from './server-fixture.js';
 afterEach(closeTestProjects);
-import {
-  SceneGraph,
-  SceneRect,
-  SceneNodeData,
-  toSceneRect,
-} from '../../packages/overlay/src/scene-graph.js';
 import { GlideServer } from '../../packages/server/src/ws-server.js';
-import { PropertyDeltaQueue } from '../../packages/server/src/delta-queue.js';
 import { HistoryStore } from '../../packages/server/src/history-manager.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -99,52 +76,9 @@ describe('[Stress] Revision-checked source writes', () => {
   }, 30000);
 });
 
-describe('[Perf] SceneGraph 1 000-node build + hitTest', () => {
-  test('builds 1 000 nodes and runs 1 000 hitTests in under 200 ms', () => {
-    const N = 1000;
-    const nodes: SceneNodeData[] = Array.from({ length: N }, (_, i) => ({
-      id: `node-${i}`,
-      tag: 'div',
-      rect: r(i * 2, i * 2, 50, 50),
-      children: [],
-    }));
-
-    const sg = new SceneGraph();
-    const t0 = performance.now();
-    sg.build(nodes);
-    const buildMs = performance.now() - t0;
-    expect(buildMs).toBeLessThan(200);
-    expect(sg.size).toBe(N);
-
-    const t1 = performance.now();
-    for (let i = 0; i < N; i++) {
-      sg.hitTest(i * 2 + 10, i * 2 + 10);
-    }
-    const hitMs = performance.now() - t1;
-    expect(hitMs).toBeLessThan(200);
-  });
-});
 
 // ─── 5. SceneGraph deep nesting (depth 20) ───────────────────────────────────
 
-describe('[Stress] SceneGraph deep nesting — 20 levels', () => {
-  test('builds depth-20 tree without stack overflow', () => {
-    function mkNested(depth: number): SceneNodeData {
-      const side = 500 - depth * 20;
-      const offset = depth * 10;
-      if (depth === 0) return node(`leaf`, r(offset, offset, side, side));
-      return node(`level-${depth}`, r(offset, offset, side, side), [mkNested(depth - 1)]);
-    }
-
-    const sg = new SceneGraph();
-    expect(() => sg.build([mkNested(20)])).not.toThrow();
-    expect(sg.size).toBe(21);
-
-    const hit = sg.hitTest(200, 200);
-    expect(hit).not.toBeNull();
-    expect(hit?.id).toBe('leaf');
-  });
-});
 
 // ─── 6. Path traversal security regression ───────────────────────────────────
 
@@ -263,56 +197,9 @@ describe('[Unit] HistoryStore: squash window collapses rapid edits', () => {
 
 // ─── 9. DeltaQueue: concurrent race — same prop, two clients ─────────────────
 
-describe('[Stress] DeltaQueue: two-client concurrent race', () => {
-  test('last timestamp wins when two clients race same property', () => {
-    const q = new PropertyDeltaQueue();
-
-    // Client A records timestamp=1000
-    q.recordApplied('node-x', 'background', 'red', 1000);
-
-    // Client B arrives at 999 (stale) → rejected
-    expect(q.canApplyLWW('node-x', 'background', 999)).toBe(false);
-
-    // Client B arrives at 2000 (newer) → accepted
-    expect(q.canApplyLWW('node-x', 'background', 2000)).toBe(true);
-    q.recordApplied('node-x', 'background', 'blue', 2000);
-
-    // Client A tries again at 1500 (now stale) → rejected
-    expect(q.canApplyLWW('node-x', 'background', 1500)).toBe(false);
-  });
-});
 
 // ─── 10. DeltaQueue: deferred queue drains in order ─────────────────────────
 
-describe('[Stress] DeltaQueue: deferred drain order', () => {
-  test('deferred callbacks execute in FIFO order after ack', async () => {
-    const q = new PropertyDeltaQueue();
-    q.enqueuePending('node-y', 'opacity', 0.5);
-
-    const order: number[] = [];
-
-    for (let i = 0; i < 5; i++) {
-      const capturedI = i;
-      q.defer('node-y', 'opacity', {
-        opId: `op-${i}`,
-        nodeId: 'node-y',
-        prop: 'opacity',
-        value: i * 0.1,
-        timestamp: Date.now(),
-      }, () => {
-        order.push(capturedI);
-      });
-    }
-
-    expect(q.getStats().deferredCount).toBe(5);
-    q.ackPending('node-y', 'opacity');
-
-    await new Promise<void>((res) => setTimeout(res, 20));
-
-    expect(order).toEqual([0, 1, 2, 3, 4]);
-    expect(q.getStats().deferredCount).toBe(0);
-  });
-});
 
 // ─── 11. Server: burst 200 rapid edits without hang ─────────────────────────
 
@@ -383,86 +270,12 @@ describe('[Stress] Server: broadcast reaches all 50 clients', () => {
 
 // ─── 13. SceneGraph: patchMany 500 updates under 5 ms ───────────────────────
 
-describe('[Perf] SceneGraph.patchMany 500 nodes under 5 ms', () => {
-  test('patchMany on 500-node flat graph completes within 5 ms', () => {
-    const N = 500;
-    const sg = new SceneGraph();
-    sg.build(Array.from({ length: N }, (_, i) => node(`n${i}`, r(i, 0, 50, 50))));
-
-    const patches = Array.from({ length: N }, (_, i) => ({
-      id: `n${i}`,
-      rect: r(i + 1, 1, 52, 52),
-    }));
-
-    const t0 = performance.now();
-    sg.patchMany(patches);
-    const elapsed = performance.now() - t0;
-
-    expect(elapsed).toBeLessThan(5);
-    expect(sg.getById('n0')!.rect.left).toBe(1);
-    expect(sg.getById('n499')!.rect.width).toBe(52);
-  });
-});
 
 // ─── 14. DeltaQueue: 1 000 independent properties never collide ──────────────
 
-describe('[Stress] DeltaQueue: 1 000 independent properties', () => {
-  test('1 000 distinct property keys never conflict with each other', () => {
-    const q = new PropertyDeltaQueue();
-    const N = 1000;
-    const TS = 5000;
-
-    for (let i = 0; i < N; i++) {
-      q.recordApplied('node-z', `prop-${i}`, i, TS);
-    }
-
-    // Each property should accept newer timestamps independently
-    for (let i = 0; i < N; i++) {
-      expect(q.canApplyLWW('node-z', `prop-${i}`, TS + 1)).toBe(true);
-      // Stale timestamps rejected per-property
-      expect(q.canApplyLWW('node-z', `prop-${i}`, TS - 1)).toBe(false);
-    }
-
-    const stats = q.getStats();
-    expect(stats.appliedCount).toBe(N);
-  });
-});
 
 // ─── 15. Empty/null edge cases in SceneGraph ─────────────────────────────────
 
-describe('[Bug] SceneGraph: edge case IDs and zero-size nodes', () => {
-  test('zero-size node is built but not hit-tested as a leaf', () => {
-    const sg = new SceneGraph();
-    sg.build([
-      node('zero', r(10, 10, 0, 0)),
-      node('real', r(10, 10, 100, 100)),
-    ]);
-    expect(sg.size).toBe(2);
-    const hit = sg.hitTest(50, 50);
-    // Should hit 'real', not 'zero' (zero-area node can't contain point)
-    expect(hit?.id).toBe('real');
-  });
-
-  test('node with id containing colons (AST source ref) resolves correctly', () => {
-    const sg = new SceneGraph();
-    const id = '/src/components/Card.tsx:42:8';
-    sg.build([node(id, r(0, 0, 200, 200))]);
-    expect(sg.getById(id)?.isStamped).toBe(true);
-  });
-
-  test('getById on empty graph returns null without throwing', () => {
-    const sg = new SceneGraph();
-    expect(() => sg.getById('anything')).not.toThrow();
-    expect(sg.getById('anything')).toBeNull();
-  });
-
-  test('patchMany with unknown IDs is a silent no-op', () => {
-    const sg = new SceneGraph();
-    sg.build([node('A', r(0, 0, 100, 100))]);
-    expect(() => sg.patchMany([{ id: 'GHOST', rect: r(0, 0, 1, 1) }])).not.toThrow();
-    expect(sg.size).toBe(1);
-  });
-});
 
 // ─── 16. HistoryStore: jumpTo out-of-bounds safety ──────────────────────────
 
@@ -515,8 +328,8 @@ describe('[Bug] Server: unknown message type', () => {
     await new Promise<void>((res) => setTimeout(res, 100));
 
     // Server should still be alive — send a valid ping
-    const pong = await sendAndAwait(ws, { type: 'GET_PENDING_OPS' });
-    expect(pong.type).toBe('PENDING_OPS');
+    const pong = await sendAndAwait(ws, { type: 'GET_HISTORY' });
+    expect(pong.type).toBe('HISTORY_UPDATE');
 
     ws.close();
   });

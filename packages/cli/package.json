@@ -12,10 +12,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@srivarsank/adapter-html": "^1.0.1",
-    "@srivarsank/adapter-svelte": "^1.0.1",
-    "@srivarsank/adapter-vue": "^1.0.1",
-    "@srivarsank/ast-writer": "^1.0.1",
+    "@srivarsank/core": "^1.0.1",
     "@srivarsank/server": "^1.0.1"
   },
   "devDependencies": {

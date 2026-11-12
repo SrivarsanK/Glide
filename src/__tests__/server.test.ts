@@ -28,7 +28,7 @@ test('live and staged style edits have identical source output', async () => {
 test('rejects malformed JSON and remains responsive', async () => {
   const f = await startTestProject(), client = await f.connect();
   expect((await request(client, 'invalid json')).error).toContain('Malformed JSON');
-  expect((await request(client, { type: 'GET_PENDING_OPS' }, 'PENDING_OPS')).pendingCount).toBe(0);
+  expect((await request(client, { type: 'GET_HISTORY' }, 'HISTORY_UPDATE')).currentIndex).toBe(-1);
 });
 
 test('requires a transaction ID and source digest for every live edit', async () => {

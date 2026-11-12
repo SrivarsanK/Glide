@@ -507,7 +507,7 @@ export function watchRegistry(
   projectRoot: string,
   onUpdate: (registry: ComponentRegistry) => void,
 ): any /* FSWatcher */ {
-  // chokidar is a CJS package — use same require pattern as scanner.ts
+  // chokidar is a CJS package, so it is loaded with require.
   const chokidar = require('chokidar');
   const meta = detectProjectMeta(projectRoot);
   const WATCH_EXTS = /\.(jsx|tsx|js|ts|vue|svelte|astro|html)$/i;

@@ -15,8 +15,11 @@ const npmCli = [process.env.npm_execpath,
   path.resolve(path.dirname(process.execPath), '../lib/node_modules/npm/bin/npm-cli.js'),
 ].find(candidate => candidate && fs.existsSync(candidate));
 assert.ok(npmCli, 'Run this test with npm run test:consumer so npm is available.');
+// npm run exports the developer's own npm settings as npm_config_* variables. A user-level
+// "allow-scripts" setting makes the nested project install fail, so it is not passed on.
+const npmEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^npm_config_allow[-_]scripts$/i.test(key)));
 const runNpm = (args, cwd) => execFileSync(process.execPath, [npmCli, ...args], {
-  cwd, encoding: 'utf8', timeout: 180000,
+  cwd, encoding: 'utf8', timeout: 180000, env: npmEnv,
 });
 let cli, browser, vite, production;
 const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).version;

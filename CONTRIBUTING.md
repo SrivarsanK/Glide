@@ -53,7 +53,6 @@ specification as a description of the current implementation.
 | Command | Purpose |
 | --- | --- |
 | `npm run build` | Compile internal modules and bundle JavaScript, declarations and skills |
-| `npm run dev` | Alias for a single build; it is not a watch server |
 | `npm run typecheck` | Check every workspace and the root, including unused locals and parameters |
 | `npm test` | Run all Vitest suites |
 | `npm run test:watch` | Watch source tests while editing |

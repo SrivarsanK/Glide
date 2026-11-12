@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const packages = ['core', 'ast-writer', 'server', 'overlay', 'babel-plugin', 'vite-plugin',
-  'adapters/vue', 'adapters/svelte', 'adapters/astro', 'adapters/html'];
+  'adapters/vue', 'adapters/svelte', 'adapters/astro'];
 
 export default defineConfig({
   // Workspace tests must exercise current source, not a previous dist build.

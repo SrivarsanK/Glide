@@ -11,7 +11,6 @@ import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassN
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { HistoryStore } from './history-manager.js';
-import { deltaQueue, PropertyDeltaQueue } from './delta-queue.js';
 import { MutationService, contentDigest, type MutationOperation } from './mutation-service.js';
 import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
@@ -1482,39 +1481,11 @@ export class GlideServer {
                 return;
               }
 
-              if (message.type === 'GET_PENDING_OPS') {
-                ws.send(JSON.stringify({
-                  type: 'PENDING_OPS',
-                  ...deltaQueue.getStats()
-                }));
-                return;
-              }
-
-              if (message.type === 'ACK_OP') {
-                const { opId, nodeId, prop } = message;
-                let acked = false;
-                if (opId) {
-                  acked = deltaQueue.ackOpId(opId);
-                } else if (nodeId && prop) {
-                  acked = deltaQueue.ackPending(nodeId, prop);
-                }
-                ws.send(JSON.stringify({
-                  type: 'ACK_OP_STATUS',
-                  success: acked,
-                  opId,
-                  nodeId,
-                  prop
-                }));
-                return;
-              } else {
-                ws.send(
-                  JSON.stringify({
-                    type: 'status',
-                    success: false,
-                    error: `Unsupported message type: ${message.type}`,
-                  })
-                );
-              }
+              ws.send(JSON.stringify({
+                type: 'status',
+                success: false,
+                error: `Unsupported message type: ${message.type}`,
+              }));
             } catch (err: any) {
               console.error('[Glide] WebSocket handler error:', err);
               ws.send(
@@ -1656,9 +1627,5 @@ export class GlideServer {
   /** Observe persisted edits. Callbacks must not perform source writes. */
   public onEdit(callback: EditCallback): void {
     this.editCallbacks.push(callback);
-  }
-
-  public getDeltaQueue(): PropertyDeltaQueue {
-    return deltaQueue;
   }
 }
