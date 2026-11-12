@@ -15,7 +15,8 @@ These exports were not used by the editor, the CLI or the Vite plugin. A program
 | Removed | Use instead |
 |---|---|
 | `reorderJSXElement`, `insertJSXElement`, `groupJSXElements`, `ungroupJSXElement`, `arrangeJSXElement` | `transformJSXBatch` with a structural change (`reorder`, `insert`, `group`, `ungroup`, `arrange`) |
-| `updateCSSModuleRule`, `parseTailwindClasses`, `updateTailwindClasses` | `updateClassString`, or `transformJSXBatch` with a `class` change |
+| `parseTailwindClasses`, `updateTailwindClasses` | `updateClassString`, or `transformJSXBatch` with a `class` change |
+| `updateCSSModuleRule` | No replacement. It edited declarations in CSS module text, which `updateClassString` and `transformJSXBatch` do not edit. |
 | `updateSvelteClass`, `updateSvelteStyle`, `updateSvelteText` | `setSvelteClassAt`, `setSvelteStyleAt`, `setSvelteTextAt` (find the element by line and column) |
 | `updateAstroClass`, `updateAstroStyle`, `updateAstroText` | `setAstroClassAt`, `setAstroStyleAt`, `setAstroTextAt` |
 | `updateHTMLClass`, `updateHTMLStyle`, `updateHTMLText`, `getElementClass` | `setAstroClassAt`, `setAstroStyleAt`, `setAstroTextAt` (the same scanner handles HTML) |
