@@ -45,7 +45,7 @@ flowchart LR
 
 1. Add the `glideSourceStamping()` plugin to your Vite config. In dev mode, it marks each element with its file, line and column.
 2. Run your dev server as usual (`npm run dev`).
-3. Open the editor at `http://localhost:5173/__glide/` (use your own port).
+3. Open the editor address that the dev server prints, such as `http://127.0.0.1:5173/__glide/`.
 4. Click elements on the canvas to inspect their properties, change styles, or drag them.
 5. Glide writes each change to the exact element in your source file.
 6. When you change a file in your code editor, the canvas updates without an iframe reload.
@@ -149,7 +149,9 @@ If your team consumes packages from GitHub Packages:
 
 To enable click-to-element mapping, add the `glideSourceStamping` plugin to your Vite configuration. This stamps elements with source file locations during development.
 
-With the plugin installed you do not need the `glide` command: run your dev server as usual and open the address it prints, such as **http://localhost:5173/__glide/**. The editor is served by Vite itself, so the preview loads your app directly and hot module replacement works as it does without Glide. Pass `glideSourceStamping({ editor: false })` to keep using the `glide` command instead.
+With the plugin installed you do not need the `glide` command: run your dev server as usual and open the address it prints, such as **http://127.0.0.1:5173/__glide/**. The editor is served by Vite itself, so the preview loads your app directly and hot module replacement works as it does without Glide.
+
+The editor uses the loopback IP address and the preview loads your app from `localhost`. These are different origins for the browser, so scripts in your app cannot read the editor page or send edits. If you open `http://localhost:5173/__glide/`, Glide sends you to the IP address. Pass `glideSourceStamping({ editor: false })` to keep using the `glide` command instead.
 
 **React (`vite.config.ts`):**
 ```ts
@@ -249,7 +251,7 @@ When Glide starts, it indexes every component in your project into `glide-compon
 }
 ```
 
-The file updates within 300 ms when you create, rename, or delete components. The `glide` command writes this file; the editor at `/__glide/` does not.
+The file updates within 300 ms when you create, rename, or delete components. Both the `glide` command and the editor at `/__glide/` write this file.
 
 Add the registry to your `.gitignore`:
 ```gitignore
