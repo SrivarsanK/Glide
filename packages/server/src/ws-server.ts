@@ -894,6 +894,11 @@ export type EditCallback = (
   hash?: string
 ) => void | Promise<void>;
 
+/** `127.0.0.1:5173` or `[::1]:5173`: a loopback address written as an IP, not as a name. */
+function loopbackLiteral(host: string | undefined): boolean {
+  return /^(127\.0\.0\.1|\[::1\]):\d+$/.test(host || '');
+}
+
 function normalizePathKey(filePath: string): string {
   return path.resolve(filePath).replace(/\\/g, '/').toLowerCase();
 }
@@ -967,6 +972,16 @@ export class GlideServer {
   }
 
   /** The port browsers reach Glide on: its own server's, or the dev server's when attached. */
+  /**
+   * Attached to a dev server, the editor answers only on the loopback IP (127.0.0.1 or [::1])
+   * and the preview loads the app from "localhost". The two are different origins, so scripts
+   * in the app cannot read the editor page or its session token. A remoteAccess configuration
+   * names its own hosts and keeps one origin.
+   */
+  private isolated(): boolean {
+    return !!this.hosted && !this.config.remoteAccess;
+  }
+
   private servedPort(): number {
     const address = (this.hosted?.httpServer ?? this.server)?.address();
     return address && typeof address === 'object' ? address.port : this.port;
@@ -1010,7 +1025,17 @@ export class GlideServer {
           // ── Editor shell: '/' on Glide's own server, '/__glide/' when attached ──
           const shell = this.hosted ? ['/__glide', '/__glide/', '/__glide/index.html'] : ['/', '/index.html'];
           if (shell.includes(pathname)) {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store' });
+            if (this.isolated() && !loopbackLiteral(req.headers.host)) {
+              // Asked for by name ("localhost"): send the browser to the address this connection arrived on.
+              const local = (req.socket.localAddress || '127.0.0.1').replace(/^::ffff:/, '');
+              const address = local.includes(':') ? '[::1]' : '127.0.0.1';
+              const scheme = (req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http';
+              res.writeHead(302, { Location: `${scheme}://${address}:${port}/__glide/`, 'Cache-Control': 'no-store' });
+              res.end();
+              return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store',
+              'Cross-Origin-Resource-Policy': 'same-origin' });
             res.end(getEditorHTML(this.config, this.sessionToken, { hosted: !!this.hosted }));
             return;
           }
@@ -1106,6 +1131,8 @@ export class GlideServer {
           this.hosted.onUpgrade = (req, socket, head) => {
             if (new URL(req.url || '/', 'http://localhost').pathname !== '/__glide/ws') return;
             if (!trustedRequest(req, this.servedPort(), this.config.remoteAccess)) { socket.destroy(); return; }
+            // The app's origin ("localhost") gets no editor socket, even with a token.
+            if (this.isolated() && !loopbackLiteral(req.headers.host)) { socket.destroy(); return; }
             wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
           };
           this.hosted.httpServer.on('upgrade', this.hosted.onUpgrade);

@@ -1,3 +1,5 @@
+type Destination = { parentId: string; file: string; x: number; y: number };
+
 interface WorkspaceObject {
   id: string;
   source: string;
@@ -18,7 +20,7 @@ export function createWorkspaceCanvas(options: {
   layers: HTMLElement;
   point(event: PointerEvent): { x: number; y: number };
   inside(x: number, y: number): boolean;
-  destination(x: number, y: number): { parentId: string; file: string; x: number; y: number } | null;
+  destination(x: number, y: number): Destination | null | Promise<Destination | null>;
   mutate(source: string, change: Record<string, unknown>): void;
   error(message: string): void;
   select(source: string): void;
@@ -95,15 +97,20 @@ export function createWorkspaceCanvas(options: {
           if (Math.abs(x - object.x) + Math.abs(y - object.y) < 2) { if (deferredRender) { deferredRender = false; render(); } return; }
           const drop = options.point(next);
           if (options.inside(drop.x, drop.y)) {
-            const target = options.destination(drop.x, drop.y);
-            if (!target || target.file.replace(/\\/g, '/') !== object.file.replace(/\\/g, '/')) {
-              options.error('Choose a container in the same source file to preserve this element’s bindings.');
-              render(); return;
-            }
-            // destination offsets are for the pointer; retain the grabbed offset.
-            options.mutate(object.source, { type: 'attach', parentId: target.parentId,
-              x: target.x - (drop.x - x), y: target.y - (drop.y - y) });
-          } else options.mutate(object.source, { type: 'workspace-position', x, y });
+            // The page may answer through the bridge, so the destination can arrive later.
+            Promise.resolve(options.destination(drop.x, drop.y)).then(target => {
+              if (!target || target.file.replace(/\\/g, '/') !== object.file.replace(/\\/g, '/')) {
+                options.error('Choose a container in the same source file to preserve this element’s bindings.');
+                render(); return;
+              }
+              // destination offsets are for the pointer; retain the grabbed offset.
+              options.mutate(object.source, { type: 'attach', parentId: target.parentId,
+                x: target.x - (drop.x - x), y: target.y - (drop.y - y) });
+              if (deferredRender) { deferredRender = false; render(); }
+            });
+            return;
+          }
+          options.mutate(object.source, { type: 'workspace-position', x, y });
           if (deferredRender) { deferredRender = false; render(); }
         };
         const cancel = (next: PointerEvent) => finish(next);
