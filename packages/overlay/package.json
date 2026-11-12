@@ -9,7 +9,6 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.8",
     "@srivarsank/core": "^1.0.1"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectProjectMeta, generateVSCodeConfig } from '../../packages/core/src/detect.js';
+import { detectProjectMeta } from '../../packages/core/src/detect.js';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
@@ -47,18 +47,4 @@ describe('Project Metadata & IDE Configuration', () => {
     expect(meta.srcDir).toBe('/projects/vue-app'); // no src folder simulated
   });
 
-  test('should generate VS Code editor settings', () => {
-    const existsMock = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-    const mkdirMock = vi.spyOn(fs, 'mkdirSync');
-    const writeMock = vi.spyOn(fs, 'writeFileSync');
-
-    generateVSCodeConfig('/my-project');
-
-    expect(mkdirMock).toHaveBeenCalledWith(path.join('/my-project', '.vscode'), { recursive: true });
-    expect(writeMock).toHaveBeenCalledWith(
-      expect.stringContaining('settings.json'),
-      expect.stringContaining('"glide.enabled": true'),
-      'utf-8'
-    );
-  });
 });

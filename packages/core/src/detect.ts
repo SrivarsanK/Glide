@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { FrameworkId, MetaFrameworkId, StylingMode, ProjectMeta } from './types.js';
+import type { FrameworkId, MetaFrameworkId, ProjectMeta } from './types.js';
 
 export function detectProjectMeta(projectRoot: string): ProjectMeta {
   let pkg: any = {};
@@ -41,48 +41,4 @@ export function detectProjectMeta(projectRoot: string): ProjectMeta {
   }
 
   return { framework, metaFramework, srcDir };
-}
-
-export function detectStyling(projectRoot: string): StylingMode {
-  let pkg: any = {};
-  const pkgPath = path.join(projectRoot, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    try {
-      pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    } catch {}
-  }
-
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
-  // Tailwind: check config file existence first (most reliable)
-  if (
-    fs.existsSync(path.join(projectRoot, 'tailwind.config.js')) ||
-    fs.existsSync(path.join(projectRoot, 'tailwind.config.ts')) ||
-    deps['tailwindcss']
-  ) return 'tailwind';
-
-  if (deps['styled-components'])  return 'styled-components';
-  if (deps['@emotion/react'])     return 'emotion';
-  if (deps['@stitches/react'])    return 'stitches';
-
-  // UnoCSS
-  if (deps['unocss'])             return 'unocss';
-
-  return 'css';
-}
-
-export function generateVSCodeConfig(projectRoot: string): void {
-  const vscodeDir = path.join(projectRoot, '.vscode');
-  if (!fs.existsSync(vscodeDir)) {
-    fs.mkdirSync(vscodeDir, { recursive: true });
-  }
-
-  const settingsPath = path.join(vscodeDir, 'settings.json');
-  const config = {
-    "glide.enabled": true,
-    "glide.editor.port": 4321,
-    "glide.stampOnSave": true
-  };
-
-  fs.writeFileSync(settingsPath, JSON.stringify(config, null, 2), 'utf-8');
 }

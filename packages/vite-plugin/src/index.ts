@@ -2,7 +2,7 @@ import { Plugin } from 'vite';
 import * as babel from '@babel/core';
 import * as path from 'path';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries, stampHTMLTemplate as stampTemplate, type GlideConfig } from '@srivarsank/core';
 import { GlideServer } from '@srivarsank/server';
 
 function normalizePath(filePath: string, rootDir: string): string {
@@ -1872,54 +1872,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
     DEFAULT_CONFIG.snapThresholdPx
   );
 
-  function stampHTMLTemplate(code: string, filepath: string): string {
-    // Replace Astro frontmatter (---...---), script, style and comments with spaces to preserve line/col numbers
-    let cleanCode = code
-      .replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length))
-      .replace(/<!--[\s\S]*?-->/g, match => ' '.repeat(match.length))
-      .replace(/<script[\s\S]*?<\/script>/gi, match => ' '.repeat(match.length))
-      .replace(/<style[\s\S]*?<\/style>/gi, match => ' '.repeat(match.length));
-
-    const tagRegex = /<([a-zA-Z][a-zA-Z0-9.-]*)/g;
-    let match;
-    let offset = 0;
-    let result = code;
-
-    while ((match = tagRegex.exec(cleanCode)) !== null) {
-      const tagName = match[1];
-
-      // Ignore template, script, style tags
-      if (['template', 'script', 'style'].includes(tagName.toLowerCase())) {
-        continue;
-      }
-
-      const index = match.index;
-      // `<svelte:head>` and other namespaced tags: an attribute placed after "svelte" would break the tag.
-      if (cleanCode[index + 1 + tagName.length] === ':') continue;
-
-      // Check if tag already has data-gl-source
-      const restOfTag = cleanCode.substring(index, index + 500);
-      const tagEnd = restOfTag.indexOf('>');
-      const tagContent = tagEnd !== -1 ? restOfTag.substring(0, tagEnd) : restOfTag;
-      if (tagContent.includes(glideConfig.sourceAttribute)) {
-        continue;
-      }
-
-      const prefix = code.substring(0, index);
-      const lines = prefix.split('\n');
-      const line = lines.length;
-      const col = lines[lines.length - 1].length + 1;
-
-      const sourceAttrVal = ` ${glideConfig.sourceAttribute}="${filepath}:${line}:${col}"`;
-      const insertPos = index + 1 + tagName.length;
-      const adjustedPos = insertPos + offset;
-
-      result = result.substring(0, adjustedPos) + sourceAttrVal + result.substring(adjustedPos);
-      offset += sourceAttrVal.length;
-    }
-
-    return result;
-  }
+  const stampHTMLTemplate = (code: string, filepath: string) => stampTemplate(code, filepath, glideConfig.sourceAttribute);
 
   /**
    * Stamp the authored elements of a page, but not <html>, <head> or <body>. Scripts add

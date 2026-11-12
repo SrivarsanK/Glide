@@ -11,8 +11,6 @@ export { inspectJSXProps } from './props.js';
 export { forwardsClassName, activeVariants } from './edit-scope.js';
 export type { ActiveVariant } from './edit-scope.js';
 export type { JSXMutation } from './writer.js';
-export { reorderJSXElement, insertJSXElement, groupJSXElements, ungroupJSXElement, arrangeJSXElement, parseJSXElements } from './reorder.js';
+export { parseJSXElements } from './reorder.js';
 export type { JSXElementRecord } from './reorder.js';
-export { updateCSSModuleRule, rewriteTailwindToken, rewriteClassNameToken } from './css.js';
-export { parseTailwindClasses, updateTailwindClasses } from './properties.js';
 

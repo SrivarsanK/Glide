@@ -1,6 +1,6 @@
 {
   "name": "@srivarsank/glide",
-  "version": "1.1.2",
+  "version": "2.0.0",
   "description": "Glide — Code-native visual design tool. Edit your React/Vue/Svelte/Astro app visually and write back to source.",
   "license": "Apache-2.0",
   "author": "Srivarsan Kannan <srivarsankannan@gmail.com> (https://github.com/SrivarsanK)",
@@ -18,7 +18,6 @@
     "astro",
     "vite",
     "ast",
-    "cst",
     "wysiwyg",
     "design-mode",
     "devtools"
@@ -38,7 +37,7 @@
   },
   "sideEffects": false,
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=20.0.0",
     "npm": ">=8.0.0"
   },
   "files": [
@@ -66,7 +65,6 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "node scripts/build-single-package.js",
     "build": "node scripts/build-single-package.js",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "vitest run",
@@ -86,12 +84,10 @@
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
     "@babel/types": "^7.24.0",
-    "@chenglou/pretext": "^0.0.8",
     "@fontsource/inter": "5.2.5",
     "@vue/compiler-sfc": "^3.4.21",
     "chokidar": "^3.6.0",
     "html-dom-parser": "^8.0.0",
-    "html-react-parser": "^6.1.3",
     "lucide": "0.468.0",
     "picocolors": "^1.0.0",
     "postcss": "^8.4.0",
