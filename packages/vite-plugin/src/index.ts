@@ -3,7 +3,7 @@ import * as babel from '@babel/core';
 import * as path from 'path';
 import * as fs from 'fs';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries, type GlideConfig } from '@srivarsank/core';
 import { GlideServer } from '@srivarsank/server';
 
 function normalizePath(filePath: string, rootDir: string): string {
@@ -1437,8 +1437,19 @@ export function buildBridgeScript(
   });
 
   window.addEventListener('message', function(e) {
-    if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
+    // The editor may have another origin than this page. The referrer names it only until
+    // the page navigates; ancestorOrigins names the embedding page for the whole session.
+    var editorUrl = (window.location.ancestorOrigins && window.location.ancestorOrigins[0]) || document.referrer;
+    if (!(${trustedWindowMessage.toString()})(e, window.parent, editorUrl)) return;
     if (!e.data) return;
+    if (e.data.type === 'glide:query') {
+      var answer = null;
+      try {
+        answer = (${createFrameQueries.toString()})(window, { source: '${sourceAttr}', selected: '${selectedAttr}', hover: '${hoverAttr}' })(e.data.query, e.data.payload);
+      } catch (_) {}
+      window.parent.postMessage({ type: 'glide:query-result', id: e.data.id, result: answer }, '*');
+      return;
+    }
     if (e.data.type === 'glide:set-interaction-mode') {
       interactionMode = !!e.data.enabled;
       if (document.documentElement) {
@@ -1987,7 +1998,10 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
         httpServer.once('listening', () => {
           const address = httpServer.address();
           const port = address && typeof address === 'object' ? address.port : server.config.server.port;
-          server.config.logger.info(`  [Glide] Editor: http://localhost:${port}/__glide/`);
+          // The editor answers on the loopback IP, a different origin than the app on "localhost".
+          const host = glideConfig.remoteAccess ? 'localhost' : address && typeof address === 'object' && address.address === '::1' ? '[::1]' : '127.0.0.1';
+          const scheme = server.config.server.https ? 'https' : 'http';
+          server.config.logger.info(`  [Glide] Editor: ${scheme}://${host}:${port}/__glide/`);
         });
         // Vite's server.close() does not always emit 'close' on the HTTP server (for example
         // when it never listened), so closeBundle below stops the editor as well.

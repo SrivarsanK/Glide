@@ -36,15 +36,15 @@ async function devServer() {
     http.close(() => resolve());
   }));
   cleanups.push(() => glide.stop());
-  return { http, glide, port, root, origin: `http://localhost:${port}` };
+  return { http, glide, port, root, origin: `http://127.0.0.1:${port}`, app: `http://localhost:${port}` };
 }
 
-function get(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+function get(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string; location?: string }> {
   return new Promise((resolve, reject) => {
     const req = request(url, { headers: { Connection: 'close', ...headers } }, res => {
       let body = '';
       res.on('data', chunk => { body += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode!, body }));
+      res.on('end', () => resolve({ status: res.statusCode!, body, ...(res.headers.location ? { location: res.headers.location } : {}) }));
     });
     req.on('error', reject);
     req.end();
@@ -127,4 +127,26 @@ test('the Vite plugin stops the editor when Vite closes, even if the server neve
   http.emit('close');
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(stops).toBe(1);
+});
+
+test('the editor lives on the loopback IP, so scripts in the app on "localhost" cannot reach it', async () => {
+  const { origin, app, port } = await devServer();
+  // Asked for by name, the editor page is not served: the browser is sent to the IP origin.
+  const byName = await get(app + '/__glide/');
+  expect(byName.status).toBe(302);
+  expect(byName.location).toBe(`http://127.0.0.1:${port}/__glide/`);
+  expect(byName.body).not.toContain('token');
+  // The page that holds the token cannot be embedded as a cross-origin resource.
+  const page = await get(origin + '/__glide/');
+  const token = page.body.match(/type: 'hello', token: "([a-f0-9]+)"/)![1];
+  // A script in the app has the app's origin. It gets no editor socket on either host, even with the token.
+  await expect(open(origin.replace('http', 'ws') + '/__glide/ws', app)).rejects.toThrow();
+  await expect(open(app.replace('http', 'ws') + '/__glide/ws', app)).rejects.toThrow();
+  // The editor's own origin still connects.
+  const editor = await open(origin.replace('http', 'ws') + '/__glide/ws', origin);
+  editor.send(JSON.stringify({ type: 'hello', token }));
+  expect(JSON.parse(await editor.first)).toMatchObject({ type: 'authenticated', success: true });
+  editor.close();
+  // The preview loads the app from the other origin.
+  expect(page.body).toContain("appBase = window.location.protocol + '//localhost'");
 });

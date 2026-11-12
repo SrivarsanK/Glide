@@ -41,7 +41,7 @@ An agent edits the source file directly. Glide watches the project, so the canva
 
 | Mode | Start | Editor address |
 |:---|:---|:---|
-| Inside Vite (default with the plugin) | `npm run dev` | `http://localhost:5173/__glide/` |
+| Inside Vite (default with the plugin) | `npm run dev` | `http://127.0.0.1:5173/__glide/` |
 | Standalone | `npx @srivarsank/glide 5173` | `http://localhost:7777` |
 
 The Vite plugin `glideSourceStamping()` is necessary for editing. It stamps each element with `data-gl-source="file:line:col"` in dev mode. Without stamps, elements can be selected but not edited.
@@ -51,7 +51,7 @@ The Vite plugin `glideSourceStamping()` is necessary for editing. It stamps each
 ## 3. Component Discovery via `glide-components.json`
 
 Never guess file paths or crawl the workspace manually.
-The `glide` command writes **`glide-components.json`** in the project root and updates it with a 300 ms debounce when source files change.
+Glide writes **`glide-components.json`** in the project root and updates it with a 300 ms debounce when source files change.
 
 ```ts
 interface ComponentRegistry {

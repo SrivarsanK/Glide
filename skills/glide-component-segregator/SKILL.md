@@ -119,7 +119,7 @@ if (bucket.cssFiles.length > 0) {
 | **Co-located CSS** | Scans directory for `.css`, `.module.css`, `.scss`, `.module.scss`, `.less` matching component stem |
 | **File added / deleted** | Registry auto-rebuilds in 300 ms via `watchRegistry` |
 | **File changed during a canvas edit** | The server refuses the user's save with `STALE_DIGEST`; the user selects the element again |
-| **Registry is missing** | Only the `glide` command writes it. With the editor at `/__glide/` only, run `npx @srivarsank/glide` once or read the source files |
+| **Registry is missing** | Glide writes it when the editor server starts (the dev server with the plugin, or the `glide` command). Start one of them, or read the source files |
 
 ---
 

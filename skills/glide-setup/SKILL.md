@@ -129,7 +129,7 @@ glide-components.json
 npm run dev
 ```
 
-Open the address that Vite prints with `/__glide/` at the end, for example **http://localhost:5173/__glide/**. The line `[Glide] Editor: ...` in the terminal shows the full address.
+Open the address in the `[Glide] Editor: ...` line that the dev server prints, for example **http://127.0.0.1:5173/__glide/**. The editor uses the IP address `127.0.0.1` and the app stays on `localhost`; this keeps app scripts away from the editor. `http://localhost:5173/__glide/` redirects to the IP address.
 
 **Option B — standalone command:**
 
@@ -141,7 +141,7 @@ npm run dev
 npx @srivarsank/glide 5173
 ```
 
-Open **http://localhost:7777**. The `glide` command also writes `glide-components.json`.
+Open **http://localhost:7777**.
 
 To use only Option B, pass `glideSourceStamping({ editor: false })`.
 
@@ -165,13 +165,14 @@ Dynamic values (`:class`, `class={...}`, `{...spread}`) are refused with a clear
 2. [ ] Elements show a blue selection boundary on hover/click.
 3. [ ] The properties panel is active for a selected element. If it is inactive, the plugin is not installed or the dev server was not restarted.
 4. [ ] Editing a color or class updates the source file and the canvas.
-5. [ ] With Option B, `glide-components.json` is generated in the project root.
+5. [ ] `glide-components.json` is generated in the project root.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 |:---|:---|
-| Editor shows "Disconnected" | Open the editor from `localhost` or `127.0.0.1`. Other hosts are refused unless `remoteAccess` is set in `glide.config.json`. |
+| Editor shows "Disconnected" | Open the editor from the printed address (`127.0.0.1` with Option A; `localhost` or `127.0.0.1` with Option B). Other hosts are refused unless `remoteAccess` is set in `glide.config.json`. |
+| App behaves differently in the preview | With Option A the app must be reachable at `localhost` on the dev server's port. |
 | Selection works, panel is inactive | No source stamps. Add the plugin and restart the dev server. |
 | `STALE_DIGEST` on save | The file changed after selection. Select the element again. |
 | `UNSUPPORTED_OPERATION` on save | Glide cannot make this edit exactly. The message gives the reason; edit in source. |

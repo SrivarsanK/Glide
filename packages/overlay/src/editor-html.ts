@@ -1,4 +1,4 @@
-import { GlideConfig, DEFAULT_CONFIG, trustedWindowMessage } from '@srivarsank/core';
+import { GlideConfig, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries } from '@srivarsank/core';
 import { createSourceMapping } from './source-mapping.js';
 import { createMutationTransport } from './mutation-transport.js';
 import { createSourceProps } from './source-props.js';
@@ -4086,41 +4086,45 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             dispatchShapeInsert(currentTool, left, top, width, height);
           }
 
-          function resolveParentAtPoint(x, y) {
-            if (!insideFrame(x, y)) return null;
-            const iframe = document.getElementById('app-iframe');
-            if (!iframe) return null;
-            const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-            if (!iDoc) return null;
-            const containers = new Set(['div', 'main', 'section', 'article', 'aside', 'header', 'footer', 'nav', 'form', 'fieldset', 'li', 'td']);
-            let stampedEl = iDoc.elementFromPoint(x, y);
-            while (stampedEl && (!stampedEl.hasAttribute('data-gl-source') || !containers.has(stampedEl.localName))) stampedEl = stampedEl.parentElement;
-            if (!stampedEl) return null;
-            const sourceAttr = stampedEl.getAttribute('data-gl-source') || '';
-            const parsed = parseSource(sourceAttr);
-            if (!parsed) return null;
-            // Absolute offsets are relative to the containing block, not the hit node.
-            let block = stampedEl;
-            const win = iframe.contentWindow;
-            while (block && win.getComputedStyle(block).position === 'static' && win.getComputedStyle(block).transform === 'none') block = block.parentElement;
-            const rect = block ? block.getBoundingClientRect() : { left: -win.scrollX, top: -win.scrollY };
-            return {
-              parentId: sourceAttr, file: parsed.file,
-              x: Math.round(x - rect.left - (block ? block.clientLeft : 0) + (block ? block.scrollLeft : 0)),
-              y: Math.round(y - rect.top - (block ? block.clientTop : 0) + (block ? block.scrollTop : 0))
-            };
+          // Ask the app page a question. With the editor's origin the document is read directly;
+          // with another origin (the hosted editor) the bridge in the page answers.
+          var frameQueryWaiters = new Map();
+          var frameQuerySequence = 0;
+          function frameAsk(query, payload) {
+            const frame = document.getElementById('app-iframe');
+            if (!frame || !frame.contentWindow) return Promise.resolve(null);
+            let doc = null;
+            try { doc = frame.contentDocument; } catch (_) {}
+            if (doc) {
+              try {
+                return Promise.resolve((${createFrameQueries.toString()})(frame.contentWindow, ${JSON.stringify({ source: config.sourceAttribute, selected: config.selectedAttribute, hover: config.hoverAttribute })})(query, payload || {}));
+              } catch (_) { return Promise.resolve(null); }
+            }
+            return new Promise(resolve => {
+              const id = ++frameQuerySequence;
+              frameQueryWaiters.set(id, resolve);
+              frame.contentWindow.postMessage({ type: 'glide:query', id, query, payload: payload || {} }, '*');
+              setTimeout(() => { if (frameQueryWaiters.delete(id)) resolve(null); }, 3000);
+            });
           }
 
-          function dispatchShapeInsert(tool, x, y, width, height) {
-            const detached = !insideFrame(drawStart.x, drawStart.y);
-            let resolved = detached ? null : resolveParentAtPoint(drawStart.x, drawStart.y);
+          function resolveParentAtPoint(x, y) {
+            if (!insideFrame(x, y)) return Promise.resolve(null);
+            return frameAsk('container-at', { x, y }).then(hit => {
+              const parsed = hit && parseSource(hit.parentId);
+              return parsed ? { parentId: hit.parentId, file: parsed.file, x: hit.x, y: hit.y } : null;
+            });
+          }
+
+          async function dispatchShapeInsert(tool, x, y, width, height) {
+            // A new drawing may start while the page answers; keep the point where this one started.
+            const origin = { x: drawStart.x, y: drawStart.y };
+            const detached = !insideFrame(origin.x, origin.y);
+            let resolved = detached ? null : await resolveParentAtPoint(origin.x, origin.y);
             if (detached) {
-              const frame = document.getElementById('app-iframe');
-              const doc = frame.contentDocument;
-              const root = doc && Array.from(doc.querySelectorAll('[data-gl-source]')).find(el => ['div', 'main', 'section', 'article'].includes(el.localName));
-              const source = root && root.getAttribute('data-gl-source');
-              const parsed = source && parseSource(source);
-              if (parsed) resolved = { parentId: source, file: parsed.file, x, y };
+              const root = await frameAsk('first-container');
+              const parsed = root && parseSource(root.parentId);
+              if (parsed) resolved = { parentId: root.parentId, file: parsed.file, x, y };
             }
             if (!resolved) {
               showToast('error', 'Choose a mapped source container before drawing.'); setTool('select'); return;
@@ -4142,8 +4146,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 file: targetFile,
                 parentId: parentId,
                 elementType: elementType,
-                x: detached ? x : resolved.x + x - drawStart.x,
-                y: detached ? y : resolved.y + y - drawStart.y,
+                x: detached ? x : resolved.x + x - origin.x,
+                y: detached ? y : resolved.y + y - origin.y,
                 detached,
                 workspaceId: detached ? crypto.randomUUID() : undefined,
                 width: Math.round(width),
@@ -4701,6 +4705,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!(${trustedWindowMessage.toString()})(event, frame?.contentWindow, frame?.src, window.location.href)) return;
             const data = event.data;
             if (!data || !data.type) return;
+
+            if (data.type === 'glide:query-result') {
+              const waiter = frameQueryWaiters.get(data.id);
+              if (waiter) { frameQueryWaiters.delete(data.id); waiter(data.result === undefined ? null : data.result); }
+              return;
+            }
 
             if (data.type === 'glide:ready') {
               syncInteractionMode();
@@ -5733,6 +5743,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // Hosted by the dev server, the app is on this origin and needs no proxy prefix.
             var appBase = ${JSON.stringify(appBase)};
+            // Hosted on a loopback address, the app runs on "localhost": another origin, so its scripts cannot reach the editor.
+            if (${JSON.stringify(!!options.hosted)} && /^(127\\.0\\.0\\.1|\\[::1\\])$/.test(window.location.hostname)) {
+              appBase = window.location.protocol + '//localhost' + (window.location.port ? ':' + window.location.port : '');
+            }
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
               // Extract path from absolute URL and route via proxy
@@ -5779,16 +5793,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // A mapped template can render more than one element. Make the scope
             // of source edits visible instead of implying an instance-only edit.
             if (selectedElement && parseSource(selectedElement.source)) {
-              try {
-                const nodes = document.getElementById('app-iframe').contentDocument.querySelectorAll('[data-gl-source]');
-                const count = Array.from(nodes).filter(node => isSourceMatch(node.getAttribute('data-gl-source'), selectedElement.source)).length;
+              const asked = selectedElement.source;
+              frameAsk('sources').then(sources => {
+                // The selection may have changed while the page answered.
+                if (!sources || !selectedElement || selectedElement.source !== asked) return;
+                const count = sources.filter(source => isSourceMatch(source, asked)).length;
                 // With component owners, the edit scope picker states where edits go instead.
                 if (count > 1 && !(selectedElement.owners && selectedElement.owners.length)) {
                   const banner = document.getElementById('source-mapping-error');
                   banner.hidden = false;
                   banner.textContent = 'Shared source: edits affect all ' + count + ' rendered instances. Individual instances cannot be moved between layers.';
                 }
-              } catch (_) { /* Cross-origin previews cannot expose instance counts. */ }
+              });
             }
             sourceProps.request();
             requestEditScopes();
@@ -7080,18 +7096,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (menu) menu.style.display = 'none';
           }
 
-          function triggerExport(formatOverride, scaleOverride) {
+          async function triggerExport(formatOverride, scaleOverride) {
             const menu = document.getElementById('glide-context-menu');
             if (menu) menu.style.display = 'none';
 
             const iframe = document.getElementById('app-iframe');
-            if (!iframe) {
+            if (!iframe || !iframe.contentWindow) {
               showToast('error', 'No app preview loaded to export');
-              return;
-            }
-            const iDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-            if (!iDoc) {
-              showToast('error', 'Cannot access canvas document');
               return;
             }
 
@@ -7101,94 +7112,46 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const scaleStr = scaleOverride || (scaleSelect ? scaleSelect.value : '1x');
             const scale = parseInt(scaleStr, 10) || 1;
 
-            let targetEl = null;
-            let label = 'canvas';
-            if (selectedElement && selectedElement.source) {
-              targetEl = iDoc.querySelector('[data-glide-selected]') ||
-                         iDoc.querySelector('[data-gl-source="' + selectedElement.source + '"]');
-              if (targetEl) {
-                label = targetEl.tagName.toLowerCase();
-              }
-            }
-            if (!targetEl) {
-              targetEl = iDoc.body;
-              label = 'canvas';
-            }
-
-            showToast('info', 'Exporting ' + label + ' as ' + format + ' (' + scale + 'x)...');
-
             if (format === 'PDF') {
-              try {
-                if (iframe.contentWindow) {
-                  iframe.contentWindow.focus();
-                  iframe.contentWindow.print();
-                  showToast('success', '✓ Print/PDF dialog triggered for ' + label);
-                }
-              } catch (err) {
-                showToast('error', 'PDF export failed: ' + err.message);
-              }
+              const printed = await frameAsk('print');
+              if (printed) showToast('success', '\u2713 Print/PDF dialog triggered');
+              else showToast('error', 'PDF export failed: the preview did not answer');
               return;
             }
 
-            try {
-              const rect = targetEl.getBoundingClientRect();
-              const width = Math.max(1, Math.round(rect.width));
-              const height = Math.max(1, Math.round(rect.height));
+            const data = await frameAsk('export', { source: selectedElement && selectedElement.source ? selectedElement.source : undefined });
+            if (!data) {
+              showToast('error', 'Cannot access canvas document');
+              return;
+            }
+            const label = data.label;
+            const width = data.width;
+            const height = data.height;
+            showToast('info', 'Exporting ' + label + ' as ' + format + ' (' + scale + 'x)...');
 
-              if (format === 'SVG' && targetEl.tagName.toLowerCase() === 'svg') {
-                const svgString = new XMLSerializer().serializeToString(targetEl);
-                const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            try {
+              if (format === 'SVG' && data.svg) {
+                const blob = new Blob([data.svg], { type: 'image/svg+xml;charset=utf-8' });
                 downloadExportBlob(blob, 'glide-' + label + '-' + Date.now() + '.svg');
-                showToast('success', '✓ Exported ' + label + ' as SVG');
+                showToast('success', '\u2713 Exported ' + label + ' as SVG');
                 return;
               }
 
-              let cssRules = '';
-              try {
-                for (let s = 0; s < iDoc.styleSheets.length; s++) {
-                  const sheet = iDoc.styleSheets[s];
-                  try {
-                    const rules = sheet.cssRules || sheet.rules;
-                    if (rules) {
-                      for (let r = 0; r < rules.length; r++) {
-                        cssRules += rules[r].cssText + '\\n';
-                      }
-                    }
-                  } catch (e) {}
-                }
-              } catch (e) {}
-
-              const clone = targetEl.cloneNode(true);
-              clone.removeAttribute('data-glide-selected');
-              clone.removeAttribute('data-glide-hover');
-              if (clone.querySelectorAll) {
-                clone.querySelectorAll('*').forEach(el => {
-                  el.removeAttribute('data-glide-selected');
-                  el.removeAttribute('data-glide-hover');
-                });
-              }
-
               let bg = 'transparent';
-              if (iframe.contentWindow) {
-                const computed = iframe.contentWindow.getComputedStyle(targetEl);
-                if (computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)' && computed.backgroundColor !== 'transparent') {
-                  bg = computed.backgroundColor;
-                } else if (format === 'JPG') {
-                  bg = '#ffffff';
-                }
-              }
+              if (data.background && data.background !== 'rgba(0, 0, 0, 0)' && data.background !== 'transparent') bg = data.background;
+              else if (format === 'JPG') bg = '#ffffff';
 
-              const svgXml = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
-                '<style>' + cssRules + '</style>' +
+              const svgXml = data.svg || ('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+                '<style>' + data.css + '</style>' +
                 '<foreignObject width="100%" height="100%">' +
                 '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;background:' + bg + ';overflow:hidden;margin:0;padding:0;">' +
-                clone.outerHTML +
-                '</div></foreignObject></svg>';
+                data.html +
+                '</div></foreignObject></svg>');
 
               if (format === 'SVG') {
                 const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
                 downloadExportBlob(blob, 'glide-' + label + '-' + Date.now() + '.svg');
-                showToast('success', '✓ Exported ' + label + ' as SVG');
+                showToast('success', '\u2713 Exported ' + label + ' as SVG');
                 return;
               }
 
@@ -7214,7 +7177,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   canvas.toBlob((b) => {
                     if (b) {
                       downloadExportBlob(b, 'glide-' + label + '-' + scale + 'x-' + Date.now() + '.' + format.toLowerCase());
-                      showToast('success', '✓ Exported ' + label + ' as ' + format + ' (' + scale + 'x)');
+                      showToast('success', '\u2713 Exported ' + label + ' as ' + format + ' (' + scale + 'x)');
                     } else {
                       showToast('error', 'Failed to generate image blob');
                     }

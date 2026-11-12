@@ -23,3 +23,4 @@ export { resolveComponentDefinition } from './resolve.js';
 export type { ResolveComponentOptions } from './resolve.js';
 
 export { trustedWindowMessage } from './window-messages.js';
+export { createFrameQueries } from './frame-queries.js';

@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project Tailwind theme**: class edits use the project's own tokens (Tailwind v3 config or v4 `@theme`).
 - **Editor chrome**: Figma-style toolbar, zoom menu and keyboard shortcuts.
 
+### Security
+- **Hosted editor isolation**: the editor at `/__glide/` now answers only on the loopback IP (`127.0.0.1` or `[::1]`), and the preview loads the app from `localhost`. The browser treats these as different origins, so scripts in the app cannot read the editor page, get the session token, or open the editor socket. A request by name redirects to the IP address. Projects with `remoteAccess` keep one origin.
+- The editor asks the app page for containers, rendered sources and export data through the bridge when it cannot read the preview document.
+- New release check `test:hosted`: a real-browser test of the hosted editor, including the attack attempts.
+
 ### Changed
 - JSX edits are spliced into the original source, so return statements are no longer reprinted with new semicolons or indentation.
 - The package is about 10 times smaller (33 MB to 3.3 MB of JavaScript). The TypeScript compiler is no longer bundled into each entry point; edited JSX is checked with the Babel parser.
