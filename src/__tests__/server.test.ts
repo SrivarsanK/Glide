@@ -145,3 +145,13 @@ test('inspects and persists literal call-site props with revision and scope chec
   expect((await request(client, { type: 'undo', transactionId: 'undo-prop' })).success).toBe(true);
   expect(f.read()).toBe(before);
 });
+
+test('the editor can point the preview at another local port, and only at a valid one', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  const moved = await request(client, { type: 'set-target-port', port: 4321 }, 'target-port');
+  expect(moved).toMatchObject({ success: true, port: 4321 });
+  for (const port of [0, 70000, 4321.5, '4321', null]) {
+    const refused = await request(client, { type: 'set-target-port', port }, 'target-port');
+    expect(refused).toMatchObject({ success: false, port: 4321 });
+  }
+});

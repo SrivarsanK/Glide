@@ -2031,89 +2031,100 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
       },
     },
 
-    transform(code, id) {
-      // Only stamp in development mode (command === 'serve')
-      if (!isDev) return null;
+    transform: {
+      // 'pre' runs this before other plugins compile the file. Astro's own plugin comes first in
+      // the plugin list; without this, the stamper saw compiled JavaScript and wrote wrong positions.
+      order: 'pre',
+      handler(code: string, id: string) {
+        // Only stamp in development mode (command === 'serve')
+        if (!isDev) return null;
 
-      const cleanId = id.split('?')[0];
-      // Skip Astro virtual script/style modules — these contain extracted
-      // TypeScript/CSS, not HTML templates. Stamping them would corrupt
-      // TS generics like Omit<T> or NodeListOf<E>.
-      if (id.includes('?astro&type=script') || id.includes('?astro&type=style')) {
-        return null;
-      }
-      if (cleanId.includes('node_modules')) {
-        return null;
-      }
+        const cleanId = id.split('?')[0];
+        // Skip Astro virtual script/style modules — these contain extracted
+        // TypeScript/CSS, not HTML templates. Stamping them would corrupt
+        // TS generics like Omit<T> or NodeListOf<E>.
+        if (id.includes('?astro&type=script') || id.includes('?astro&type=style')) {
+          return null;
+        }
+        if (cleanId.includes('node_modules')) {
+          return null;
+        }
 
-      const isJSX = /\.[jt]sx$/.test(cleanId);
-      const isHTML = /\.html$/.test(cleanId);
-      const isVue = /\.vue$/.test(cleanId);
-      const isSvelte = /\.svelte$/.test(cleanId);
-      const isAstro = /\.astro$/.test(cleanId);
+        const isJSX = /\.[jt]sx$/.test(cleanId);
+        const isHTML = /\.html$/.test(cleanId);
+        const isVue = /\.vue$/.test(cleanId);
+        const isSvelte = /\.svelte$/.test(cleanId);
+        const isAstro = /\.astro$/.test(cleanId);
 
-      if (!isJSX && !isHTML && !isVue && !isSvelte && !isAstro) {
-        return null;
-      }
+        if (!isJSX && !isHTML && !isVue && !isSvelte && !isAstro) {
+          return null;
+        }
 
-      if (isJSX) {
-        const result = babel.transformSync(code, {
-          filename: cleanId,
-          configFile: false,
-          babelrc: false,
-          parserOpts: {
-            plugins: ['jsx', 'typescript'],
-          },
-          // Stamp with the configured attribute, which the bridge reads on elements and component props.
-          plugins: [
-            [glideSourceStampingPlugin, { sourceAttribute: glideConfig.sourceAttribute }]
-          ],
-          sourceMaps: true,
-        });
+        if (isJSX) {
+          const result = babel.transformSync(code, {
+            filename: cleanId,
+            configFile: false,
+            babelrc: false,
+            parserOpts: {
+              plugins: ['jsx', 'typescript'],
+            },
+            // Stamp with the configured attribute, which the bridge reads on elements and component props.
+            plugins: [
+              [glideSourceStampingPlugin, { sourceAttribute: glideConfig.sourceAttribute }]
+            ],
+            sourceMaps: true,
+          });
 
-        if (!result) return null;
+          if (!result) return null;
 
-        // Only return the stamped code — bridge is injected via transformIndexHtml
-        const hmrInjection = `
-if (import.meta.hot && window !== window.top) {
-  const __glideAfterUpdate = function() {
-    if (window.__glide_refresh_pending__) return;
-    window.__glide_refresh_pending__ = true;
-    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
-    raf(function() {
+          // Only return the stamped code — bridge is injected via transformIndexHtml
+          const hmrInjection = `
+  if (import.meta.hot && window !== window.top) {
+    const __glideAfterUpdate = function() {
+      if (window.__glide_refresh_pending__) return;
+      window.__glide_refresh_pending__ = true;
+      var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(cb) { setTimeout(cb, 16); };
       raf(function() {
-        window.__glide_refresh_pending__ = false;
-        if (typeof window.__glide_update_selection_node__ === 'function') {
-          window.__glide_update_selection_node__();
-        }
-        if (typeof window.__glide_refresh_selection__ === 'function') {
-          window.__glide_refresh_selection__();
-        }
+        raf(function() {
+          window.__glide_refresh_pending__ = false;
+          if (typeof window.__glide_update_selection_node__ === 'function') {
+            window.__glide_update_selection_node__();
+          }
+          if (typeof window.__glide_refresh_selection__ === 'function') {
+            window.__glide_refresh_selection__();
+          }
+        });
       });
+    };
+    import.meta.hot.on('vite:afterUpdate', __glideAfterUpdate);
+    import.meta.hot.dispose(function() {
+      import.meta.hot.off('vite:afterUpdate', __glideAfterUpdate);
     });
-  };
-  import.meta.hot.on('vite:afterUpdate', __glideAfterUpdate);
-  import.meta.hot.dispose(function() {
-    import.meta.hot.off('vite:afterUpdate', __glideAfterUpdate);
-  });
-}
-`;
-        return {
-          code: (result.code ?? code) + hmrInjection,
-          map: result.map,
-        };
-      }
+  }
+  `;
+          return {
+            code: (result.code ?? code) + hmrInjection,
+            map: result.map,
+          };
+        }
 
-      // For HTML, Vue, Svelte, and Astro templates, stamp them using stampHTMLTemplate
-      if (isHTML || isVue || isSvelte || isAstro) {
-        const relativePath = normalizePath(cleanId, rootDir);
-        const stampedCode = stampHTMLTemplate(code, relativePath);
-        return {
-          code: stampedCode,
-          map: null
-        };
-      }
+        // For HTML, Vue, Svelte, and Astro templates, stamp them using stampHTMLTemplate
+        if (isHTML || isVue || isSvelte || isAstro) {
+          const relativePath = normalizePath(cleanId, rootDir);
+          let stampedCode = stampHTMLTemplate(code, relativePath);
+          // Astro renders its pages itself and never calls transformIndexHtml, so the bridge goes
+          // into the page or layout that has the <head>. It is added after stamping: the stamps
+          // hold positions in the file on disk. `is:inline` keeps Astro from processing the script.
+          if (isAstro) {
+            stampedCode = stampedCode.replace(/<head(\s[^>]*)?>/, tag => `${tag}<script is:inline>${bridgeScript}<\/script>`);
+          }
+          return {
+            code: stampedCode,
+            map: null
+          };
+        }
       return null;
+      },
     },
   };
 }

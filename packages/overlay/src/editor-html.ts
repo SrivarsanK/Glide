@@ -2572,6 +2572,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       showToast('error', message.error || 'Server error');
                     }
                   }
+                } else if (message.type === 'target-port') {
+                  if (message.success) {
+                    proxyTargetPort = message.port;
+                    if (pendingTargetLoad) pendingTargetLoad();
+                  } else {
+                    showToast('error', message.error || 'The preview port could not be changed.');
+                  }
+                  pendingTargetLoad = null;
                 } else if (message.type === 'git-status') {
                   if (message.success) {
                     if (message.action === 'create') {
@@ -5657,6 +5665,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ── PORT PROBE ──────────────────────────────────────────────────
           // fetch() with no-cors resolves for any live server (even if CORS
           // blocks the response body) and rejects only on connection refused.
+          var proxyTargetPort = ${JSON.stringify(Number(config.targetPort) || 5173)};
+          var pendingTargetLoad = null;
+
           function probePort(port, timeoutMs) {
             timeoutMs = timeoutMs || 800;
             return new Promise(function(resolve) {
@@ -5772,6 +5783,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             var oldBtn = document.getElementById('glide-retry-btn');
             if (oldBtn) oldBtn.remove();
 
+            // The proxy shows one dev server port. An address with another port moves the proxy first;
+            // without this the preview kept showing the old port, whatever the field said.
+            var wanted = null;
+            try {
+              var asked = new URL(url);
+              if (!${JSON.stringify(!!options.hosted)} && ['localhost', '127.0.0.1'].includes(asked.hostname) && asked.port) wanted = Number(asked.port);
+            } catch (e) {}
+            if (wanted && wanted !== proxyTargetPort) {
+              if (!socket || socket.readyState !== WebSocket.OPEN) {
+                // Not connected yet (first load): try again when the socket is ready.
+                setTimeout(function() { loadApp(url); }, 300);
+                return;
+              }
+              pendingTargetLoad = function() { _doLoadApp(proxyUrl, iframe, loading, statusEl); };
+              socket.send(JSON.stringify({ type: 'set-target-port', port: wanted }));
+              return;
+            }
             _doLoadApp(proxyUrl, iframe, loading, statusEl);
           }
 
@@ -8207,6 +8235,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             loadApp(defaultUrl);
           }
           applyTransform();
+          // Start with the whole preview in view. At 100% a desktop-size preview is larger than
+          // the canvas area, and the top of the page would be out of view.
+          fitToScreen();
 
           // Initialize Lucide icons on page load with zero-dependency SVG fallback
           (function initIcons() {

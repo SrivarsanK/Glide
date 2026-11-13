@@ -182,7 +182,7 @@ test('JSX is stamped with the configured source attribute, which the bridge read
     for (let attempt = 0; attempt < 200 && !plugin.transformIndexHtml.handler('<head></head>').includes("props['data-src']"); attempt++) {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    const stamped = plugin.transform('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;
+    const stamped = plugin.transform.handler('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;
     expect(stamped).toMatch(/<Button size="lg" data-src="[^"]+App\.tsx:1:26" \/>/);
     expect(stamped).not.toContain('data-gl-source');
   } finally {

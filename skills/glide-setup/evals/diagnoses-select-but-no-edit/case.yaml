@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: diagnoses-select-but-no-edit
+expected_outcome: |
+  The answer finds that vite.config.ts does not have the glideSourceStamping plugin, explains that without it elements have no source position, adds the plugin, and says to restart the dev server.
+context:
+  scaffold_script: place-files.sh
