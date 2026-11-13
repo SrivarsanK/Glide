@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: explains-refused-dynamic-class
+expected_outcome: |
+  The answer says this is intended, not a bug: Glide refuses because the background is also set under a condition and it will not guess. It gives a concrete source edit that adds a default background to the always-applied class string.

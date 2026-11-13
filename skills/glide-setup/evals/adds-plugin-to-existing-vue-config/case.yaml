@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: adds-plugin-to-existing-vue-config
+expected_outcome: |
+  The package is added as a dev dependency, glideSourceStamping() is added to the existing plugin list in vite.config.ts next to vue(), glide-components.json is in .gitignore, and the user is told to start the dev server and open the printed /__glide/ address.
+context:
+  scaffold_script: place-files.sh

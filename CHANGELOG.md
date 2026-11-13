@@ -35,13 +35,18 @@ Found with real React, Vue, Svelte, Astro and HTML test apps:
 - **Astro elements could not be edited.** Astro's own plugin compiled the file before Glide stamped it, so each stamp held a position in compiled JavaScript. The stamp now runs first.
 - **Astro pages had no bridge**, so nothing could be selected. Astro does not call `transformIndexHtml`; the bridge now goes into the page or layout that has the `<head>`.
 - **Vue component roots pointed at the usage.** A stamp on a component tag (`<PlanCard>`) fell through to the component's root element and replaced its own stamp. Component tags in templates get no stamp now.
+- **The `glide` command could not reach a dev server on another port.** With no port argument it proxied port 5173 even when the app ran elsewhere (Astro uses 4321), and an address typed in the editor's URL field changed nothing. The command now looks for the dev server, and the URL field moves the preview to the port in the address.
 - **The top of the page was out of view at first load.** The editor now starts with the whole preview in view.
 - `<html>`, `<head>` and `<body>` get no stamp in any template file, not only in HTML pages.
 
 ### Changed (breaking)
-- Node.js 20 or later is necessary. The build already targeted Node 20; `engines` now states it.
+- Node.js 20 or later is necessary.
+- **The `glide` command no longer installs skills by itself.** Before, it asked at start and installed after 6 seconds with no answer, and installed without asking in a non-interactive shell. Now it prints a tip; `glide install-skills` installs. The `--yes` flag is removed.
+- **Skills install where agents read them:** `.agents/skills/`, and `.claude/skills/` for Claude Code (`--agent claude|agents|all`). A repeated install replaces the skill folders with the current version. Test cases (`evals/`) are no longer copied into the project.
+- The skill scripts are `query-components.mjs` and `verify-setup.mjs` (were `.js`), so they run in a project without `"type": "module"`. The build already targeted Node 20; `engines` now states it.
 
 ### Added
+- The three agent skills are rewritten: each description says when to use the skill, the instructions give the reasons, and each skill has test cases in `evals/`.
 - `transformJSXBatch` and the position-based template writers are exported from the package root.
 - `.gitattributes` (LF line endings on all platforms), `.editorconfig`, `.nvmrc`, `SECURITY.md` and `CODEOWNERS`.
 

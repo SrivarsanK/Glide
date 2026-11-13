@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: reports-missing-registry
+expected_outcome: |
+  There is no glide-components.json. The answer says so, says that Glide writes it when the dev server (with the plugin) or the glide command runs, does not create the file by hand, and lists the components by reading the source instead.
+context:
+  scaffold_script: place-files.sh

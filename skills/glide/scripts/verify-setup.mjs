@@ -58,11 +58,11 @@ if (!pluginFound) {
 }
 
 // Check skills
-const skillPath = path.join(projectRoot, '.agents', 'skills', 'glide', 'SKILL.md');
-if (fs.existsSync(skillPath)) {
-  console.log('✅ Glide AI Agent Skill installed in .agents/skills/glide/');
+const skillFolders = ['.agents', '.claude'].filter(dir => fs.existsSync(path.join(projectRoot, dir, 'skills', 'glide', 'SKILL.md')));
+if (skillFolders.length) {
+  console.log('✅ Glide skills installed in: ' + skillFolders.map(dir => dir + '/skills/').join(', '));
 } else {
-  console.log('💡 AI skills not installed. Run: npx @srivarsank/glide --install-skills');
+  console.log('💡 AI skills not installed. Run: npx @srivarsank/glide install-skills');
 }
 
 console.log('[Glide Setup Verifier] Check complete.');

@@ -7,7 +7,7 @@ const registryPath = path.join(projectRoot, 'glide-components.json');
 
 if (!fs.existsSync(registryPath)) {
   console.error(`[Glide] No glide-components.json found at ${registryPath}`);
-  console.error(`[Glide] Start Glide first with: npx @srivarsank/glide <port>`);
+  console.error(`[Glide] Glide writes it when the editor server starts: run the dev server (with the Glide plugin) or npx @srivarsank/glide.`);
   process.exit(1);
 }
 

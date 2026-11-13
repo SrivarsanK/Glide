@@ -1,178 +1,121 @@
 ---
 name: glide-setup
 description: >
-  Zero-error setup guide for AI agents to install and configure @srivarsank/glide
-  visual editor on any React, Vue, Svelte, Astro, or HTML Vite project in one prompt.
-  Covers the Vite plugin, the editor address, CLI startup, automatic skill installation,
-  and troubleshooting.
+  How to install and configure the Glide visual editor (@srivarsank/glide) in a Vite or Astro
+  project, and how to fix a setup that does not work. Use this skill whenever the user asks to add,
+  install, set up, enable, start or open Glide or "the visual editor"; when they ask how to reach
+  the editor (`/__glide/`, port 7777); and when Glide is installed but the editor does not load,
+  cannot connect, shows an empty preview, or lets them select elements but not edit them.
 ---
 
-# Glide Setup — Agent Installation Skill
+# Glide setup
 
-> **CRITICAL**: The Vite plugin export is `glideSourceStamping`, NOT `glide`.
-> Import path: `@srivarsank/glide/vite-plugin`
-> Import statement: `import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';`
+Glide needs two things in a project: the package, and its Vite plugin. The plugin is the part that
+matters most. In dev mode it marks each element with its source position, and it serves the editor
+from the dev server. Without the plugin the user can see and select elements but cannot edit them,
+which looks like a broken install.
 
----
+## Before you start
 
-## Prerequisites (Check Before Install)
+- **Node.js 20 or later.** Check with `node -v`.
+- **A Vite-based project**: Vite, Astro, SvelteKit, or another tool that takes Vite plugins. Look
+  for `vite` or `astro` in `package.json`. Glide does not support Webpack or Next.js projects.
+- **The package manager**: use the one whose lockfile is present (`package-lock.json` → npm,
+  `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb` → bun).
 
-1. **Node.js ≥ 20** — verify with `node -v`
-2. **Vite-based project** — Glide integrates with Vite dev servers. Confirm `vite` is in dependencies.
-3. **Package manager** — detect from lockfile:
-   - `package-lock.json` → `npm`
-   - `pnpm-lock.yaml` → `pnpm`
-   - `yarn.lock` → `yarn`
-   - `bun.lockb` → `bun`
+## Steps
 
----
-
-## Step-by-Step Setup
-
-### Step 1 — Install Package
+### 1. Install the package
 
 ```bash
 npm install -D @srivarsank/glide
 ```
 
-### Step 2 — Configure Vite Plugin
+### 2. Add the plugin
 
-Open `vite.config.ts` (or `vite.config.js`). Add `glideSourceStamping()`:
+The export is `glideSourceStamping`, from `@srivarsank/glide/vite-plugin`. Add it to the existing
+plugin list; do not replace the framework plugin.
 
-**React**:
 ```ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+// vite.config.ts — React, Vue, Svelte, or plain HTML
 import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
-  plugins: [react(), glideSourceStamping()],
+  plugins: [/* the plugins already here, such as react(), vue() or svelte() */ glideSourceStamping()],
 });
 ```
 
-**Vue**:
-```ts
-import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
+```js
+// astro.config.mjs — Astro takes Vite plugins under `vite`
 import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
 
 export default defineConfig({
-  plugins: [vue(), glideSourceStamping()],
+  vite: { plugins: [glideSourceStamping()] },
 });
 ```
 
-**Svelte**:
-```ts
-import { defineConfig } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
+The plugin does nothing in a production build: no stamps and no editor are in the output.
 
-export default defineConfig({
-  plugins: [svelte(), glideSourceStamping()],
-});
-```
+### 3. Ignore the generated file
 
-**Astro** (`astro.config.mjs`):
-```ts
-import { defineConfig } from 'astro/config';
-import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
-
-export default defineConfig({
-  vite: {
-    plugins: [glideSourceStamping()],
-  },
-});
-```
-
-**Plain HTML / Vanilla Vite**:
-```ts
-import { defineConfig } from 'vite';
-import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
-
-export default defineConfig({
-  plugins: [glideSourceStamping()],
-});
-```
-
-The plugin is necessary. It stamps each element with its source position in dev mode. Without it, elements can be selected but not edited.
-
----
-
-### Step 3 — Install Agent Skills
-
-```bash
-npx @srivarsank/glide --install-skills
-```
-
-This installs:
-- `.agents/skills/glide/SKILL.md` (Architecture & Visual Editing)
-- `.agents/skills/glide-component-segregator/SKILL.md` (Component Registry & Targeting)
-- `.agents/skills/glide-setup/SKILL.md` (Project Setup Guide)
-
----
-
-### Step 4 — Configure `.gitignore`
-
-Add the auto-generated registry file:
+Glide writes a component index in the project root. Add it to `.gitignore`:
 
 ```gitignore
 glide-components.json
 ```
 
----
+### 4. Start and open the editor
 
-### Step 5 — Run Glide Visual Editor
+Start the dev server as usual (`npm run dev`). The terminal prints a line like:
 
-**Option A — inside the dev server (default with the plugin):**
-
-```bash
-npm run dev
+```
+[Glide] Editor: http://127.0.0.1:5173/__glide/
 ```
 
-Open the address in the `[Glide] Editor: ...` line that the dev server prints, for example **http://127.0.0.1:5173/__glide/**. The editor uses the IP address `127.0.0.1` and the app stays on `localhost`; this keeps app scripts away from the editor. `http://localhost:5173/__glide/` redirects to the IP address.
+Tell the user to open that address. Use the address as printed: the editor runs on `127.0.0.1` and
+the app stays on `localhost`. The two are different origins for the browser, which keeps scripts in
+the app away from the editor. `http://localhost:5173/__glide/` redirects there.
 
-**Option B — standalone command:**
+### 5. Check that it works
 
-```bash
-# Terminal 1 — Start your app
-npm run dev
+Ask the user to click an element in the preview. A working setup shows a selection outline and an
+active properties panel, and a change in the panel changes the source file.
 
-# Terminal 2 — Start Glide targeting your app's port (e.g. 5173)
-npx @srivarsank/glide 5173
-```
+## Optional
 
-Open **http://localhost:7777**.
+- **Skills for AI agents.** `npx @srivarsank/glide install-skills` copies the Glide skills into
+  `.agents/skills/`, and into `.claude/skills/` when the project uses Claude Code. Add
+  `--agent claude`, `--agent agents` or `--agent all` to choose. Nothing is installed unless this
+  command is run.
+- **The separate command.** `npx @srivarsank/glide` starts the editor on its own port
+  (`http://localhost:7777`) and shows the app through a proxy. With no port argument it looks for
+  the dev server on the common ports; `npx @srivarsank/glide 4321` names one. Use this when the
+  editor cannot be served from the dev server. Pass `glideSourceStamping({ editor: false })` to
+  turn off the editor at `/__glide/` and keep only the stamps.
+- **Settings.** `glide.config.json` in the project root can set `port` (the separate command's
+  port), `targetPort`, and `defaultViewport: { "width": 1440, "height": 1024 }`.
 
-To use only Option B, pass `glideSourceStamping({ editor: false })`.
+## What works after setup
 
----
-
-## What Can Be Saved
-
-| File type | Class, inline style, text, drag/resize | Structural edits |
+| File type | Class, inline style, text, drag and resize | Insert, delete, move, group |
 |:---|:---|:---|
 | JSX / TSX | Yes | Yes |
 | Vue, Svelte, Astro | Yes | No |
 | HTML | Yes, in projects with no UI framework | No |
 
-Dynamic values (`:class`, `class={...}`, `{...spread}`) are refused with a clear message. Edit those in source.
+## When it does not work
 
----
+| The user sees | Cause | Fix |
+|:---|:---|:---|
+| No `[Glide] Editor:` line in the terminal | The plugin is not in the config that the dev server uses | Check the import and the plugin list; restart the dev server |
+| Elements select, but the properties panel is inactive | No source stamps | Same as above. A dev server that was already running must be restarted |
+| "Could not reach dev server" at port 7777 | The separate command points at the wrong port | Type the app's address in the editor's URL field and press Enter, or restart with the port as argument |
+| The editor says "Disconnected" | It was opened from a host that is not allowed | Open the printed address. Other hosts need `remoteAccess` in `glide.config.json` |
+| A Svelte or Astro page fails to compile after the plugin was added | An old Glide version stamped tags that it must not | Update `@srivarsank/glide` |
+| A save gives `UNSUPPORTED_OPERATION` | Glide cannot make that edit exactly | Not a setup problem. See the `glide` skill |
 
-## Verification Checklist
+A script checks the basic setup and prints what is missing:
 
-1. [ ] The editor loads at `/__glide/` (Option A) or `http://localhost:7777` (Option B).
-2. [ ] Elements show a blue selection boundary on hover/click.
-3. [ ] The properties panel is active for a selected element. If it is inactive, the plugin is not installed or the dev server was not restarted.
-4. [ ] Editing a color or class updates the source file and the canvas.
-5. [ ] `glide-components.json` is generated in the project root.
-
-## Troubleshooting
-
-| Symptom | Cause and fix |
-|:---|:---|
-| Editor shows "Disconnected" | Open the editor from the printed address (`127.0.0.1` with Option A; `localhost` or `127.0.0.1` with Option B). Other hosts are refused unless `remoteAccess` is set in `glide.config.json`. |
-| App behaves differently in the preview | With Option A the app must be reachable at `localhost` on the dev server's port. |
-| Selection works, panel is inactive | No source stamps. Add the plugin and restart the dev server. |
-| `STALE_DIGEST` on save | The file changed after selection. Select the element again. |
-| `UNSUPPORTED_OPERATION` on save | Glide cannot make this edit exactly. The message gives the reason; edit in source. |
+```bash
+node <glide skill folder>/scripts/verify-setup.mjs
+```
