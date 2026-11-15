@@ -61,7 +61,8 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     const strip = (el: any) => { el.removeAttribute(attributes.selected); el.removeAttribute(attributes.hover); };
     strip(clone);
     Array.prototype.forEach.call(clone.querySelectorAll('*'), strip);
-    return { label, width: size.width, height: size.height, css, html: clone.outerHTML,
+    // The editor puts this markup in an SVG, which is XML: <input> and <img> must be closed.
+    return { label, width: size.width, height: size.height, css, html: new win.XMLSerializer().serializeToString(clone),
       background: win.getComputedStyle(target).backgroundColor || '' };
   }
 

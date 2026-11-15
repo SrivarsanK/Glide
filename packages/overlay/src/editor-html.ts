@@ -2446,16 +2446,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 sourceProps.accept(message);
                 acceptEditScopes(message);
                 if (message.type === 'authenticated') {
+                  // shortcut: Tailwind from a CDN script is not detected, choose "Tailwind" in the Style format menu then.
+                  if (message.tailwind === false) document.getElementById('edit-representation').value = 'inline';
                   sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
                   return;
                 }
+                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
                 if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
                 if (message.type === 'tree' && message.file) {
                   sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
                   if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
                 }
                 if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
+                // The first selection in a file asks for its props before the file's digest arrives; ask again.
+                if (firstDigest && selectedElement) sourceProps.request();
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;
                   if (!message.tree) {
@@ -4124,6 +4129,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             });
           }
 
+          // The editor has a digest only for a file whose tree it loaded, and every source edit needs one.
+          async function ensureDigest(file) {
+            if (fileDigests.has(normalizePathSlash(file)) || !socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({ type: 'get-tree', file }));
+            for (let tries = 0; tries < 30 && !fileDigests.has(normalizePathSlash(file)); tries++) await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
           async function dispatchShapeInsert(tool, x, y, width, height) {
             // A new drawing may start while the page answers; keep the point where this one started.
             const origin = { x: drawStart.x, y: drawStart.y };
@@ -4148,6 +4160,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             };
             const elementType = elemTypeMap[tool] || 'rectangle';
 
+            await ensureDigest(targetFile);
             if (socket && socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: 'insert',
@@ -5080,8 +5093,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 }
 
                 menu.style.display = 'block';
-                menu.style.left = (rect.left + data.clientX) + 'px';
-                menu.style.top = (rect.top + data.clientY) + 'px';
+                // The page reports frame coordinates; the canvas zoom scales them on screen. Keep the menu in the window.
+                const zoom = rect.width / iframe.offsetWidth || 1;
+                menu.style.left = Math.max(0, Math.min(rect.left + data.clientX * zoom, window.innerWidth - menu.offsetWidth)) + 'px';
+                menu.style.top = Math.max(0, Math.min(rect.top + data.clientY * zoom, window.innerHeight - menu.offsetHeight)) + 'px';
               }
             }
             if (data.type === 'glide:element-selected-by-id') {
@@ -7170,7 +7185,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               else if (format === 'JPG') bg = '#ffffff';
 
               const svgXml = data.svg || ('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
-                '<style>' + data.css + '</style>' +
+                '<style><![CDATA[' + data.css + ']]></style>' +
                 '<foreignObject width="100%" height="100%">' +
                 '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;background:' + bg + ';overflow:hidden;margin:0;padding:0;">' +
                 data.html +
@@ -7183,10 +7198,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 return;
               }
 
-              const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
+              // Chromium taints a canvas that draws a foreignObject SVG from a blob URL, but not from a data URL.
+              const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgXml);
               const img = new Image();
-              img.crossOrigin = 'anonymous';
               img.onload = () => {
                 try {
                   const canvas = document.createElement('canvas');
@@ -7199,7 +7213,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                   ctx.scale(scale, scale);
                   ctx.drawImage(img, 0, 0);
-                  URL.revokeObjectURL(url);
 
                   const mime = format === 'JPG' ? 'image/jpeg' : 'image/png';
                   canvas.toBlob((b) => {
@@ -7211,12 +7224,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     }
                   }, mime, 0.95);
                 } catch (err) {
-                  URL.revokeObjectURL(url);
                   showToast('error', 'Canvas rasterize error: ' + err.message);
                 }
               };
               img.onerror = () => {
-                URL.revokeObjectURL(url);
                 showToast('error', 'Export rendering error: browser security or asset restriction');
               };
               img.src = url;
@@ -7858,9 +7869,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             {
               category: 'Phones',
               items: [
-                { id: '1290', name: 'iPhone 15 Pro Max', width: 1290, height: 2796 },
-                { id: '1170', name: 'iPhone 15 Pro', width: 1170, height: 2532 },
-                { id: '1179', name: 'iPhone 15', width: 1179, height: 2556 },
+                { id: '430', name: 'iPhone 15 Pro Max', width: 430, height: 932 },
+                { id: '393', name: 'iPhone 15 / 15 Pro', width: 393, height: 852 },
                 { id: '390', name: 'iPhone 13 / 14 / 14 Pro', width: 390, height: 844 },
                 { id: '375', name: 'iPhone SE', width: 375, height: 667 },
                 { id: '360', name: 'Android Small', width: 360, height: 640 }

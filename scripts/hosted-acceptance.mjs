@@ -24,13 +24,17 @@ fs.writeFileSync(path.join(project, 'App.tsx'), `function h(tag, attrs, ...child
   el.append(...children.filter(child => child !== false && child !== null)); return el;
 }
 document.body.append(<button style={{ width: '160px', height: '60px' }}>Hosted button</button>);
-document.body.append(<main style={{ position: 'relative', width: '600px', height: '300px', marginTop: '40px' }}></main>);
+globalThis.h = h;
+import('./Panel.tsx');
+`);
+// A second file that is never selected: drawing into it needs a digest the editor has not loaded.
+fs.writeFileSync(path.join(project, 'Panel.tsx'), `document.body.append(<main style={{ position: 'relative', width: '600px', height: '300px', marginTop: '40px' }}><input /></main>);
 `);
 fs.writeFileSync(path.join(project, 'glide.config.json'), JSON.stringify({ defaultViewport: { width: 800, height: 600 } }));
-const read = () => fs.readFileSync(path.join(project, 'App.tsx'), 'utf8');
-async function waitForSource(predicate, what) {
+const read = (file = 'App.tsx') => fs.readFileSync(path.join(project, file), 'utf8');
+async function waitForSource(predicate, what, file) {
   const deadline = Date.now() + 10000;
-  while (Date.now() < deadline) { if (predicate(read())) return; await new Promise(r => setTimeout(r, 100)); }
+  while (Date.now() < deadline) { if (predicate(read(file))) return; await new Promise(r => setTimeout(r, 100)); }
   throw new Error('Timed out waiting for: ' + what);
 }
 
@@ -63,11 +67,30 @@ try {
   // Selection and an edit still work across the two origins.
   await frame.getByRole('button', { name: 'Hosted button' }).click();
   await page.waitForFunction(() => typeof selectedElement !== 'undefined' && selectedElement && selectedElement.source);
-  await page.locator('#edit-representation').selectOption('inline');
+  assert.equal(await page.locator('#edit-representation').inputValue(), 'inline', 'a project without Tailwind writes inline styles by default');
+  await page.waitForFunction(() => !/Reading/.test(document.getElementById('source-props').textContent));
+  assert.doesNotMatch(await page.locator('#source-props').textContent(), /STALE_DIGEST/, 'props load on the first selection in a file');
   await page.locator('#prop-w').fill('240');
   await page.locator('#prop-w').press('Enter');
   await waitForSource(code => code.includes('240'), 'width edit');
   console.log('PASS: select and edit across origins');
+
+  // The context menu opens at the pointer when the canvas is zoomed.
+  await page.locator('#zoom-label').click();
+  await page.locator('[data-canvas-zoom="0.5"]').click();
+  const target = await frame.getByRole('button', { name: 'Hosted button' }).boundingBox();
+  await page.mouse.click(target.x + 10, target.y + 10, { button: 'right' });
+  await page.locator('#glide-context-menu').waitFor({ state: 'visible' });
+  const menu = await page.locator('#glide-context-menu').boundingBox();
+  assert.ok(Math.abs(menu.x - target.x - 10) < 3 && Math.abs(menu.y - target.y - 10) < 3, `menu at ${menu.x},${menu.y}, pointer at ${target.x + 10},${target.y + 10}`);
+  await page.keyboard.press('Escape');
+  await page.locator('#zoom-fit').click();
+
+  // A PNG export draws the markup through an SVG image; the page has an <input>, which XML must close.
+  const download = page.waitForEvent('download', { timeout: 10000 });
+  await page.evaluate(() => triggerExport('PNG', '1x'));
+  assert.match((await download).suggestedFilename(), /\.png$/);
+  console.log('PASS: context menu at the pointer under zoom, PNG export');
 
   // Drawing asks the page for the container through the bridge.
   await frame.locator('main').waitFor();
@@ -77,8 +100,10 @@ try {
   await page.mouse.down();
   await page.mouse.move(box.x + 160, box.y + 120, { steps: 6 });
   await page.mouse.up();
-  await waitForSource(code => (code.match(/<div/g) || []).length >= 1, 'drawn rectangle');
-  console.log('PASS: draw a shape through the bridge query');
+  await waitForSource(code => (code.match(/<div/g) || []).length >= 1, 'drawn rectangle', 'Panel.tsx');
+  console.log('PASS: draw a shape through the bridge query, into a file that was never selected');
+  // The preview reloads for the changed file; the next step runs a script in it.
+  await frame.locator('main div').waitFor();
 
   // A script in the app cannot reach the editor or its token.
   const appFrame = page.frames().find(item => item.url().startsWith(`http://localhost:${port}/`));

@@ -79,7 +79,7 @@ test('the editor socket shares the dev server with its HMR socket and still need
   expect(await hmr.first).toBe('hmr-connected');
   const editor = await open(origin.replace('http', 'ws') + '/__glide/ws', origin);
   editor.send(JSON.stringify({ type: 'hello', token }));
-  expect(JSON.parse(await editor.first)).toMatchObject({ type: 'authenticated', success: true });
+  expect(JSON.parse(await editor.first)).toMatchObject({ type: 'authenticated', success: true, tailwind: false });
   const stranger = await open(origin.replace('http', 'ws') + '/__glide/ws', origin);
   const refused = new Promise(resolve => stranger.once('close', code => resolve(code)));
   stranger.send(JSON.stringify({ type: 'hello', token: 'wrong' }));

@@ -4,7 +4,7 @@ import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassName, activeVariants } from '@srivarsank/ast-writer';
@@ -1163,7 +1163,8 @@ export class GlideServer {
                 }
                 this.authenticated.add(ws);
                 clearTimeout(timer);
-                ws.send(JSON.stringify({ type: 'authenticated', success: true }));
+                // The editor writes inline styles by default when the project cannot render a Tailwind class.
+                ws.send(JSON.stringify({ type: 'authenticated', success: true, tailwind: loadTailwindTheme(this.projectPaths.root).version !== null }));
                 return;
               }
 

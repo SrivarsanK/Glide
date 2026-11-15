@@ -38,6 +38,12 @@ Found with real React, Vue, Svelte, Astro and HTML test apps:
 - **The `glide` command could not reach a dev server on another port.** With no port argument it proxied port 5173 even when the app ran elsewhere (Astro uses 4321), and an address typed in the editor's URL field changed nothing. The command now looks for the dev server, and the URL field moves the preview to the port in the address.
 - **The top of the page was out of view at first load.** The editor now starts with the whole preview in view.
 - `<html>`, `<head>` and `<body>` get no stamp in any template file, not only in HTML pages.
+- **Size, spacing and radius edits had no effect in a project without Tailwind.** The Style format menu started on Auto, which writes Tailwind classes. The editor now starts on Inline when the project has no Tailwind package and no Tailwind v4 stylesheet.
+- **Drawing into a file that was never selected saved nothing** ("Source mapping is not ready"). The editor now loads that file's digest before it sends the insert.
+- **The Authored props panel showed `STALE_DIGEST` on the first selection in a file.** The editor asks for the props again when the file's digest arrives.
+- **The context menu opened away from the pointer when the canvas was zoomed**, and outside the window near the bottom edge. It now follows the zoom and stays in the window.
+- **PNG and JPG export failed** with "Tainted canvases may not be exported", and an export that contained `<input>` or `<img>` did not render. The image now loads from a data URL, and the markup is serialized as XML.
+- **The iPhone 15 device presets used physical pixels** (1290 px wide). They now use the CSS viewport sizes: 430 × 932 and 393 × 852.
 
 ### Changed (breaking)
 - Node.js 20 or later is necessary.
