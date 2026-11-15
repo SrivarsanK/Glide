@@ -44,6 +44,8 @@ Found with real React, Vue, Svelte, Astro and HTML test apps:
 - **The context menu opened away from the pointer when the canvas was zoomed**, and outside the window near the bottom edge. It now follows the zoom and stays in the window.
 - **PNG and JPG export failed** with "Tainted canvases may not be exported", and an export that contained `<input>` or `<img>` did not render. The image now loads from a data URL, and the markup is serialized as XML.
 - **The iPhone 15 device presets used physical pixels** (1290 px wide). They now use the CSS viewport sizes: 430 × 932 and 393 × 852.
+- **Edit scopes were offered only for the root element of a component.** An inner element that takes the component's `className`, such as the `<input>` inside a `<label>`, now gets the scope picker too. With a development build of React, the editor finds the component that holds an element from React's own record of which component created it.
+- **With Inline styles, the scope picker started on a usage, which Inline styles cannot reach, so every style edit on a component was refused.** Without Tailwind, Inline is the default format, so this hit every such project. With Inline the picker now starts on every instance. The shared-source warning no longer appears beside the picker, which already says where edits go.
 
 ### Changed (breaking)
 - Node.js 20 or later is necessary.

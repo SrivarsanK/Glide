@@ -2865,7 +2865,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           // EDIT SCOPE
           // ═══════════════════════════════════════════════════════════════
-          // The bridge reports the components whose root is the selection, each with where it is used.
+          // The bridge reports the components that hold the selection, each with where it is used.
           // The server says which usages pass className down to the element and which cva options apply.
           function requestEditScopes() {
             const owners = (selectedElement && selectedElement.owners) || [];
@@ -2897,6 +2897,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (message.type !== 'edit-scopes' || message.requestId !== editScopeRequest || !selectedElement || !message.success) return;
             (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
             const owners = selectedElement.owners;
+            // Inside a component, an element that does not take the component's className has no usage to choose.
+            if (!owners[0].root && !message.forwards[0] && !(message.variants || []).length) return;
             const where = source => { const parsed = parseSource(source); return parsed ? normalizePathSlash(parsed.file).split('/').pop() + ':' + parsed.line : ''; };
             const element = selectedElement.source;
             const scopes = [{ element, source: element, label: 'Every <' + owners[0].name + '> · ' + where(element) }];
@@ -2922,13 +2924,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (scope.reason) option.title = scope.reason;
               return option;
             }));
-            // Like a Figma instance, default to the outermost usage that reaches the element.
+            // Like a Figma instance, default to the outermost usage that reaches the element. Inline styles
+            // cannot reach a usage, so with that format (the default without Tailwind) stay on every instance.
             let chosen = 0;
-            scopes.forEach((scope, index) => { if (index && !scope.variant && !scope.reason) chosen = index; });
+            if (mutationScope.capture({ type: 'style' }).authoringRepresentation !== 'inline') {
+              scopes.forEach((scope, index) => { if (index && !scope.variant && !scope.reason) chosen = index; });
+            }
             select.value = String(chosen);
             select.onchange = () => { editScope = scopes[Number(select.value)]; };
             editScope = scopes[chosen];
             document.getElementById('edit-scope-row').style.display = 'block';
+            // The picker states where edits go; a shared-source warning beside it would only repeat that.
+            document.getElementById('source-mapping-error').hidden = true;
           }
 
           /** Class edits for the selection go to its chosen scope; other edits stay on the element. */
@@ -5841,8 +5848,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 // The selection may have changed while the page answered.
                 if (!sources || !selectedElement || selectedElement.source !== asked) return;
                 const count = sources.filter(source => isSourceMatch(source, asked)).length;
-                // With component owners, the edit scope picker states where edits go instead.
-                if (count > 1 && !(selectedElement.owners && selectedElement.owners.length)) {
+                // When the edit scope picker is shown, it states where edits go instead.
+                if (count > 1 && document.getElementById('edit-scope-row').style.display !== 'block') {
                   const banner = document.getElementById('source-mapping-error');
                   banner.hidden = false;
                   banner.textContent = 'Shared source: edits affect all ' + count + ' rendered instances. Individual instances cannot be moved between layers.';
