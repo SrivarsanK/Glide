@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: keeps-variant-classes-on-padding-change
+expected_outcome: |
+  Card.tsx has p-6 where p-4 was. md:p-8 and hover:bg-slate-50 and every other class are still there, in the same element.
+context:
+  scaffold_script: place-files.sh

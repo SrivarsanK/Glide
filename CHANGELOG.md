@@ -29,10 +29,32 @@ Also removed, with no public export:
 - The CSS and Tailwind value scanner (`scanProject`, `scanFile`), the `FrameworkAdapter` interface, and the second copy of the template stamper.
 - The dependencies `@chenglou/pretext` and `html-react-parser`.
 
+### Fixed
+Found with real React, Vue, Svelte, Astro and HTML test apps:
+- **Svelte apps did not load.** The stamper put an attribute on `<title>` inside `<svelte:head>`, which the Svelte compiler rejects. Document metadata and the content of `<svelte:head>` get no stamp now.
+- **Astro elements could not be edited.** Astro's own plugin compiled the file before Glide stamped it, so each stamp held a position in compiled JavaScript. The stamp now runs first.
+- **Astro pages had no bridge**, so nothing could be selected. Astro does not call `transformIndexHtml`; the bridge now goes into the page or layout that has the `<head>`.
+- **Vue component roots pointed at the usage.** A stamp on a component tag (`<PlanCard>`) fell through to the component's root element and replaced its own stamp. Component tags in templates get no stamp now.
+- **The `glide` command could not reach a dev server on another port.** With no port argument it proxied port 5173 even when the app ran elsewhere (Astro uses 4321), and an address typed in the editor's URL field changed nothing. The command now looks for the dev server, and the URL field moves the preview to the port in the address.
+- **The top of the page was out of view at first load.** The editor now starts with the whole preview in view.
+- `<html>`, `<head>` and `<body>` get no stamp in any template file, not only in HTML pages.
+- **Size, spacing and radius edits had no effect in a project without Tailwind.** The Style format menu started on Auto, which writes Tailwind classes. The editor now starts on Inline when the project has no Tailwind package and no Tailwind v4 stylesheet.
+- **Drawing into a file that was never selected saved nothing** ("Source mapping is not ready"). The editor now loads that file's digest before it sends the insert.
+- **The Authored props panel showed `STALE_DIGEST` on the first selection in a file.** The editor asks for the props again when the file's digest arrives.
+- **The context menu opened away from the pointer when the canvas was zoomed**, and outside the window near the bottom edge. It now follows the zoom and stays in the window.
+- **PNG and JPG export failed** with "Tainted canvases may not be exported", and an export that contained `<input>` or `<img>` did not render. The image now loads from a data URL, and the markup is serialized as XML.
+- **The iPhone 15 device presets used physical pixels** (1290 px wide). They now use the CSS viewport sizes: 430 × 932 and 393 × 852.
+- **Edit scopes were offered only for the root element of a component.** An inner element that takes the component's `className`, such as the `<input>` inside a `<label>`, now gets the scope picker too. With a development build of React, the editor finds the component that holds an element from React's own record of which component created it.
+- **With Inline styles, the scope picker started on a usage, which Inline styles cannot reach, so every style edit on a component was refused.** Without Tailwind, Inline is the default format, so this hit every such project. With Inline the picker now starts on every instance. The shared-source warning no longer appears beside the picker, which already says where edits go.
+
 ### Changed (breaking)
-- Node.js 20 or later is necessary. The build already targeted Node 20; `engines` now states it.
+- Node.js 20 or later is necessary.
+- **The `glide` command no longer installs skills by itself.** Before, it asked at start and installed after 6 seconds with no answer, and installed without asking in a non-interactive shell. Now it prints a tip; `glide install-skills` installs. The `--yes` flag is removed.
+- **Skills install where agents read them:** `.agents/skills/`, and `.claude/skills/` for Claude Code (`--agent claude|agents|all`). A repeated install replaces the skill folders with the current version. Test cases (`evals/`) are no longer copied into the project.
+- The skill scripts are `query-components.mjs` and `verify-setup.mjs` (were `.js`), so they run in a project without `"type": "module"`. The build already targeted Node 20; `engines` now states it.
 
 ### Added
+- The three agent skills are rewritten: each description says when to use the skill, the instructions give the reasons, and each skill has test cases in `evals/`.
 - `transformJSXBatch` and the position-based template writers are exported from the package root.
 - `.gitattributes` (LF line endings on all platforms), `.editorconfig`, `.nvmrc`, `SECURITY.md` and `CODEOWNERS`.
 

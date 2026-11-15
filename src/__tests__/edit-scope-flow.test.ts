@@ -27,7 +27,7 @@ function functions(script: string, names: string[]): string {
   return found.join('\n');
 }
 
-test('the bridge reports the components whose root is the selection, innermost first', () => {
+test('with a production build of React, the bridge reports the components whose root is the selection', () => {
   const script = buildBridgeScript(DEFAULT_CONFIG.sourceAttribute, DEFAULT_CONFIG.hoverAttribute,
     DEFAULT_CONFIG.selectedAttribute, DEFAULT_CONFIG.snapThresholdPx);
   const context = vm.createContext({});
@@ -46,10 +46,41 @@ test('the bridge reports the components whose root is the selection, innermost f
   el.__reactFiber$abc = host;
   // A memo wrapper repeats its child's props; the repeated usage is reported once.
   expect(JSON.parse(JSON.stringify(vm.runInContext('glideOwners', context)(el)))).toEqual([
-    { name: 'Button', source: 'src/Button.tsx:6:10', props: { size: 'lg', id: 'c' } },
-    { name: 'IconButton', source: 'src/main.tsx:8:7', props: { id: 'c' } },
+    { name: 'Button', source: 'src/Button.tsx:6:10', props: { size: 'lg', id: 'c' }, root: true },
+    { name: 'IconButton', source: 'src/main.tsx:8:7', props: { id: 'c' }, root: true },
   ]);
   expect(vm.runInContext('glideOwners', context)({})).toEqual([]);
+});
+
+test('with a development build, the bridge reports the component that holds an inner element', () => {
+  const script = buildBridgeScript(DEFAULT_CONFIG.sourceAttribute, DEFAULT_CONFIG.hoverAttribute,
+    DEFAULT_CONFIG.selectedAttribute, DEFAULT_CONFIG.snapThresholdPx);
+  const context = vm.createContext({});
+  vm.runInContext(functions(script, ['glideComponentName', 'glideRootElement', 'glideOwners']), context);
+  const owners = (el: any) => JSON.parse(JSON.stringify(vm.runInContext('glideOwners', context)(el)));
+  // Page renders <Panel><em /></Panel>; Panel renders <Field />; Field renders <label><input /></label>.
+  const label: any = {}, input: any = {}, em: any = {};
+  const labelHost: any = { type: 'label', stateNode: label };
+  const page: any = { type: function Page() {}, child: { type: 'main', stateNode: {} }, _debugOwner: null,
+    memoizedProps: { 'data-gl-source': 'src/main.tsx:4:3' } };
+  const panel: any = { type: function Panel() {}, _debugOwner: page, memoizedProps: { 'data-gl-source': 'src/Page.tsx:7:5' } };
+  const field: any = { type: function Field() {}, child: labelHost, _debugOwner: panel,
+    memoizedProps: { label: 'Name', 'data-gl-source': 'src/Panel.tsx:3:10' } };
+  panel.child = field;
+  input.__reactFiber$abc = { type: 'input', stateNode: input, return: labelHost, _debugOwner: field };
+  // Panel has the same root as Field, so a className can reach the input through it. Page has another root.
+  expect(owners(input)).toEqual([
+    { name: 'Field', source: 'src/Panel.tsx:3:10', props: { label: 'Name' }, root: false },
+    { name: 'Panel', source: 'src/Page.tsx:7:5', props: {}, root: false },
+  ]);
+  label.__reactFiber$abc = { ...labelHost, return: field, _debugOwner: field };
+  expect(owners(label).map((owner: any) => [owner.name, owner.root])).toEqual([['Field', true], ['Panel', true]]);
+  // An element that Page passes to Panel as a child is in Page's definition, not in Panel's.
+  em.__reactFiber$abc = { type: 'em', stateNode: em, return: field, _debugOwner: page };
+  expect(owners(em)).toEqual([{ name: 'Page', source: 'src/main.tsx:4:3', props: {}, root: false }]);
+  // A component that library code created has no usage in source.
+  delete field.memoizedProps['data-gl-source'];
+  expect(owners(input)).toEqual([]);
 });
 
 test('the page gets the bridge script verbatim, even where it contains replacement patterns', () => {
@@ -76,7 +107,7 @@ function editor(owners: any[]) {
     let selectedElement = { source: 'src/Button.tsx:3:10', owners };
     const sent = [], toasts = [], WebSocket = { OPEN: 1 };
     const socket = { readyState: 1, send(value) { sent.push(JSON.parse(value)); } };
-    const elements = { 'edit-scope-row': { style: {} }, 'edit-scope': { value: '', options: [],
+    const elements = { 'source-mapping-error': { hidden: false }, 'edit-scope-row': { style: {} }, 'edit-scope': { value: '', options: [],
       replaceChildren(...options) { this.options = options; } } };
     const document = { getElementById: id => elements[id], createElement: () => ({}) };
     function showToast(kind, message) { toasts.push(message); }
@@ -137,6 +168,18 @@ test('a usage the className does not reach is shown but cannot be chosen', () =>
   expect(vm.runInContext('elements["edit-scope"].value', context)).toBe('1');
 });
 
+test('an inner element gets the picker only when a usage or a variant can reach it', () => {
+  const context = editor([{ name: 'Field', source: 'src/main.tsx:8:7', props: {}, root: false }]);
+  vm.runInContext('requestEditScopes()', context);
+  vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: 1, success: true, forwards: [false], variants: [], files: [] })`, context);
+  expect(vm.runInContext('editScope', context)).toBeNull();
+  expect(vm.runInContext('elements["edit-scope-row"].style.display', context)).toBe('none');
+  vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: 1, success: true, forwards: [true], variants: [], files: [] })`, context);
+  expect(vm.runInContext('elements["edit-scope"].options', context).map((option: any) => option.textContent))
+    .toEqual(['Every <Field> · Button.tsx:3', 'This <Field> · main.tsx:8']);
+  expect(vm.runInContext(`scopedEdit('src/Button.tsx:3:10', { type: 'class', property: 'padding', value: 16 })`, context).source).toBe('src/main.tsx:8:7');
+});
+
 test('a re-reported selection keeps its chosen scope; another selection never uses it', () => {
   const context = editor(OWNERS);
   const accept = (id: number) => vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: ${id}, success: true,
@@ -172,6 +215,17 @@ test('quick style changes carry the format, so Inline is refused for a usage sco
     change: { type: 'class', property: 'padding', value: '16px' } });
 });
 
+test('with Inline styles the picker defaults to every instance, and it replaces the shared-source warning', () => {
+  const context = editor(OWNERS);
+  vm.runInContext('representation = "inline"; requestEditScopes()', context);
+  vm.runInContext(`acceptEditScopes({ type: 'edit-scopes', requestId: 1, success: true, forwards: [true, true], variants: [], files: [] })`, context);
+  expect(vm.runInContext('elements["edit-scope"].value', context)).toBe('0');
+  expect(vm.runInContext(`scopedEdit('src/Button.tsx:3:10', { type: 'class', property: 'padding', value: 16, authoringRepresentation: 'inline' })`, context))
+    .toEqual({ source: 'src/Button.tsx:3:10', change: { type: 'class', property: 'padding', value: 16, authoringRepresentation: 'inline' } });
+  expect(vm.runInContext('toasts.length', context)).toBe(0);
+  expect(vm.runInContext('elements["source-mapping-error"].hidden', context)).toBe(true);
+});
+
 test('JSX is stamped with the configured source attribute, which the bridge reads', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-attr-'));
   try {
@@ -182,7 +236,7 @@ test('JSX is stamped with the configured source attribute, which the bridge read
     for (let attempt = 0; attempt < 200 && !plugin.transformIndexHtml.handler('<head></head>').includes("props['data-src']"); attempt++) {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    const stamped = plugin.transform('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;
+    const stamped = plugin.transform.handler('export const App = () => <Button size="lg" />;', path.join(root, 'App.tsx')).code;
     expect(stamped).toMatch(/<Button size="lg" data-src="[^"]+App\.tsx:1:26" \/>/);
     expect(stamped).not.toContain('data-gl-source');
   } finally {

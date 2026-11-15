@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: finds-root-element-from-registry
+expected_outcome: |
+  The answer names src/components/Card.tsx, line 3, the article element (the root), and its current background class bg-white. It gets this from glide-components.json.
+context:
+  scaffold_script: place-files.sh

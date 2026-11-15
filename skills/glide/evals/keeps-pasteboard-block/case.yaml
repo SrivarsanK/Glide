@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: keeps-pasteboard-block
+expected_outcome: |
+  The unused import and the unused variable are removed. The `{false && <div data-gl-workspace-id=...>}` block is kept, because it is the Glide pasteboard, and the response says so.
+context:
+  scaffold_script: place-files.sh

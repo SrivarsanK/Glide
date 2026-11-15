@@ -212,22 +212,23 @@ export default defineConfig({
 
 ## AI agent skills
 
-Glide includes bundled skills that teach AI assistants (including Antigravity IDE, Claude Code, Cursor, Windsurf, and GitHub Copilot) how to inspect and modify components directly through Glide.
+Glide ships three skills that teach AI coding agents how to work in a project that uses Glide.
 
 ### Installing skills
 
 Run the installer from your project root:
 
 ```bash
-npx @srivarsank/glide --install-skills
+npx @srivarsank/glide install-skills
 ```
 
-This installs three structured skills into `.agents/skills/`:
-- `glide`: Architecture guide, SceneGraph hit testing, and visual editing patterns.
-- `glide-component-segregator`: Component registry lookup using `glide-components.json`.
-- `glide-setup`: Setup and configuration steps for all supported frameworks.
+This copies the skills into `.agents/skills/`. If the project uses Claude Code (it has a `.claude` folder or a `CLAUDE.md`), it also copies them into `.claude/skills/`. To choose the place yourself, add `--agent claude`, `--agent agents` or `--agent all`.
 
-If you use Cursor, the installer also creates `.cursor/rules/glide.mdc`.
+- `glide`: how to find an element, edit source so that the canvas keeps working, and explain a refused edit.
+- `glide-component-segregator`: how to use `glide-components.json` to find a component by name.
+- `glide-setup`: how to install and configure Glide, and fix a setup that does not work.
+
+Glide does not install skills by itself. When the skills are not in the project, the `glide` command prints a one-line tip. If you use Cursor, the installer also creates `.cursor/rules/glide.mdc`.
 
 ### The component registry (`glide-components.json`)
 

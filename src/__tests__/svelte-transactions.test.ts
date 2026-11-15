@@ -76,5 +76,7 @@ test('unsupported Svelte edits are refused and write nothing', async () => {
 test('stamping leaves namespaced tags such as <svelte:head> intact', () => {
   const stamped = stampHTMLTemplate(source, 'App.svelte');
   expect(stamped).toContain('<svelte:head>');
+  // The Svelte compiler rejects an attribute on <title>.
+  expect(stamped).toContain('<svelte:head><title>Demo</title></svelte:head>');
   expect(stamped).toContain(`<main data-gl-source="App.svelte:${line}:${column('<main')}"`);
 });

@@ -1,135 +1,93 @@
 ---
 name: glide-component-segregator
 description: >
-  Component segregation guide for Glide (@srivarsank/glide). Teaches AI agents
-  how to read `glide-components.json` to discover, locate, and edit components by
-  name instead of raw file:line:col coordinates. Covers 300ms auto-watch behavior,
-  adding new components, co-located CSS detection, root element targeting,
-  and multi-framework support (React, Vue, Svelte, Astro, HTML).
+  How to read `glide-components.json`, the component index that the Glide visual editor writes, to
+  find a component or element by name without searching the file tree. Use this skill whenever a
+  project has `glide-components.json` and the user asks to change, find, restyle or inspect a
+  component ("make the Card background darker", "where is the Header defined", "which components
+  use this button"), and whenever you need the file, line and column of a UI element. Use it also
+  when the registry looks wrong, empty or out of date.
 ---
 
-# Glide Component Segregator
+# Glide component registry
 
-## What Is This?
+Glide scans the project and writes `glide-components.json` in the project root. Each component is
+one entry with its file and the elements it renders. Reading this file is faster and more exact
+than a search through the source tree, because each element already has its line and column.
 
-When the `glide` command starts (via `npx @srivarsank/glide` or `glide`), it scans the target project's source tree and writes **`glide-components.json`** to the project root. It watches for source file changes and rebuilds incrementally with a 300 ms debounce.
+Glide writes the file when the editor server starts (the dev server with the Glide plugin, or the
+`glide` command) and again within 300 ms of a source change. Treat it as read-only: Glide
+overwrites manual changes.
 
-Every component in the app — including layout wrappers, backgrounds, and sub-elements — is indexed in a `ComponentBucket` within that file.
-
----
-
-## Registry Shape
+## The file
 
 ```ts
-// glide-components.json
-{
-  "projectRoot": "/absolute/path/to/project",
-  "generatedAt": "2026-09-24T12:00:00.000Z",
-  "framework": "react" | "vue" | "svelte" | "astro" | "html" | "unknown",
-  "buckets": ComponentBucket[]
+interface ComponentRegistry {
+  projectRoot: string;
+  generatedAt: string;                 // ISO time of the last scan
+  framework: 'react' | 'vue' | 'svelte' | 'astro' | 'html' | 'unknown';
+  buckets: ComponentBucket[];          // one per component
 }
 
 interface ComponentBucket {
-  name: string;           // "Card", "Header", "Hero", "Default", "Anonymous"
-  file: string;           // absolute path to source file
-  exportType: "default" | "named" | "anonymous" | "sfc" | "html";
-  line: number;           // line of the function/export declaration
+  name: string;                        // "Card", "Header"; "Anonymous" for an unnamed default export
+  file: string;                        // absolute path
+  exportType: 'default' | 'named' | 'anonymous' | 'sfc' | 'html';
+  line: number;                        // where the component is declared
   column: number;
   elements: RegistryElement[];
-  cssFiles: string[];     // co-located CSS files (same dir, same stem)
+  cssFiles: string[];                  // stylesheets next to the file with the same name
 }
 
 interface RegistryElement {
-  id: string;             // data-gl-source value or "file:line:col" fallback
-  tagName: string;        // "div", "button", "Card.Header", etc.
+  id: string;                          // "file:line:col", the same value as the element's data-gl-source
+  tagName: string;                     // "div", "button", or a component such as "Card.Header"
   line: number;
   column: number;
-  isRoot: boolean;        // true = outermost element returned by the component
-  classNames: string[];   // static className tokens
-  text?: string;          // trimmed direct text content (≤25 chars)
+  isRoot: boolean;                     // the outer element that the component returns
+  classNames: string[];                // static classes only; empty when the class is computed
+  text?: string;                       // the first 25 characters of direct text
 }
 ```
 
----
+## How to use it
 
-## How to Use This as an AI Agent
-
-### 1. Locate a component before editing it
-
-**Do not** guess file paths or scan the entire filesystem manually. Read the registry first:
+A script in the `glide` skill prints the parts you need, so you do not have to load the whole file:
 
 ```bash
-# In the target project root:
-cat glide-components.json
+node <glide skill folder>/scripts/query-components.mjs --list
+node <glide skill folder>/scripts/query-components.mjs --name Card
 ```
 
-Then find the bucket:
-```js
-const bucket = registry.buckets.find(b => b.name === 'Card');
-// bucket.file = "/Users/dev/myapp/src/components/Card.tsx"
-// bucket.line = 12
-```
+Or read the JSON directly. Then:
 
-Use `bucket.file` + `bucket.line` as the starting point for any edit.
+1. **Find the component** by `name`. Go to `bucket.file` at `bucket.line`.
+2. **Pick the element.**
+   - For background, outer padding or size, use the element with `isRoot: true`.
+   - For a part inside, match on `tagName`, `classNames` or `text`.
+3. **Edit at `element.line` and `element.column`** in `bucket.file`. That position is the `<` of the
+   opening tag.
+4. **For a CSS Modules component**, the styles are in `bucket.cssFiles[0]`, not in the markup.
+5. **For a capitalized `tagName`** (`<Button>`), the element is another component. To change what it
+   renders, find the entry with that name. To change only this one use of it, edit here.
 
-### 2. Find the root / background element
+After you add or rename a component, wait a moment and read the file again; the scan runs 300 ms
+after the change.
 
-The outermost wrapper element is tagged `isRoot: true`:
-```js
-const root = bucket.elements.find(e => e.isRoot);
-// root.tagName = "div", root.classNames = ["card-container"], root.id = "src/Card.tsx:13:8"
-```
+## Limits to keep in mind
 
-`root.id` is the `data-gl-source` value of that element. Use `root.line` and `root.column` to find it in `bucket.file`.
+- **Static classes only.** `classNames` is empty for a computed class (`cn(...)`, `:class`). Empty
+  does not mean the element has no classes; read the source.
+- **Several components can share a name** in different files. Check `file` before you edit.
+- **Template files** (`.vue`, `.svelte`, `.astro`) have one entry per file, with `exportType: 'sfc'`.
+- **Folders that are skipped:** `node_modules`, `dist`, `build`, `.next`, `.nuxt`, `coverage`, and
+  test folders.
 
-### 3. Target a specific nested element
+## When the file is missing or wrong
 
-Find by tagName, className, or text:
-```js
-const btn = bucket.elements.find(e => e.tagName === 'button' && e.classNames.includes('submit'));
-// btn.line / btn.column → the position of the tag in bucket.file
-```
-
-### 4. Jump to imported sub-component definitions
-
-If an element has a capitalized `tagName` (e.g. `<Button />`, `<Avatar />`), it is a custom component instantiation.
-- In the editor, the Properties panel header and Layers tree include a **Jump to Component** button.
-- As an agent, query `registry.buckets.find(b => b.name === tagName)` to jump directly to its definition.
-
-### 5. Edit co-located CSS
-
-Check `bucket.cssFiles` for associated stylesheets:
-```js
-if (bucket.cssFiles.length > 0) {
-  // Edit bucket.cssFiles[0] for CSS module changes
-}
-```
-
----
-
-## Edge Cases
-
-| Scenario | Behavior |
-|:---|:---|
-| **Anonymous export** (`export default function() { ... }`) | `bucket.name = "Anonymous"`, `exportType = "anonymous"` |
-| **Vue SFC** (`.vue`) | Scans `<template>` block only; `exportType = "sfc"` |
-| **Svelte** (`.svelte`) | Strips `<script>` and `<style>` blocks; scans template; `exportType = "sfc"` |
-| **Astro** (`.astro`) | Preserves `---` frontmatter; scans template; `exportType = "sfc"` |
-| **Static HTML** (`.html`) | Excludes `<head>`, `<script>`, `<style>`; `exportType = "html"` |
-| **Co-located CSS** | Scans directory for `.css`, `.module.css`, `.scss`, `.module.scss`, `.less` matching component stem |
-| **File added / deleted** | Registry auto-rebuilds in 300 ms via `watchRegistry` |
-| **File changed during a canvas edit** | The server refuses the user's save with `STALE_DIGEST`; the user selects the element again |
-| **Registry is missing** | Glide writes it when the editor server starts (the dev server with the plugin, or the `glide` command). Start one of them, or read the source files |
-
----
-
-## Recommended Workflow
-
-```
-1. Read glide-components.json
-2. Find bucket by component name (e.g. "Card", "Header")
-3. Inspect elements — target by isRoot / tagName / classNames
-4. Edit the tag at element.line / element.column in bucket.file
-5. For CSS edits — open file listed in bucket.cssFiles
-6. If adding a new component — wait 300 ms, then re-read registry
-```
+| Problem | Cause | What to do |
+|:---|:---|:---|
+| No `glide-components.json` | Glide has not run in this project | Start the dev server (with the Glide plugin) or run `npx @srivarsank/glide`. Until then, read the source files |
+| A new component is not listed | The scan runs 300 ms after a change, and only while Glide runs | Read the file again; check `generatedAt` |
+| A component has no elements | The file did not parse, or it returns no markup | Open the file and check it for a syntax error |
+| The user's canvas edit was refused after your change | You changed a file they had selected | Normal. Tell them to select the element again |

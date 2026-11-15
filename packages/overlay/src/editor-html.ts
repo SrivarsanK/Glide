@@ -2446,16 +2446,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 sourceProps.accept(message);
                 acceptEditScopes(message);
                 if (message.type === 'authenticated') {
+                  // shortcut: Tailwind from a CDN script is not detected, choose "Tailwind" in the Style format menu then.
+                  if (message.tailwind === false) document.getElementById('edit-representation').value = 'inline';
                   sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
                   return;
                 }
+                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
                 if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
                 if (message.type === 'tree' && message.file) {
                   sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
                   if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
                 }
                 if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
+                // The first selection in a file asks for its props before the file's digest arrives; ask again.
+                if (firstDigest && selectedElement) sourceProps.request();
                 if (message.type === 'tree') {
                   lastRequestedTreeFile = null;
                   if (!message.tree) {
@@ -2572,6 +2577,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       showToast('error', message.error || 'Server error');
                     }
                   }
+                } else if (message.type === 'target-port') {
+                  if (message.success) {
+                    proxyTargetPort = message.port;
+                    if (pendingTargetLoad) pendingTargetLoad();
+                  } else {
+                    showToast('error', message.error || 'The preview port could not be changed.');
+                  }
+                  pendingTargetLoad = null;
                 } else if (message.type === 'git-status') {
                   if (message.success) {
                     if (message.action === 'create') {
@@ -2852,7 +2865,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           // EDIT SCOPE
           // ═══════════════════════════════════════════════════════════════
-          // The bridge reports the components whose root is the selection, each with where it is used.
+          // The bridge reports the components that hold the selection, each with where it is used.
           // The server says which usages pass className down to the element and which cva options apply.
           function requestEditScopes() {
             const owners = (selectedElement && selectedElement.owners) || [];
@@ -2884,6 +2897,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (message.type !== 'edit-scopes' || message.requestId !== editScopeRequest || !selectedElement || !message.success) return;
             (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
             const owners = selectedElement.owners;
+            // Inside a component, an element that does not take the component's className has no usage to choose.
+            if (!owners[0].root && !message.forwards[0] && !(message.variants || []).length) return;
             const where = source => { const parsed = parseSource(source); return parsed ? normalizePathSlash(parsed.file).split('/').pop() + ':' + parsed.line : ''; };
             const element = selectedElement.source;
             const scopes = [{ element, source: element, label: 'Every <' + owners[0].name + '> · ' + where(element) }];
@@ -2909,13 +2924,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (scope.reason) option.title = scope.reason;
               return option;
             }));
-            // Like a Figma instance, default to the outermost usage that reaches the element.
+            // Like a Figma instance, default to the outermost usage that reaches the element. Inline styles
+            // cannot reach a usage, so with that format (the default without Tailwind) stay on every instance.
             let chosen = 0;
-            scopes.forEach((scope, index) => { if (index && !scope.variant && !scope.reason) chosen = index; });
+            if (mutationScope.capture({ type: 'style' }).authoringRepresentation !== 'inline') {
+              scopes.forEach((scope, index) => { if (index && !scope.variant && !scope.reason) chosen = index; });
+            }
             select.value = String(chosen);
             select.onchange = () => { editScope = scopes[Number(select.value)]; };
             editScope = scopes[chosen];
             document.getElementById('edit-scope-row').style.display = 'block';
+            // The picker states where edits go; a shared-source warning beside it would only repeat that.
+            document.getElementById('source-mapping-error').hidden = true;
           }
 
           /** Class edits for the selection go to its chosen scope; other edits stay on the element. */
@@ -4116,6 +4136,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             });
           }
 
+          // The editor has a digest only for a file whose tree it loaded, and every source edit needs one.
+          async function ensureDigest(file) {
+            if (fileDigests.has(normalizePathSlash(file)) || !socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({ type: 'get-tree', file }));
+            for (let tries = 0; tries < 30 && !fileDigests.has(normalizePathSlash(file)); tries++) await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
           async function dispatchShapeInsert(tool, x, y, width, height) {
             // A new drawing may start while the page answers; keep the point where this one started.
             const origin = { x: drawStart.x, y: drawStart.y };
@@ -4140,6 +4167,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             };
             const elementType = elemTypeMap[tool] || 'rectangle';
 
+            await ensureDigest(targetFile);
             if (socket && socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({
                 type: 'insert',
@@ -5072,8 +5100,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 }
 
                 menu.style.display = 'block';
-                menu.style.left = (rect.left + data.clientX) + 'px';
-                menu.style.top = (rect.top + data.clientY) + 'px';
+                // The page reports frame coordinates; the canvas zoom scales them on screen. Keep the menu in the window.
+                const zoom = rect.width / iframe.offsetWidth || 1;
+                menu.style.left = Math.max(0, Math.min(rect.left + data.clientX * zoom, window.innerWidth - menu.offsetWidth)) + 'px';
+                menu.style.top = Math.max(0, Math.min(rect.top + data.clientY * zoom, window.innerHeight - menu.offsetHeight)) + 'px';
               }
             }
             if (data.type === 'glide:element-selected-by-id') {
@@ -5657,6 +5687,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ── PORT PROBE ──────────────────────────────────────────────────
           // fetch() with no-cors resolves for any live server (even if CORS
           // blocks the response body) and rejects only on connection refused.
+          var proxyTargetPort = ${JSON.stringify(Number(config.targetPort) || 5173)};
+          var pendingTargetLoad = null;
+
           function probePort(port, timeoutMs) {
             timeoutMs = timeoutMs || 800;
             return new Promise(function(resolve) {
@@ -5772,6 +5805,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             var oldBtn = document.getElementById('glide-retry-btn');
             if (oldBtn) oldBtn.remove();
 
+            // The proxy shows one dev server port. An address with another port moves the proxy first;
+            // without this the preview kept showing the old port, whatever the field said.
+            var wanted = null;
+            try {
+              var asked = new URL(url);
+              if (!${JSON.stringify(!!options.hosted)} && ['localhost', '127.0.0.1'].includes(asked.hostname) && asked.port) wanted = Number(asked.port);
+            } catch (e) {}
+            if (wanted && wanted !== proxyTargetPort) {
+              if (!socket || socket.readyState !== WebSocket.OPEN) {
+                // Not connected yet (first load): try again when the socket is ready.
+                setTimeout(function() { loadApp(url); }, 300);
+                return;
+              }
+              pendingTargetLoad = function() { _doLoadApp(proxyUrl, iframe, loading, statusEl); };
+              socket.send(JSON.stringify({ type: 'set-target-port', port: wanted }));
+              return;
+            }
             _doLoadApp(proxyUrl, iframe, loading, statusEl);
           }
 
@@ -5798,8 +5848,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 // The selection may have changed while the page answered.
                 if (!sources || !selectedElement || selectedElement.source !== asked) return;
                 const count = sources.filter(source => isSourceMatch(source, asked)).length;
-                // With component owners, the edit scope picker states where edits go instead.
-                if (count > 1 && !(selectedElement.owners && selectedElement.owners.length)) {
+                // When the edit scope picker is shown, it states where edits go instead.
+                if (count > 1 && document.getElementById('edit-scope-row').style.display !== 'block') {
                   const banner = document.getElementById('source-mapping-error');
                   banner.hidden = false;
                   banner.textContent = 'Shared source: edits affect all ' + count + ' rendered instances. Individual instances cannot be moved between layers.';
@@ -7142,7 +7192,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               else if (format === 'JPG') bg = '#ffffff';
 
               const svgXml = data.svg || ('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
-                '<style>' + data.css + '</style>' +
+                '<style><![CDATA[' + data.css + ']]></style>' +
                 '<foreignObject width="100%" height="100%">' +
                 '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;background:' + bg + ';overflow:hidden;margin:0;padding:0;">' +
                 data.html +
@@ -7155,10 +7205,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 return;
               }
 
-              const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
+              // Chromium taints a canvas that draws a foreignObject SVG from a blob URL, but not from a data URL.
+              const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgXml);
               const img = new Image();
-              img.crossOrigin = 'anonymous';
               img.onload = () => {
                 try {
                   const canvas = document.createElement('canvas');
@@ -7171,7 +7220,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                   ctx.scale(scale, scale);
                   ctx.drawImage(img, 0, 0);
-                  URL.revokeObjectURL(url);
 
                   const mime = format === 'JPG' ? 'image/jpeg' : 'image/png';
                   canvas.toBlob((b) => {
@@ -7183,12 +7231,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     }
                   }, mime, 0.95);
                 } catch (err) {
-                  URL.revokeObjectURL(url);
                   showToast('error', 'Canvas rasterize error: ' + err.message);
                 }
               };
               img.onerror = () => {
-                URL.revokeObjectURL(url);
                 showToast('error', 'Export rendering error: browser security or asset restriction');
               };
               img.src = url;
@@ -7830,9 +7876,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             {
               category: 'Phones',
               items: [
-                { id: '1290', name: 'iPhone 15 Pro Max', width: 1290, height: 2796 },
-                { id: '1170', name: 'iPhone 15 Pro', width: 1170, height: 2532 },
-                { id: '1179', name: 'iPhone 15', width: 1179, height: 2556 },
+                { id: '430', name: 'iPhone 15 Pro Max', width: 430, height: 932 },
+                { id: '393', name: 'iPhone 15 / 15 Pro', width: 393, height: 852 },
                 { id: '390', name: 'iPhone 13 / 14 / 14 Pro', width: 390, height: 844 },
                 { id: '375', name: 'iPhone SE', width: 375, height: 667 },
                 { id: '360', name: 'Android Small', width: 360, height: 640 }
@@ -8207,6 +8252,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             loadApp(defaultUrl);
           }
           applyTransform();
+          // Start with the whole preview in view. At 100% a desktop-size preview is larger than
+          // the canvas area, and the top of the page would be out of view.
+          fitToScreen();
 
           // Initialize Lucide icons on page load with zero-dependency SVG fallback
           (function initIcons() {

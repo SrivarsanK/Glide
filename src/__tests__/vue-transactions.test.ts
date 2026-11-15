@@ -77,3 +77,12 @@ test('a drag result saves to a Vue template as a relative offset', async () => {
   expect(result.error).toBeUndefined();
   expect(f.read()).toContain('<button :disabled="!label" style="left: 12px; top: 8px; position: relative">Save</button>');
 });
+
+test('component tags get no stamp, so a component root keeps the stamp from its own file', async () => {
+  const { stampHTMLTemplate } = await import('../../packages/core/src/utils.js');
+  const stamped = stampHTMLTemplate(['<template>', '  <main><PlanCard v-for="p in plans" :key="p" /><Card.Header /><plan-list></plan-list></main>', '</template>', ''].join(String.fromCharCode(10)), 'src/App.vue');
+  expect(stamped).toContain('<main data-gl-source="src/App.vue:2:3">');
+  expect(stamped).toContain('<PlanCard v-for');
+  expect(stamped).toContain('<Card.Header />');
+  expect(stamped).toContain('<plan-list data-gl-source=');
+});

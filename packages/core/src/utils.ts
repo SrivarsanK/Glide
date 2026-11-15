@@ -13,7 +13,9 @@ export function stampHTMLTemplate(code: string, filepath: string, sourceAttribut
     .replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length))
     .replace(/<!--[\s\S]*?-->/g, match => ' '.repeat(match.length))
     .replace(/<script[\s\S]*?<\/script>/gi, match => ' '.repeat(match.length))
-    .replace(/<style[\s\S]*?<\/style>/gi, match => ' '.repeat(match.length));
+    .replace(/<style[\s\S]*?<\/style>/gi, match => ' '.repeat(match.length))
+    // Document metadata is not on the canvas, and the Svelte compiler rejects attributes on <title>.
+    .replace(/<svelte:head[\s\S]*?<\/svelte:head>/gi, match => ' '.repeat(match.length));
 
   const tagRegex = /<([a-zA-Z][a-zA-Z0-9.-]*)/g;
   let match: RegExpExecArray | null;
@@ -22,9 +24,15 @@ export function stampHTMLTemplate(code: string, filepath: string, sourceAttribut
 
   while ((match = tagRegex.exec(cleanCode)) !== null) {
     const tagName = match[1];
-    if (['template', 'script', 'style'].includes(tagName.toLowerCase())) {
+    // Not stamped: non-visual tags, and the document scaffolding. Scripts add elements to <body>;
+    // with a stamp there, each such element would look like an authored one.
+    if (['template', 'script', 'style', 'html', 'head', 'body', 'title', 'meta', 'link', 'base'].includes(tagName.toLowerCase())) {
       continue;
     }
+
+    // A component tag (`<PlanCard>`, `<Card.Header>`) is not an element. In Vue the attribute would
+    // fall through to the component's root element and replace that element's own stamp.
+    if (/^[A-Z]/.test(tagName) || tagName.includes('.')) continue;
 
     const index = match.index;
     // `<svelte:head>` and other namespaced tags: an attribute placed after "svelte" would break the tag.

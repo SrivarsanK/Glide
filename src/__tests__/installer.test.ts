@@ -71,14 +71,15 @@ describe('Glide AI Skill Installer', () => {
     expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'framework-adapters.md'))).toBe(true);
     expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'tailwind-rewriting.md'))).toBe(true);
     expect(fs.existsSync(path.join(targetDir, 'glide', 'references', 'staged-edits.md'))).toBe(true);
-    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'query-components.js'))).toBe(true);
-    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'verify-setup.js'))).toBe(true);
-    expect(fs.existsSync(path.join(targetDir, 'glide', 'evals', 'evals.json'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'query-components.mjs'))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'scripts', 'verify-setup.mjs'))).toBe(true);
+    // Test cases are for the skill's authors; they are not instructions for an agent.
+    expect(fs.existsSync(path.join(targetDir, 'glide', 'evals'))).toBe(false);
 
     // Verify content of installed skill
     const content = fs.readFileSync(path.join(targetDir, 'glide', 'SKILL.md'), 'utf-8');
     expect(content).toContain('name: glide');
-    expect(content).toContain('What Glide Can Save');
+    expect(content).toContain('What Glide can save');
     expect(content).not.toContain('LWW');
   });
 
@@ -109,6 +110,51 @@ describe('Glide AI Skill Installer', () => {
     const result = await promptOrInstallSkills(tempDir, ['node', 'cli.js', '--install-skills']);
     expect(result).toBe(true);
     expect(fs.existsSync(path.join(tempDir, '.agents', 'skills', 'glide', 'SKILL.md'))).toBe(true);
+  });
+
+  it('starting the editor never installs skills by itself; it only says how', async () => {
+    const result = await promptOrInstallSkills(tempDir, ['node', 'cli.js', '5173']);
+    expect(result).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, '.agents'))).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, '.claude'))).toBe(false);
+  });
+
+  it('installs into .claude/skills too when the project uses Claude Code, or on request', async () => {
+    const plain = installSkills(tempDir, { silent: true });
+    expect(plain.skillsDirs.map(dir => path.relative(tempDir, dir).split(path.sep).join('/'))).toEqual(['.agents/skills']);
+    expect(fs.existsSync(path.join(tempDir, '.claude'))).toBe(false);
+
+    await promptOrInstallSkills(tempDir, ['node', 'cli.js', 'install-skills', '--agent', 'claude']);
+    expect(fs.existsSync(path.join(tempDir, '.claude', 'skills', 'glide', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, '.claude', 'skills', 'glide', 'scripts', 'query-components.mjs'))).toBe(true);
+
+    // With a Claude Code marker in the project, a plain install covers both folders.
+    const detected = installSkills(tempDir, { silent: true, force: true });
+    expect(detected.skillsDirs.length).toBe(2);
+    expect(() => installSkills(tempDir, { silent: true, agent: 'nope' })).toThrow('Unknown agent');
+  });
+
+  it('a forced install replaces the folder, so files from an older version do not stay', () => {
+    installSkills(tempDir, { silent: true });
+    const stale = path.join(tempDir, '.agents', 'skills', 'glide', 'scripts', 'query-components.js');
+    fs.writeFileSync(stale, '// old version');
+    installSkills(tempDir, { silent: true, force: true });
+    expect(fs.existsSync(stale)).toBe(false);
+  });
+
+  it('every skill has a name that matches its folder and a description that says when to use it', () => {
+    const srcDir = getSkillsSourceDir();
+    for (const skill of ['glide', 'glide-component-segregator', 'glide-setup']) {
+      const text = fs.readFileSync(path.join(srcDir, skill, 'SKILL.md'), 'utf-8');
+      const frontmatter = text.split('---')[1];
+      expect(frontmatter).toMatch(new RegExp('name: ' + skill + '\n'));
+      expect(frontmatter).toMatch(/Use this skill when/);
+      expect(text.split(/\r?\n/).length).toBeLessThan(500);
+      // Links to bundled files must resolve.
+      for (const link of text.matchAll(/\]\((references\/[^)]+)\)/g)) {
+        expect(fs.existsSync(path.join(srcDir, skill, link[1]))).toBe(true);
+      }
+    }
   });
 
   it('should validate YAML frontmatter in all skill files', () => {

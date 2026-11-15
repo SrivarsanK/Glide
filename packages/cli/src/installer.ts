@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
 
 export interface AIEnvironmentInfo {
   antigravity: boolean;
@@ -13,7 +12,10 @@ export interface AIEnvironmentInfo {
 
 export interface InstallResult {
   success: boolean;
+  /** The first skills folder written to; kept for callers of the earlier API. */
   skillsDir: string;
+  /** Every skills folder written to, such as `.agents/skills` and `.claude/skills`. */
+  skillsDirs: string[];
   installed: string[];
   skipped: string[];
   harnesses: string[];
@@ -22,7 +24,20 @@ export interface InstallResult {
 export interface InstallOptions {
   force?: boolean;
   silent?: boolean;
+  /** Where to install: 'agents' (.agents/skills), 'claude' (.claude/skills) or 'all'. Default: by detection. */
+  agent?: string;
 }
+
+export const SKILL_NAMES = ['glide', 'glide-component-segregator', 'glide-setup'];
+
+/** Where each agent reads project skills. */
+const SKILL_FOLDERS: Record<string, { folder: string; label: string }> = {
+  agents: { folder: path.join('.agents', 'skills'), label: 'agents that read .agents/skills (Codex, Antigravity, Cursor, and others)' },
+  claude: { folder: path.join('.claude', 'skills'), label: 'Claude Code' },
+};
+
+/** Author-only content of a skill folder: test cases and test results are not instructions for an agent. */
+const NOT_INSTALLED = new Set(['evals']);
 
 /**
  * Locate the bundled or repository skills directory.
@@ -33,18 +48,12 @@ export function getSkillsSourceDir(): string {
     path.join(__dirname, '..', 'skills'),
     path.resolve(process.cwd(), 'skills'),
   ];
-
   for (const cand of candidates) {
-    if (fs.existsSync(cand) && fs.existsSync(path.join(cand, 'glide', 'SKILL.md'))) {
-      return cand;
-    }
+    if (fs.existsSync(path.join(cand, 'glide', 'SKILL.md'))) return cand;
   }
-
-  // Fallback to first existing candidate
   for (const cand of candidates) {
     if (fs.existsSync(cand)) return cand;
   }
-
   return candidates[0];
 }
 
@@ -52,76 +61,85 @@ export function getSkillsSourceDir(): string {
  * Detect available AI development environments in the target project.
  */
 export function detectAIEnvironments(projectRoot: string): AIEnvironmentInfo {
+  const has = (...parts: string[]) => fs.existsSync(path.join(projectRoot, ...parts));
   return {
-    antigravity: fs.existsSync(path.join(projectRoot, '.gemini')) || fs.existsSync(path.join(projectRoot, '.agents')),
-    claude: fs.existsSync(path.join(projectRoot, 'CLAUDE.md')) || fs.existsSync(path.join(projectRoot, '.claude')),
-    cursor: fs.existsSync(path.join(projectRoot, '.cursorrules')) || fs.existsSync(path.join(projectRoot, '.cursor')),
-    windsurf: fs.existsSync(path.join(projectRoot, '.windsurfrules')),
-    copilot: fs.existsSync(path.join(projectRoot, '.github', 'copilot-instructions.md')),
-    agentDirExists: fs.existsSync(path.join(projectRoot, '.agents', 'skills')),
+    antigravity: has('.gemini') || has('.agents'),
+    claude: has('CLAUDE.md') || has('.claude'),
+    cursor: has('.cursorrules') || has('.cursor'),
+    windsurf: has('.windsurfrules'),
+    copilot: has('.github', 'copilot-instructions.md'),
+    agentDirExists: has('.agents', 'skills'),
   };
 }
 
+/** The skill folders an install writes to. `.agents/skills` always; `.claude/skills` when the project uses Claude Code. */
+export function skillTargets(projectRoot: string, agent?: string): string[] {
+  if (agent === 'all') return Object.keys(SKILL_FOLDERS);
+  if (agent) {
+    if (!SKILL_FOLDERS[agent]) throw new Error(`Unknown agent "${agent}". Use one of: ${Object.keys(SKILL_FOLDERS).join(', ')}, all.`);
+    return [agent];
+  }
+  return detectAIEnvironments(projectRoot).claude ? ['agents', 'claude'] : ['agents'];
+}
+
+/** Whether the Glide skills are in any folder that an agent reads. */
+export function skillsInstalled(projectRoot: string): boolean {
+  return Object.values(SKILL_FOLDERS).some(target => fs.existsSync(path.join(projectRoot, target.folder, 'glide', 'SKILL.md')));
+}
+
 /**
- * Install Glide AI skills into target project's .agents/skills directory.
+ * Copy the Glide skills into the project folders that AI agents read.
+ * A skill that is already there is left alone unless `force` is set; with `force`
+ * the folder is replaced, so files from an older version do not stay behind.
  */
 export function installSkills(projectRoot: string, options: InstallOptions = {}): InstallResult {
   const sourceDir = getSkillsSourceDir();
-  const targetDir = path.join(projectRoot, '.agents', 'skills');
   const envInfo = detectAIEnvironments(projectRoot);
-
+  const targets = skillTargets(projectRoot, options.agent);
   const installed: string[] = [];
   const skipped: string[] = [];
   const harnesses: string[] = [];
-
   if (envInfo.antigravity) harnesses.push('Antigravity IDE');
   if (envInfo.claude) harnesses.push('Claude Code');
   if (envInfo.cursor) harnesses.push('Cursor');
   if (envInfo.windsurf) harnesses.push('Windsurf');
   if (envInfo.copilot) harnesses.push('GitHub Copilot');
-  if (harnesses.length === 0) harnesses.push('Universal AI Agent (.agents/skills)');
 
-  const skillNames = ['glide', 'glide-component-segregator', 'glide-setup'];
-
-  for (const skill of skillNames) {
-    const srcSkillDir = path.join(sourceDir, skill);
-    const srcSkillFile = path.join(srcSkillDir, 'SKILL.md');
-    const destSkillDir = path.join(targetDir, skill);
-    const destSkillFile = path.join(destSkillDir, 'SKILL.md');
-
-    if (!fs.existsSync(srcSkillFile)) {
-      skipped.push(skill);
-      continue;
+  for (const target of targets) {
+    const targetDir = path.join(projectRoot, SKILL_FOLDERS[target].folder);
+    for (const skill of SKILL_NAMES) {
+      const srcSkillDir = path.join(sourceDir, skill);
+      const destSkillDir = path.join(targetDir, skill);
+      const destSkillFile = path.join(destSkillDir, 'SKILL.md');
+      if (!fs.existsSync(path.join(srcSkillDir, 'SKILL.md')) || (fs.existsSync(destSkillFile) && !options.force)) {
+        skipped.push(destSkillFile);
+        continue;
+      }
+      fs.rmSync(destSkillDir, { recursive: true, force: true });
+      fs.mkdirSync(destSkillDir, { recursive: true });
+      fs.cpSync(srcSkillDir, destSkillDir, {
+        recursive: true,
+        filter: source => !NOT_INSTALLED.has(path.basename(source)) || path.dirname(source) !== srcSkillDir,
+      });
+      installed.push(destSkillFile);
     }
-
-    if (fs.existsSync(destSkillFile) && !options.force) {
-      skipped.push(skill);
-      continue;
-    }
-
-    fs.mkdirSync(destSkillDir, { recursive: true });
-    fs.cpSync(srcSkillDir, destSkillDir, { recursive: true });
-    installed.push(destSkillFile);
   }
 
-  // Also support Cursor rules if .cursor directory exists or Cursor is detected
+  // Cursor reads rules, not skill folders: a rule points it at the installed skills.
   if (envInfo.cursor) {
-    const cursorRulesDir = path.join(projectRoot, '.cursor', 'rules');
-    const cursorMdcFile = path.join(cursorRulesDir, 'glide.mdc');
+    const cursorMdcFile = path.join(projectRoot, '.cursor', 'rules', 'glide.mdc');
     if (!fs.existsSync(cursorMdcFile) || options.force) {
       try {
-        fs.mkdirSync(cursorRulesDir, { recursive: true });
-        const mdcContent = `---
-description: Glide Visual Design & AST Code-Native Editor Rules
+        fs.mkdirSync(path.dirname(cursorMdcFile), { recursive: true });
+        fs.writeFileSync(cursorMdcFile, `---
+description: Glide visual editor: how to find and edit UI source in this project
 globs: *
 alwaysApply: false
 ---
-# Glide Visual Editor Rules
-- When editing visual UI components, read \`glide-components.json\` first to locate component buckets.
-- Follow the skills in \`.agents/skills/glide/SKILL.md\` and \`.agents/skills/glide-component-segregator/SKILL.md\`.
-- Keep source code formatting clean and use Tailwind utility replacements where appropriate.
-`;
-        fs.writeFileSync(cursorMdcFile, mdcContent, 'utf-8');
+# Glide
+- This project uses the Glide visual editor. Before a UI change, read \`.agents/skills/glide/SKILL.md\`.
+- To find a component by name, read \`.agents/skills/glide-component-segregator/SKILL.md\`.
+`, 'utf-8');
         installed.push(cursorMdcFile);
       } catch {
         // Non-critical
@@ -131,91 +149,37 @@ alwaysApply: false
 
   if (!options.silent) {
     if (installed.length > 0) {
-      console.log(`[Glide] ✅ Installed ${installed.length} AI agent skill(s) into .agents/skills/`);
-      for (const file of installed) {
-        console.log(`        → ${path.relative(projectRoot, file)}`);
-      }
-      console.log(`[Glide] 🤖 Target harnesses: ${harnesses.join(', ')}`);
-    } else if (skipped.length > 0 && !options.force) {
-      console.log(`[Glide] ℹ️ AI agent skills already up to date in .agents/skills/`);
+      console.log(`[Glide] Installed the Glide skills (${SKILL_NAMES.join(', ')}):`);
+      for (const target of targets) console.log(`        ${SKILL_FOLDERS[target].folder}${path.sep}  for ${SKILL_FOLDERS[target].label}`);
+      if (!targets.includes('claude')) console.log('[Glide] For Claude Code, run: npx @srivarsank/glide install-skills --agent claude');
+    } else if (skipped.length > 0) {
+      console.log('[Glide] The Glide skills are already installed. Use --force to replace them with this version.');
     }
   }
 
-  return {
-    success: installed.length > 0 || skipped.length > 0,
-    skillsDir: targetDir,
-    installed,
-    skipped,
-    harnesses,
-  };
+  const skillsDirs = targets.map(target => path.join(projectRoot, SKILL_FOLDERS[target].folder));
+  return { success: installed.length > 0 || skipped.length > 0, skillsDir: skillsDirs[0], skillsDirs, installed, skipped, harnesses };
 }
 
 /**
- * Handle skill installation check, interactive prompt, or automatic installation.
+ * Install the skills when the command asks for it; otherwise only say how.
+ * Starting the editor never writes skill files into the project by itself.
  */
 export async function promptOrInstallSkills(projectRoot: string, argv: string[] = process.argv): Promise<boolean> {
-  // Check for opt-out
-  if (argv.includes('--no-skills') || argv.includes('--skip-skills')) {
-    return false;
-  }
+  if (argv.includes('--no-skills') || argv.includes('--skip-skills')) return false;
 
-  const explicitInstall = argv.includes('--install-skills') ||
-    argv.includes('-i') ||
-    argv.includes('install-skills') ||
-    argv.includes('init') ||
-    argv.includes('--init');
-
-  const autoYes = argv.includes('--yes') || argv.includes('-y');
-
-  if (explicitInstall || autoYes) {
-    installSkills(projectRoot, { force: true });
+  const explicitInstall = ['--install-skills', '-i', 'install-skills', 'init', '--init'].some(flag => argv.includes(flag));
+  if (explicitInstall) {
+    const agentIndex = argv.indexOf('--agent');
+    installSkills(projectRoot, {
+      // An explicit install brings the project to this version, unless only missing skills are wanted.
+      force: true,
+      agent: agentIndex >= 0 ? argv[agentIndex + 1] : undefined,
+    });
     return true;
   }
 
-  // Check if primary skill already exists
-  const primarySkill = path.join(projectRoot, '.agents', 'skills', 'glide', 'SKILL.md');
-  if (fs.existsSync(primarySkill)) {
-    return true;
-  }
-
-  // Interactive prompt if TTY
-  if (process.stdin.isTTY && !process.env.CI) {
-    try {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      const answer = await new Promise<string>((resolve) => {
-        const timer = setTimeout(() => {
-          // Timeout after 6 seconds, default to Yes
-          resolve('y');
-        }, 6000);
-
-        rl.question('[Glide] 🤖 Install AI agent skills into .agents/skills for your AI editor/CLI? [Y/n] (auto-proceeds in 6s): ', (ans) => {
-          clearTimeout(timer);
-          resolve(ans.trim());
-        });
-      });
-
-      rl.close();
-
-      if (answer.toLowerCase() === 'n' || answer.toLowerCase() === 'no') {
-        console.log('[Glide] Skipped AI agent skills installation.');
-        return false;
-      }
-
-      installSkills(projectRoot, { force: false });
-      return true;
-    } catch {
-      // Fallback to auto install
-      installSkills(projectRoot, { force: false });
-      return true;
-    }
-  } else {
-    // Non-interactive (CI or running inside an AI harness/subagent)
-    // Automatically install so the AI harness immediately gains Glide capabilities
-    installSkills(projectRoot, { force: false, silent: false });
-    return true;
-  }
+  if (skillsInstalled(projectRoot)) return true;
+  console.log('[Glide] Tip: to teach your AI coding agent about Glide, run: npx @srivarsank/glide install-skills');
+  return false;
 }

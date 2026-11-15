@@ -4,7 +4,7 @@ import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassName, activeVariants } from '@srivarsank/ast-writer';
@@ -750,7 +750,8 @@ function proxyToDevServer(
       return proxyToDevServer(targetPort, proxyPath, req, res, bridgeScript, true);
     }
     res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('[Glide Proxy] Could not reach dev server: ' + err.message);
+    res.end('[Glide Proxy] Could not reach dev server: ' + err.message
+      + '\n\nStart the dev server of your app. If it uses a different port, type its address (for example http://localhost:4321) in the URL field of the editor and press Enter.');
   });
 
   if (req.readable) req.pipe(proxyReq); else proxyReq.end();
@@ -1162,7 +1163,8 @@ export class GlideServer {
                 }
                 this.authenticated.add(ws);
                 clearTimeout(timer);
-                ws.send(JSON.stringify({ type: 'authenticated', success: true }));
+                // The editor writes inline styles by default when the project cannot render a Tailwind class.
+                ws.send(JSON.stringify({ type: 'authenticated', success: true, tailwind: loadTailwindTheme(this.projectPaths.root).version !== null }));
                 return;
               }
 
@@ -1452,6 +1454,21 @@ export class GlideServer {
                     action: 'finalize'
                   }));
                 }
+                return;
+              }
+
+              // The address field of the editor names the dev server. Only the port can change:
+              // the proxy always connects to this machine.
+              if (message.type === 'set-target-port') {
+                const port = message.port;
+                const valid = !this.hosted && Number.isInteger(port) && port >= 1 && port <= 65535 && port !== this.servedPort();
+                if (valid) {
+                  this.targetPort = port;
+                  this.config = { ...this.config, targetPort: port };
+                  console.log(`[Glide] Preview now shows the dev server on port ${port}`);
+                }
+                ws.send(JSON.stringify({ type: 'target-port', success: valid, port: this.targetPort,
+                  ...(valid ? {} : { error: 'INVALID_OPERATION: Give a port from 1 to 65535 that is not the editor port.' }) }));
                 return;
               }
 
