@@ -63,7 +63,7 @@ class Actor {
       if (s.eyes) { const e = typeof s.eyes === 'function' ? s.eyes(t) : s.eyes; if (e && !(eyes === 'blink' && e === 'n')) eyes = e; }
       if (s.arms) arms = typeof s.arms === 'function' ? s.arms(t) : s.arms;
     }
-    const x = Math.round(pos.x / (px / 2)) * (px / 2);
+    const x = pos.x;                                                  // no grid snap: float noise during zooms flipped it a sprite pixel back and forth
     return { x, y: pos.y, px, flip, sq, legs, arms, eyes, shadow: s.k === 'jump' ? 0 : 1, jump: s.k === 'jump', sign: !!s.sign };
   }
 }
@@ -98,12 +98,12 @@ export const box = (A, key) => { const p = A(key, 0, 0); if (p) boxes[key] = { x
 // ───────── the timeline
 export const T = {
   apply: 1.10, land0: 1.60, title: 3.70, wipe2: 5.80, md: 6.34, cut3: 8.96, scope: 9.50, pick: 9.85, tab: 10.22, lg: 11.06,
-  wipe3: 12.65, drag0: 13.0, drag1: 13.6, rel: 13.70, styleW: 13.98, refuse: 15.05, split: 17.91, beats: [17.91, 18.44, 18.96, 19.49],
+  wipe3: 12.65, drag0: 13.0, drag1: 13.6, rel: 13.70, styleW: 14.12, refuse: 15.05, split: 17.91, beats: [17.91, 18.44, 18.96, 19.49],
   merge: 21.07, cmd: 21.40, enter: 22.65, home: 24.23
 };
 export const SUBS = [
-  [0.00, 2.80, 'I clicked a color.'], [2.90, 5.70, 'It edited my code.'], [6.40, 9.00, 'Only that class.'], [9.80, 12.60, 'Or every lg button.'],
-  [15.00, 17.85, 'Not exact? Refused.'], [18.10, 21.35, 'React, Vue, Svelte, Astro.'], [21.45, 23.80, 'Open source.'], [24.60, 25.01, 'I clicked a color.']
+  [0.00, 2.80, 'I clicked a color'], [2.90, 5.70, 'It edited my code'], [6.40, 9.00, 'Only that class'], [9.80, 12.60, 'Or every lg button'],
+  [15.00, 17.55, 'Not exact? Refused'], [18.10, 21.35, 'React, Vue, Svelte, Astro'], [21.45, 23.80, 'Open source'], [24.60, 25.01, 'I clicked a color']
 ].map(([t0, t1, text]) => ({ t0, t1, text }));
 const CH = [[T.wipe2, '02', 'Precise', true], [T.wipe3, '03', 'Layout', true], [T.split, '04', 'Everywhere', false]];
 const KEYS = [[5.98, ['7', '2', '⏎'], 'font size', [6.08, 6.18, 6.30]], [10.03, ['1', '8', '⏎'], 'font size', [10.12, 10.20, 10.30]], [22.40, ['⏎'], 'run', [T.enter]]];
@@ -125,22 +125,25 @@ function build() {
 
   // camera
   cam(0, 1.2, [645, 1050, .96], 'ss');
-  cam(1.22, .38, [430, 1270, 1.45], 'whip');                                   // fall with the mascot to line 24
+  // follow moves: smoothstep, never shorter than ~0.4 s of film time, arriving on the beat they used to land on
+  // (the old quintic whips peaked at 5× their mean speed: 250–730 px in one frame, the "too fast" spots in the motion audit)
+  cam(1.08, .58, [430, 1270, 1.45], 'ss');                                    // fall with the mascot to line 24
   cam(2.40, 1.1, [675, 700, .8]);                                            // one calm pull out to the whole window
   cam(3.72, 1.7, [380, 380, 1.6]);                                            // push to the tab title
   cut(T.wipe2, [1030, 470, 1.9]);                                             // panel: breakpoint and size
-  cam(6.10, .24, [470, 1270, 1.45], 'whip');                                  // down to the code
+  cam(5.92, .42, [470, 1270, 1.45], 'ss');                                    // down to the code, landing with the stomp
   cam(7.20, .8, CAM0);
-  cam(T.cut3 - .2, .2, [420, 700, 1.6], 'whip');                              // to "View the repo"
-  cam(9.30, .25, [1000, 480, 1.7]);                                           // to the scope select
-  cam(10.20, .3, [520, 1270, 1.45], 'whip');                                  // to Button.tsx
+  cam(T.cut3 - .36, .4, [420, 700, 1.6], 'ss');                              // to "View the repo"
+  cam(9.14, .5, [1000, 480, 1.7]);                                           // to the scope select
+  cam(10.08, .46, [520, 1270, 1.45], 'ss');                                   // to Button.tsx
   cam(11.50, .7, CAM0);
   cut(T.wipe3, [420, 640, 1.6]);                                              // the subtitle
-  cam(13.72, .3, [500, 1314, 1.3], 'whip');                                   // to line 25
-  cam(14.76, .34, [440, 660, 1.5], 'whip');                                   // to the card and the toast
-  cam(15.10, 2.5, [440, 690, 1.65], 'ss');                                    // the freeze: a slow push
-  cam(17.66, .25, [850, 850, .635], 'whip');                                  // cell division: the whole desktop
-  cam(21.07, .3, [750, 920, 1.0]);
+  cam(13.66, .44, [500, 1314, 1.3], 'ss');                                    // to line 25
+  cam(14.70, .5, [440, 660, 1.5], 'ss');                                      // to the card and the toast
+  cam(15.20, 2.4, [440, 690, 1.65], 'ss');                                    // the freeze: a slow push
+  cam(17.40, .62, [850, 850, .635], 'ss');                                    // cell division: the whole desktop
+  cam(19.60, 1.4, [850, 870, .7], 'ss');                                      // no dead hold on the four-up: a slow push in
+  cam(21.00, .45, [750, 920, 1.0]);
   cam(21.40, 1.25, [750, 920, 1.1], 'ss');
   cut(T.home, CAM0);
 
@@ -175,7 +178,8 @@ function build() {
     .jump(13.75, 14.05, at('sub', .55, 0), at('tk-style', .03, 0), 50)
     .stand(14.05, 14.80, at('tk-style', .03, 0), { eyes: 'happy' })
     .jump(14.80, 15.15, at('tk-style', .03, 0), at('card0', .5, 0), 90)
-    .stand(15.15, T.split - .23, at('card0', .5, 0), { eyes: 'stern', arms: t => t > 15.3 ? 'sign' : 'down', sign: true })
+    .stand(15.15, T.split - .62, at('card0', .5, 0), { eyes: 'stern', arms: t => t > 15.3 ? 'sign' : 'down', sign: true })
+    .jump(T.split - .62, T.split - .23, at('card0', .5, 0), pt(850, 850), 120)            // into the middle of the desk, where it divides
     .hide(T.split - .23, T.merge + .05)
     .stand(T.merge + .05, 22.80, at('termbar', .3, 0), { eyes: 'd' })
     .jump(22.80, 23.08, at('termbar', .3, 0), at('out1', .9, 0), 40)
@@ -195,10 +199,10 @@ function build() {
   CUR = new Cursor();
   CUR.show(0, 3.0).move(0, 0, P0).move(0, 1.0, at('apply', .5, .55)).click(T.apply)
     .show(5.85, 6.40).move(5.85, 5.85, at('size', .3, .6)).click(5.95)
-    .show(T.cut3 - .1, 10.25).move(T.cut3 - .1, T.cut3 - .1, pt(520, 760)).move(T.cut3, 9.22, at('btn1', .6, .6)).click(9.25)
-      .move(9.28, 9.45, at('scope', .45, .55)).click(9.47).move(9.55, 9.82, at('opt3', .45, .55)).click(T.pick)
+    .show(T.cut3 - .1, 10.25).move(T.cut3 - .1, T.cut3 - .1, pt(520, 760)).move(T.cut3 - .1, 9.06, at('btn1', .6, .6)).click(9.1)
+      .move(9.14, 9.44, at('scope', .45, .55)).click(9.47).move(9.55, 9.82, at('opt3', .45, .55)).click(T.pick)
     .show(12.85, 13.95).move(12.85, 12.85, at('sub', .2, .55)).click(12.95, 'press').move(T.drag0, T.drag1, at('sub', .2, .55)).click(T.rel, 'release')
-    .show(14.78, 17.6).move(14.78, 14.78, pt(600, 760)).move(14.78, 14.95, at('cardbody0', .4, .5)).click(14.95).click(T.refuse)
+    .show(14.52, 17.6).move(14.52, 14.52, pt(600, 760)).move(14.56, 14.92, at('cardbody0', .4, .5)).click(14.95).click(T.refuse)
     .show(24.40, DUR + 1).move(24.40, 24.40, P0);
 }
 build();
@@ -212,10 +216,10 @@ export function frame(t) {
   const btnStage = t >= T.cut3 && t < T.wipe3 && !home;
   const E = F.ed = {
     file: t >= T.pick && btnStage ? 'Button.tsx' : 'App.tsx',
-    sel: home || t < 9.25 ? 'h1' : t < T.wipe3 ? 'btn1' : t >= 12.95 && t < 14.76 ? 'sub' : t >= 14.95 && t < T.split ? 'card' : null,
+    sel: home || t < 9.1 ? 'h1' : t < T.wipe3 ? 'btn1' : t >= 12.95 && t < 14.76 ? 'sub' : t >= 14.95 && t < T.split ? 'card' : null,
     h1Col: !home && t >= T.land0 ? '#6d28d9' : '#0f172a', h1Size: !home && t >= T.md ? 72 : 60, btnText: !home && t >= T.lg ? 18 : 16,
     subDX: home ? 0 : 48 * eio(seg(t, T.drag0, T.drag1)), subDY: 0, guide: !home && t > 13.3 && t < 13.8 ? Math.min(seg(t, 13.3, 13.4), 1 - seg(t, 13.7, 13.8)) : 0,
-    bp: !home && t >= T.wipe2 && t < T.cut3 ? 'md' : 'Base', props: btnStage && t >= 9.25 ? 'button' : 'h1',
+    bp: !home && t >= T.wipe2 && t < T.cut3 ? 'md' : 'Base', props: btnStage && t >= 9.1 ? 'button' : 'h1',
     colorHex: !home && t >= T.land0 ? '#6d28d9' : '#000000',
     picker: home || t < 1.45 ? { op: home ? 1 : 1 - seg(t, 1.30, 1.45), hex: '#6d28d9', press: t >= T.apply && t < T.apply + .12 } : null,
     sizeField: '60', sizeHot: false, toast: null,
@@ -251,8 +255,9 @@ export function frame(t) {
 function hud(F, t, home) {
   const H = F.hud;
   const s = SUBS.find(x => t >= x.t0 && t < x.t1);
-  if (s) H.cap = { text: s.text, op: s.t0 === 0 ? 1 - seg(t, s.t1 - .15, s.t1) : s.t1 > DUR ? Math.min(1, seg(t, s.t0, s.t0 + .12)) : Math.min(seg(t, s.t0, s.t0 + .12), 1 - seg(t, s.t1 - .15, s.t1)),
-    y: s.t0 === 0 ? 0 : (1 - eo(seg(t, s.t0, s.t0 + .2))) * 12 };
+  // asymmetric: a slow, eased entrance that rises out of a vertical blur, then a quicker exit that blurs away (bang-motion: directional blur on every text in/out)
+  if (s) { const kin = s.t0 === 0 ? 1 : eo(seg(t, s.t0, s.t0 + .22)), kout = seg(t, s.t1 - .1, s.t1);
+    H.cap = { text: s.text, op: s.t0 === 0 ? 1 - kout : s.t1 > DUR ? kin : Math.min(kin, 1 - kout), y: (1 - kin) * 18 - kout * 8, blur: (1 - kin) * 7 + kout * 5 }; }
   for (const [t0, no, nm, wipe] of CH) {
     if (wipe && t >= t0 - .45 && t < t0 + .42) H.wipe = { p: (t - t0 + .45) / .87, no, nm };
     if (t >= t0 + .4 && t < t0 + 2.0) H.chap = { no, nm, op: Math.min(seg(t, t0 + .4, t0 + .6), 1 - seg(t, t0 + 1.8, t0 + 2.0)) };

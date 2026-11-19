@@ -3,7 +3,10 @@
 export const WORLD = 1700;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export const desk = () => `<div class="wall"></div>`;
+// the desk is never still (bang-motion: a living background with at least two layers): the base gradient, a slow drifting light
+// and film grain whose seed steps 12 times a second. All of it is a function of film time, so every render is identical.
+export const desk = (t = 0) => `<div class="wall"><div class="dglow" style="left:${1080 + 240 * Math.sin(t * .23) - 600}px;top:${300 + 170 * Math.sin(t * .31 + 1) - 600}px"></div>
+  <svg class="grain" width="1700" height="1700"><filter id="gr"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="1" seed="${Math.floor(t * 12) % 97}"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0"/></filter><rect width="1700" height="1700" filter="url(#gr)"/></svg></div>`;
 
 // ───────── browser window with the Glide editor
 export const BW = { x: 40, y: 150, w: 1160, h: 960 };

@@ -8,7 +8,7 @@ html,body{margin:0;width:1080px;height:1080px;overflow:hidden;background:#0b0e14
 body{font-family:Inter,sans-serif;-webkit-font-smoothing:antialiased}
 #stage{position:absolute;inset:0;overflow:hidden}
 .layer{position:absolute;left:0;top:0;width:1700px;height:1700px;transform-origin:0 0}
-.wall{position:absolute;inset:0;background:radial-gradient(1100px 800px at 78% 18%,#1f2a48 0%,#121a2e 45%,#0b0f1a 100%)}
+.wall{position:absolute;inset:0;overflow:hidden;background:radial-gradient(1100px 800px at 78% 18%,#1f2a48 0%,#121a2e 45%,#0b0f1a 100%)}.dglow{position:absolute;width:1200px;height:1200px;border-radius:50%;background:radial-gradient(circle,rgba(96,120,230,.20),rgba(96,120,230,0) 64%)}.grain{position:absolute;left:0;top:0;opacity:.07;mix-blend-mode:overlay}
 .win{position:absolute;border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.09)}
 .dots{display:flex;gap:8px;align-items:center;height:100%;padding:0 6px 0 2px}.dots i{width:13px;height:13px;border-radius:50%;background:#ff5f57}.dots i+i{background:#febc2e}.dots i+i+i{background:#28c840}
 /* browser */
@@ -99,16 +99,16 @@ h1{margin:16px 0 0;font-weight:700;letter-spacing:-.025em;line-height:1}
 .px{position:absolute;image-rendering:pixelated;overflow:visible}
 .ring{position:absolute;border-radius:50%;border:3px solid #38bdf8}
 #hud{position:absolute;inset:0;pointer-events:none;z-index:10}
-.cap{position:absolute;left:50%;bottom:150px;text-align:center;font:700 44px Inter;letter-spacing:-.01em;line-height:1.2;white-space:nowrap;color:#fff;
+.cap{position:absolute;left:50%;bottom:150px;text-align:center;font:600 44px Inter;letter-spacing:-.01em;line-height:1.2;white-space:nowrap;color:#fff;
   background:rgba(22,24,32,.72);backdrop-filter:blur(14px);padding:14px 30px;border-radius:999px;box-shadow:0 0 0 1px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.35)}
 .chap{position:absolute;left:36px;top:36px;display:flex;align-items:center;gap:14px;font:600 30px Inter;color:#fff;background:rgba(22,24,32,.72);backdrop-filter:blur(14px);padding:10px 22px 10px 10px;border-radius:16px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
 .chap b{font:700 20px Mono;color:#1a1206;background:#FF7A1A;border-radius:9px;padding:6px 10px}
-.keys{position:absolute;right:36px;top:36px;display:flex;align-items:center;gap:8px;font:600 20px Inter;color:#fff;background:rgba(22,24,32,.8);padding:10px 14px;border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
-.keys i{font-style:normal;min-width:46px;height:46px;padding:0 10px;border-radius:9px;background:#3a3d46;display:grid;place-items:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.45);font-size:22px}
+.keys{position:absolute;right:36px;top:36px;display:flex;align-items:center;gap:8px;font:600 30px Inter;color:#fff;background:rgba(22,24,32,.8);padding:10px 14px;border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+.keys i{font-style:normal;min-width:54px;height:54px;padding:0 10px;border-radius:9px;background:#3a3d46;display:grid;place-items:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.45);font-size:30px}
 .keys i.dn{transform:translateY(2px);box-shadow:inset 0 -1px 0 rgba(0,0,0,.45);background:#FF7A1A;color:#1a1206}.keys span{margin-left:6px;color:#c9ced8;font-weight:500}
 .wipe{position:absolute;inset:0}.wipe b{position:absolute;display:block}
-.cred{position:absolute;inset:0;background:#0b0e14}.cred img{position:absolute;width:560px;height:340px;image-rendering:pixelated;transform-origin:50% 50%}
-.ctag,.crepo{position:absolute;left:0;right:0;text-align:center;font:600 38px Inter;color:#e8ecf2;letter-spacing:-.01em}.crepo{font:500 26px Inter;color:#9aa4b8}
+.cred{position:absolute;inset:0;background:radial-gradient(900px 640px at 50% 34%,#17203a 0%,#0e1424 52%,#0a0d16 100%);overflow:hidden}.cred .cglow{position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,rgba(255,122,26,.16),rgba(255,122,26,0) 62%)}.cred img{position:absolute;width:560px;height:340px;image-rendering:pixelated;transform-origin:50% 50%;mix-blend-mode:lighten}
+.ctag,.crepo{position:absolute;left:0;right:0;text-align:center;font:600 38px Inter;color:#e8ecf2;letter-spacing:-.01em}.crepo{font:500 30px Inter;color:#9aa4b8}
 .ccmd{position:absolute;left:50%;font:500 34px Mono;color:#e8ecf2;background:#161b26;padding:14px 28px;border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.12);white-space:nowrap}
 .wlabel{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#fff;white-space:nowrap}
 .wlabel .no{font:700 30px Mono;letter-spacing:.2em;opacity:.85;margin-bottom:10px}.wlabel .nm{font:700 104px Inter;letter-spacing:-.03em;line-height:1.05}
@@ -116,7 +116,7 @@ h1{margin:16px 0 0;font-weight:700;letter-spacing:-.025em;line-height:1}
 .fade{position:absolute;inset:0;background:#0b0e14}
 </style></head>
 <body>
-<svg width="0" height="0" style="position:absolute"><filter id="mb" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur id="mbg" stdDeviation="0 0"/></filter></svg>
+<svg width="0" height="0" style="position:absolute"><filter id="mb" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur id="mbg" stdDeviation="0 0"/></filter><filter id="cmb" x="-10%" y="-60%" width="120%" height="220%"><feGaussianBlur id="cmbg" stdDeviation="0 0"/></filter></svg>
 <div id="stage">
   <div id="mbw" style="position:absolute;inset:0">
     <div id="world" class="layer"></div>

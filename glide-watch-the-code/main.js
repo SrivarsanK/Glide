@@ -6,6 +6,7 @@ import * as FM from './film.js';
 const Q = new URLSearchParams(location.search), NOSUBS = Q.has('nosubs');
 const world = document.getElementById('world'), spr = document.getElementById('spr'), hudEl = document.getElementById('hud');
 const mbg = document.getElementById('mbg'), mbw = document.getElementById('mbw');
+const cmbg = document.getElementById("cmbg");
 // Pacing: film.js is authored at the 25 s cut's speed (film time u). After the hook's payoff (1.6 s) the picture plays 1.5× slower;
 // 1.5 maps every beat of the 114.84 BPM grid onto an eighth-note of the same grid, so beat locks stay on the music.
 const W0 = 1.6, K = 1.5, U_END = 24.2;                          // film time stops before the old loop wipe (23.78) and reset (24.23)
@@ -18,21 +19,24 @@ window.EV = FM.EV.filter(e => e.t < 23.7).map(e => ({ ...e, t: +Tof(e.t).toFixed
 window.SUBS = FM.SUBS.filter(s => s.t1 <= FM.DUR).map(s => ({ ...s, t0: Tof(s.t0), t1: Tof(s.t1) }));
 window.T = FM.T;
 
+const PROBE = window.PROBE = {};
 const tf = ([cx, cy, z]) => `translate(540px,540px) scale(${z}) translate(${-cx}px,${-cy}px)`;
 function render(tr) {
   const t = U(tr);
   const F = FM.frame(t), [cx, cy, z] = F.cam;
   const quadFull = F.quad && t >= FM.T.split + .2 && t < FM.T.merge;
-  world.innerHTML = UI.desk() + (quadFull ? '' : UI.browser(F) + UI.codeWin(F)) + (F.term ? `<div style="position:absolute;left:0;top:0;width:1700px;height:1700px;background:#0b0e14;opacity:${F.term.op * .82}"></div>` + UI.term(F) : '') + (F.quad ? UI.quad(F) : '');
+  world.innerHTML = UI.desk(t) + (quadFull ? '' : UI.browser(F) + UI.codeWin(F)) + (F.term ? `<div style="position:absolute;left:0;top:0;width:1700px;height:1700px;background:#0b0e14;opacity:${F.term.op * .82}"></div>` + UI.term(F) : '') + (F.quad ? UI.quad(F) : '');
   world.style.transform = spr.style.transform = tf(F.cam);
+  if (F.quad && !quadFull) { const k = 1 - seg(t, FM.T.split - .34, FM.T.split - .08); for (const el of world.querySelectorAll(".bw, .cw")) el.style.opacity = k.toFixed(3); }   // the editor gives way as the four windows divide out
   const cache = {};
   const A = (key, fx = .5, fy = 0) => { const el = cache[key] !== undefined ? cache[key] : (cache[key] = world.querySelector(`[data-a="${key}"]`));
     if (!el) return null; const r = el.getBoundingClientRect();
     return { x: (r.left + r.width * fx - 540) / z + cx, y: (r.top + r.height * fy - 540) / z + cy, w: r.width / z, h: r.height / z }; };
   // motion blur from camera speed: only whips smear
   const [px, py] = FM.camAt(U(tr - 1 / 30)), vx = (cx - px) * z, vy = (cy - py) * z;
-  const bx = Math.min(30, Math.max(0, Math.abs(vx) - 26) * .3), by = Math.min(30, Math.max(0, Math.abs(vy) - 26) * .3);
+  const bx = Math.min(12, Math.max(0, Math.abs(vx) - 60) * .12), by = Math.min(12, Math.max(0, Math.abs(vy) - 60) * .12);   // a hint of smear on fast follows, never a smudge
   mbg.setAttribute('stdDeviation', `${bx.toFixed(2)} ${by.toFixed(2)}`); mbw.style.filter = bx > .6 || by > .6 ? 'url(#mb)' : '';
+  PROBE.cam = F.cam; PROBE.u = t;
   spr.innerHTML = sprites(F, t, A, z);
   hud(F, t, A, z, cx, cy);
   if (tr >= CRED) hudEl.innerHTML += credits(tr - CRED);
@@ -42,7 +46,7 @@ function render(tr) {
 function credits(s) {
   const k = x => eo(clamp(x)), bg = ss(s / .8), lg = k((s - .3) / .9), ln = k((s - 1.4) / .5), cm = k((s - 1.8) / .5), rp = k((s - 2.2) / .5);
   const LX = 260, LY = 250;                                       // logo 560×340 (exactly 2× the 280×170 PNG), centred at x 540
-  let h = `<div class="cred" style="opacity:${bg}">
+  let h = `<div class="cred" style="opacity:${bg}"><div class="cglow" style="left:${90 + 120 * Math.sin(s * .5)}px;top:${-60 + 80 * Math.sin(s * .37 + 1)}px"></div>
     <img src="ascii-art.png" style="left:${LX}px;top:${LY}px;opacity:${lg};transform:scale(${1.06 - .06 * lg});filter:blur(${(1 - lg) * 6}px)">
     <div class="ctag" style="top:640px;opacity:${ln};transform:translateY(${(1 - ln) * 14}px)">Design visually. Ship real source code.</div>
     <div class="ccmd" style="top:712px;opacity:${cm};transform:translate(-50%,${(1 - cm) * 14}px)">npx @srivarsank/glide</div>
@@ -69,6 +73,7 @@ function sprites(F, t, A, z) {
     return c;
   };
   const c1 = F.showMain ? draw(F.actors[0]) : null;
+  PROBE.m = c1 ? { x: (c1.x - F.cam[0]) * z + 540, y: (c1.y - F.cam[1]) * z + 540, wx: c1.x, wy: c1.y, jump: c1.jump } : null;   // motion audit (probe.mjs)
   for (const q of F.clones) draw(q);
   // stomps: the old token crumbles where the new one is written
   for (const [ts, key, len] of [[T.land0, 'tk-brand', 14], [T.md, 'tk-md7', 11], [T.lg, 'tk-lg', 9]]) if (t >= ts && t < ts + .7) {
@@ -81,6 +86,7 @@ function sprites(F, t, A, z) {
   if (t >= T.split - .23 && t < T.split + .3) { const p = A('qh0', .5, 0) || { x: 440, y: 300 }; h += burst(850, 850, seg(t, T.split - .23, T.split + .3), 28); }
   if (t >= T.merge && t < T.merge + .5) h += burst(UI.TW.x + 270, UI.TW.y - 40, seg(t, T.merge, T.merge + .5), 22);
   const cu = F.cursor.eval(t, A);
+  PROBE.cu = cu ? { x: (cu.x - F.cam[0]) * z + 540, y: (cu.y - F.cam[1]) * z + 540, wx: cu.x, wy: cu.y, op: cu.op } : null;
   if (cu) {
     if (cu.sp > 900) for (let i = 1; i <= 4; i++) { const g = F.cursor.eval(t - i * .012, A); if (g) h += cursorSvg(g.x, g.y, 1, cu.op * .16 * (5 - i) / 4, z); }
     if (cu.ring > 0) h += `<div class="ring" style="left:${cu.x - 26 * cu.ring / z - 4}px;top:${cu.y - 26 * cu.ring / z - 4}px;width:${(52 * cu.ring) / z + 8}px;height:${(52 * cu.ring) / z + 8}px;opacity:${(1 - cu.ring) * .8};border-width:${3 / z}px"></div>`;
@@ -99,7 +105,8 @@ function hud(F, t, A, z, cx, cy) {
     h += `<div class="spot" style="opacity:${H.spot.op};background:radial-gradient(ellipse ${r * 2.1}px ${r * 2.0}px at ${s.x}px ${s.y - 90}px, transparent 50%, rgba(5,7,12,.6) 100%)"></div>`; } }
   if (H.chap && !H.wipe) h += `<div class="chap" style="opacity:${H.chap.op}"><b>${H.chap.no}</b>${H.chap.nm}</div>`;
   if (H.keys) h += `<div class="keys" style="opacity:${H.keys.op}">${H.keys.keys.map((k, i) => `<i class="${H.keys.dn === i ? 'dn' : ''}">${k}</i>`).join('')}<span>${H.keys.label}</span></div>`;
-  if (H.cap && !NOSUBS) h += `<div class="cap" style="opacity:${H.cap.op};transform:translate(-50%,${H.cap.y}px)">${H.cap.text}</div>`;
+  const cb = H.cap && !NOSUBS ? H.cap.blur : 0; cmbg.setAttribute("stdDeviation", `0 ${cb.toFixed(2)}`);
+  if (H.cap && !NOSUBS) h += `<div class="cap" style="opacity:${H.cap.op};transform:translate(-50%,${H.cap.y}px);${cb > .3 ? "filter:url(#cmb)" : ""}">${H.cap.text}</div>`;
   if (H.wipe) h += wipe(H.wipe, t);
   hudEl.innerHTML = h;
 }
