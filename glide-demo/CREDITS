@@ -1,0 +1,6 @@
+Watch the Code — third-party assets
+- Inter (fonts/Inter.woff2) — SIL Open Font License 1.1 (fonts/OFL-inter.txt)
+- JetBrains Mono (fonts/JetBrainsMono.woff2) — SIL Open Font License 1.1 (fonts/OFL-jetbrainsmono.txt)
+- Music: "Happy Beats / Business Moves vol. 11" by Sascha Ende, ende.app — CC BY 4.0 (credit: "Music: Sascha Ende, ende.app (CC BY 4.0)")
+- Rendering and sound tools: Lemo-Opuscar library (core/), used as tools; nothing from it appears in the picture.
+- The mascot, UI redraw and timeline are original to this film. Glide UI labels are Glide's own (the user's project).

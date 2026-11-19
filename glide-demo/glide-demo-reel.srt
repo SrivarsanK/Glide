@@ -1,0 +1,47 @@
+1
+00:00:00,000 --> 00:00:03,500
+Click an element. Change its color.
+
+2
+00:00:03,600 --> 00:00:07,500
+Glide writes it to your source file.
+
+3
+00:00:12,800 --> 00:00:16,100
+Change the size at md only.
+
+4
+00:00:16,200 --> 00:00:19,400
+Only md:text-6xl changes.
+
+5
+00:00:19,500 --> 00:00:22,900
+Every other class stays.
+
+6
+00:00:23,800 --> 00:00:27,400
+Inside a component, pick a scope.
+
+7
+00:00:27,500 --> 00:00:31,700
+This usage, the component, or a variant.
+
+8
+00:00:31,900 --> 00:00:36,100
+Every lg button grows. One line changes.
+
+9
+00:00:38,800 --> 00:00:42,100
+Can’t be exact? Glide refuses.
+
+10
+00:00:42,200 --> 00:00:45,500
+Your file stays untouched.
+
+11
+00:00:47,100 --> 00:00:50,500
+React, Vue, Svelte, Astro.
+
+12
+00:00:50,700 --> 00:00:54,900
+Insert, move and group: JSX and TSX only.

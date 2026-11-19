@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "JBMono"; src: url("assets/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; }
+      :root {
+        --dark: #0b0e14;
+        --light: #ffffff;
+        --ink: #0b0e14;
+        --sub-light: #4b5563;
+        --sub-dark: #9aa3b2;
+        --accent: #38bdf8;
+        --violet: #6d28d9;
+        --panel: #151a23;
+        --line: #283041;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--dark); }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: "Inter", sans-serif; }
+      .clip { position: absolute; inset: 0; overflow: hidden; }
+      .light { background: var(--light); color: var(--ink); }
+      .dark { background: var(--dark); color: #fff; }
+      .mono { font-family: "JBMono", monospace; }
+      .abs { position: absolute; }
+      .center-x { left: 0; right: 0; text-align: center; }
+      .tag { font-family: "JBMono", monospace; font-size: 30px; letter-spacing: 0.04em; }
+
+      /* Scene 1 — hook */
+      #s1-head { top: 250px; font-size: 150px; font-weight: 800; letter-spacing: -0.04em; }
+      #s1-head span { position: relative; display: inline-block; padding: 0 28px; }
+      #s1-sel { position: absolute; inset: -10px 0; border: 3px solid var(--accent); opacity: 0; }
+      #s1-sel i { position: absolute; width: 14px; height: 14px; background: #fff; border: 3px solid var(--accent); }
+      #s1-file { top: 520px; color: #6b7280; }
+      #s1-code { top: 580px; font-size: 44px; color: var(--ink); white-space: pre; }
+      #tok { position: relative; display: inline-block; width: 14ch; height: 1.25em; vertical-align: bottom; }
+      #tok-old, #tok-new { position: absolute; left: 0; top: 0; }
+      #tok-new { color: var(--violet); font-weight: 700; }
+      #tok-strike { position: absolute; left: -4px; right: -4px; top: 54%; height: 4px; background: #ef4444; }
+      #s1-cap { top: 800px; font-size: 52px; font-weight: 600; color: var(--sub-light); letter-spacing: -0.01em; }
+
+      /* Scene 2 — reveal */
+      #s2-mark { top: 150px; left: 543px; width: 834px; height: 489px; image-rendering: pixelated; }
+      #s2-tag { top: 700px; font-size: 64px; font-weight: 700; letter-spacing: -0.02em; }
+      #s2-fw { top: 830px; font-size: 34px; color: var(--accent); }
+      #s2-fw span { display: inline-block; margin: 0 22px; opacity: 0; }
+
+      /* Editor scenes */
+      #cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+      #win { position: absolute; left: 160px; top: 120px; width: 1920px; height: 1080px; transform: scale(0.833333); transform-origin: 0 0; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 2px #2a3140, 0 40px 120px rgba(0,0,0,0.6); }
+      #win img { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; opacity: 0; }
+      #menu { position: absolute; left: 1652px; top: 168px; width: 250px; background: #2b2d31; border: 1px solid #45484f; border-radius: 6px; padding: 4px; opacity: 0; transform-origin: top center; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+      #menu div { font-family: "Inter", sans-serif; font-size: 14px; color: #e8e8e8; height: 30px; line-height: 30px; padding: 0 8px; border-radius: 4px; white-space: nowrap; }
+      #menu .cur { background: #3a3d44; }
+      #menu .on { background: #2563eb; color: #fff; }
+      .ed-label { top: 44px; left: 160px; font-size: 30px; color: var(--sub-dark); }
+      .ed-label b { color: var(--accent); font-weight: 600; }
+      #ed-repo { top: 44px; right: 160px; font-size: 30px; color: var(--sub-dark); }
+      .chip { position: absolute; left: 50%; top: 900px; transform: translateX(-50%); background: #0b0e14; color: #fff; border: 1px solid #39425a; border-radius: 16px; padding: 18px 34px; font-size: 40px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; opacity: 0; }
+      .diff { position: absolute; left: 300px; width: 1320px; top: 600px; background: #0d1117; border: 1px solid #39425a; border-radius: 18px; padding: 26px 34px 30px; opacity: 0; box-shadow: 0 30px 90px rgba(0,0,0,0.55); }
+      .diff h4 { font-family: "JBMono", monospace; font-weight: 500; font-size: 30px; color: var(--sub-dark); margin-bottom: 18px; }
+      .diff h4 b { color: #fff; font-weight: 700; }
+      .diff p { font-family: "JBMono", monospace; font-size: 34px; line-height: 1.55; white-space: pre; padding: 0 14px; border-radius: 8px; }
+      .diff .rm { background: rgba(239,68,68,0.16); color: #fca5a5; }
+      .diff .ad { background: rgba(34,197,94,0.16); color: #86efac; }
+      .diff mark { background: none; color: #fff; font-weight: 800; text-decoration: underline; text-underline-offset: 6px; }
+      .diff .note { font-family: "Inter", sans-serif; font-size: 34px; font-weight: 600; color: #fff; margin-top: 18px; padding: 0 14px; }
+      .hl { position: absolute; border: 3px solid var(--accent); border-radius: 10px; opacity: 0; }
+      #fs-chip { position: absolute; left: 760px; top: 474px; font-size: 34px; background: var(--accent); color: var(--ink); padding: 10px 20px; border-radius: 12px; font-weight: 700; opacity: 0; }
+
+      /* Cursor (global overlay) */
+      #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; opacity: 0; z-index: 50; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.35)); }
+      #ripple { position: absolute; left: 0; top: 0; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; border: 3px solid var(--accent); opacity: 0; z-index: 49; }
+
+      /* Scene 5 — under the hood */
+      #s5-tag { top: 190px; left: 160px; color: var(--accent); font-size: 30px; }
+      .row { left: 160px; font-size: 78px; font-weight: 700; letter-spacing: -0.025em; opacity: 0; }
+      .row .mono { font-size: 30px; color: var(--sub-dark); margin-right: 34px; vertical-align: middle; }
+
+      /* Scene 6 — proof */
+      #s6-tag { top: 190px; color: #6b7280; font-size: 30px; }
+      .stat { top: 360px; width: 560px; text-align: center; opacity: 0; }
+      .stat .n { font-size: 210px; font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; line-height: 1; }
+      .stat .l { font-family: "JBMono", monospace; font-size: 34px; color: var(--sub-light); margin-top: 26px; }
+
+      /* Scene 7 — open source */
+      #s7-a { top: 230px; font-size: 140px; font-weight: 800; letter-spacing: -0.04em; opacity: 0; }
+      #s7-b { top: 400px; font-size: 140px; font-weight: 800; letter-spacing: -0.04em; color: var(--accent); opacity: 0; }
+      #s7-term { top: 650px; left: 50%; transform: translateX(-50%); width: 900px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px 34px; font-size: 42px; color: #e6edf3; opacity: 0; white-space: pre; }
+      #s7-term .p { color: var(--accent); }
+      #s7-url { top: 840px; font-size: 34px; color: var(--sub-dark); opacity: 0; }
+
+      /* Scene 8 — hire */
+      #s8-logo { top: -60px; left: 610px; width: 700px; height: 700px; opacity: 0; }
+      #s8-name { top: 430px; font-size: 150px; font-weight: 800; letter-spacing: -0.045em; opacity: 0; }
+      #s8-bio { top: 625px; font-size: 42px; font-weight: 500; color: var(--sub-light); opacity: 0; }
+      #s8-pill { top: 730px; left: 50%; background: var(--accent); color: var(--ink); font-size: 46px; font-weight: 700; padding: 16px 40px; border-radius: 999px; opacity: 0; white-space: nowrap; }
+      #s8-url { top: 880px; font-size: 36px; color: var(--ink); opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="45.3" data-width="1920" data-height="1080">
+
+      <!-- Scene 1: hook -->
+      <section id="s1" class="clip light" data-start="0" data-duration="4.91" data-track-index="0">
+        <h1 id="s1-head" class="abs center-x"><span><em id="s1-word" style="font-style:normal">Building Glide.</em><b id="s1-sel"><i style="left:-9px;top:-9px"></i><i style="right:-9px;top:-9px"></i><i style="left:-9px;bottom:-9px"></i><i style="right:-9px;bottom:-9px"></i></b></span></h1>
+        <div id="s1-file" class="abs center-x tag">App.tsx · line 24</div>
+        <div id="s1-code" class="abs center-x mono">className="… tracking-tight <span id="tok"><span id="tok-old">text-slate-900</span><span id="tok-strike"></span><span id="tok-new"></span></span>"</div>
+        <p id="s1-cap" class="abs center-x">Edited on a canvas. Written to source.</p>
+      </section>
+
+      <!-- Scene 2: reveal -->
+      <section id="s2" class="clip dark" data-start="4.91" data-duration="4.38" data-track-index="0">
+        <img id="s2-mark" class="abs" src="assets/img/wordmark.png" alt="glide" />
+        <p id="s2-tag" class="abs center-x">Design visually. Ship real source code.</p>
+        <p id="s2-fw" class="abs center-x mono"><span>React</span><span>Vue</span><span>Svelte</span><span>Astro</span></p>
+      </section>
+
+      <!-- Scenes 3 + 4: the real editor -->
+      <section id="ed" class="clip dark" data-start="9.29" data-duration="17.45" data-track-index="0">
+        <div id="cam">
+          <div id="win">
+            <img id="sh0" src="assets/shots/00-idle.png" alt="" />
+            <img id="sh1" src="assets/shots/01-select-h1.png" alt="" />
+            <img id="sh1b" src="assets/shots/01b-select-h1-typography.png" alt="" />
+            <img id="sh2" src="assets/shots/02-picker.png" alt="" />
+            <img id="sh2b" src="assets/shots/02b-picker-typed.png" alt="" />
+            <img id="sh3" src="assets/shots/03-recolored.png" alt="" />
+            <img id="sh4" src="assets/shots/04-button-selected.png" alt="" />
+            <img id="sh5" src="assets/shots/05-scope-lg.png" alt="" />
+            <img id="sh6" src="assets/shots/06-scope-applied.png" alt="" />
+            <div id="menu">
+              <div>Every &lt;Button&gt; · Button.tsx:23</div>
+              <div class="cur">This &lt;Button&gt; · App.tsx:27</div>
+              <div>Every &lt;Button variant="primary"&gt;</div>
+              <div id="opt4">Every &lt;Button size="lg"&gt;</div>
+            </div>
+          </div>
+        </div>
+        <div id="labs" class="abs" style="inset:0">
+          <div id="lab1" class="abs ed-label mono"><b>01</b>&nbsp;&nbsp;canvas → source</div>
+          <div id="lab2" class="abs ed-label mono" style="opacity:0"><b>02</b>&nbsp;&nbsp;edit scopes</div>
+          <div id="ed-repo" class="abs mono">SrivarsanK/Glide</div>
+        </div>
+        <div id="chip1" class="chip">Click any element in your running app.</div>
+        <div id="chip2" class="chip">Inside a component? Pick where the edit lands.</div>
+        <div id="fs-chip" class="mono">font-size 16 → 18</div>
+        <div id="hl1" class="hl"></div>
+        <div id="hl2" class="hl"></div>
+        <div id="diff1" class="diff">
+          <h4><b>App.tsx</b> · line 24 · written by Glide</h4>
+          <p class="rm">- className="… tracking-tight <mark>text-slate-900</mark>"</p>
+          <p class="ad">+ className="… tracking-tight <mark>text-brand-500</mark>"</p>
+          <p class="note">Hex in. Your Tailwind theme token out.</p>
+        </div>
+        <div id="diff2" class="diff">
+          <h4><b>Button.tsx</b> · cva variant size.lg · written by Glide</h4>
+          <p class="rm">-   lg: 'h-12 px-6 <mark>text-base</mark>',</p>
+          <p class="ad">+   lg: 'h-12 px-6 <mark>text-lg</mark>',</p>
+          <p class="note">One edit. Every large button.</p>
+        </div>
+      </section>
+
+      <!-- Scene 5: under the hood -->
+      <section id="s5" class="clip dark" data-start="26.74" data-duration="4.91" data-track-index="0">
+        <div id="s5-tag" class="abs mono">UNDER THE HOOD · 8 PACKAGES · TYPESCRIPT</div>
+        <p class="abs row" style="top:330px"><span class="mono">01</span>SHA-256 digest on every write</p>
+        <p class="abs row" style="top:500px"><span class="mono">02</span>All-or-nothing transactions</p>
+        <p class="abs row" style="top:670px"><span class="mono">03</span>Localhost only. Session-token handshake.</p>
+      </section>
+
+      <!-- Scene 6: proof -->
+      <section id="s6" class="clip light" data-start="31.65" data-duration="3.82" data-track-index="0">
+        <div id="s6-tag" class="abs center-x mono">BUILT IN PUBLIC</div>
+        <div class="abs stat" style="left:120px"><div class="n" id="n1">0</div><div class="l">GitHub stars</div></div>
+        <div class="abs stat" style="left:680px"><div class="n" id="n2">0</div><div class="l">commits</div></div>
+        <div class="abs stat" style="left:1240px"><div class="n" id="n3">0</div><div class="l">tests passing</div></div>
+      </section>
+
+      <!-- Scene 7: open source -->
+      <section id="s7" class="clip dark" data-start="35.47" data-duration="4.35" data-track-index="0">
+        <p id="s7-a" class="abs center-x">Open source.</p>
+        <p id="s7-b" class="abs center-x">Contributions welcome.</p>
+        <div id="s7-term" class="abs mono"><span class="p">$ </span><span id="cmd"></span></div>
+        <p id="s7-url" class="abs center-x mono">github.com/SrivarsanK/Glide · Apache 2.0</p>
+      </section>
+
+      <!-- Scene 8: hire card -->
+      <section id="s8" class="clip light" data-start="39.82" data-duration="5.48" data-track-index="0">
+        <img id="s8-logo" class="abs" src="assets/img/logo.png" alt="Glide logo" />
+        <p id="s8-name" class="abs center-x">SrivarsanK</p>
+        <p id="s8-bio" class="abs center-x">Full-Stack / AI Developer · B.Tech AI '28 · Building Glide</p>
+        <div id="s8-pill" class="abs">Open to roles</div>
+        <p id="s8-url" class="abs center-x mono">github.com/SrivarsanK</p>
+      </section>
+
+      <!-- Global cursor -->
+      <svg id="cursor" class="clip-free" viewBox="0 0 24 24"><path d="M3 2 L3 19.5 L7.6 15.4 L10.6 22 L13.6 20.7 L10.7 14.2 L17 14.2 Z" fill="#fff" stroke="#0b0e14" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <div id="ripple"></div>
+
+      <!-- Audio -->
+      <audio id="music" data-start="0" data-duration="45.3" data-track-index="10" data-volume="0.32" data-fade-in="0.4" data-fade-out="2" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <div id="sfx"></div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      gsap.set("#s8-pill", { xPercent: -50 });
+      gsap.set("#cam", { transformOrigin: "0 0" });
+      const E = "power3.out";
+      const S = 0.833333; // shot → window scale
+
+      // ---------- SFX (deterministic schedule) ----------
+      const sfx = [
+        [1.64, "mouseclick1.ogg", 0.6], [2.0, "click3.ogg", 0.25], [2.27, "click3.ogg", 0.22], [2.55, "click3.ogg", 0.25],
+        [4.91, "thud.wav", 0.75], [6.56, "rollover2.ogg", 0.3], [8.19, "rollover2.ogg", 0.3],
+        [9.29, "rollover2.ogg", 0.35], [9.83, "mouseclick1.ogg", 0.6], [13.64, "mouseclick1.ogg", 0.55],
+        [14.2, "click3.ogg", 0.22], [14.37, "click3.ogg", 0.2], [14.55, "click3.ogg", 0.22], [15.29, "mouseclick1.ogg", 0.6], [15.84, "rollover2.ogg", 0.45],
+        [18.56, "mouseclick1.ogg", 0.6], [19.66, "click2.ogg", 0.4], [21.84, "mouseclick1.ogg", 0.55], [22.93, "rollover2.ogg", 0.45],
+        [27.3, "click2.ogg", 0.28], [29.47, "click2.ogg", 0.28],
+        [32.19, "click2.ogg", 0.3], [32.74, "click2.ogg", 0.3], [33.29, "click2.ogg", 0.3],
+        [35.47, "thud.wav", 0.6], [36.6, "click3.ogg", 0.22], [36.95, "click3.ogg", 0.2], [37.3, "click3.ogg", 0.22],
+        [41.47, "thud.wav", 0.7],
+      ];
+      const sfxHost = document.getElementById("sfx");
+      sfx.forEach(([t, f, v], i) => {
+        const a = document.createElement("audio");
+        a.id = "sfx-" + i;
+        a.src = "assets/sfx/" + f;
+        a.setAttribute("data-start", t);
+        a.setAttribute("data-duration", { "thud.wav": 0.9, "click3.ogg": 0.08, "click2.ogg": 0.05, "mouseclick1.ogg": 0.05, "rollover2.ogg": 0.05 }[f]);
+        a.setAttribute("data-track-index", 11 + i);
+        a.setAttribute("data-volume", v);
+        sfxHost.appendChild(a);
+      });
+
+      // ---------- helpers ----------
+      const cur = "#cursor", rip = "#ripple";
+      // a shot pixel → frame pixel, for a given camera {x, y, z}
+      const P = (sx, sy, cam = { x: 0, y: 0, z: 1 }) => [cam.x + cam.z * (160 + S * sx), cam.y + cam.z * (120 + S * sy)];
+      const camA = { x: -2304, y: -1108, z: 2.4 }; // properties panel, typography
+      const camB = { x: -2304, y: -408, z: 2.4 };  // edit-scope select
+      const moveTo = ([x, y], t, d = 0.55) => tl.to(cur, { x: x - 6, y: y - 4, duration: d, ease: "power2.inOut" }, t);
+      const click = ([x, y], t) => {
+        tl.to(cur, { scale: 0.86, duration: 0.07, transformOrigin: "20% 15%" }, t)
+          .to(cur, { scale: 1, duration: 0.12 }, t + 0.07)
+          .set(rip, { x, y, scale: 0.4, opacity: 0.9 }, t)
+          .to(rip, { scale: 1.6, opacity: 0, duration: 0.45, ease: "power2.out" }, t);
+      };
+      const show = (id, t) => tl.set("#win img", { opacity: 0 }, t).set(id, { opacity: 1 }, t);
+      const typeInto = (el, text, t0, step) => {
+        const host = document.querySelector(el);
+        [...text].forEach((ch, i) => {
+          const s = document.createElement("span");
+          s.textContent = ch;
+          s.style.opacity = 0;
+          host.appendChild(s);
+          tl.set(s, { opacity: 1 }, t0 + i * step);
+        });
+      };
+
+      // ---------- Scene 1: hook (0 – 4.91) ----------
+      // headline + code are on screen at frame 0 (it is the thumbnail); they only drift into place
+      tl.from(["#s1-head", "#s1-file", "#s1-code"], { y: 16, duration: 0.7, ease: E }, 0)
+        .set("#tok-strike", { scaleX: 0, transformOrigin: "left center" }, 0)
+        .set(cur, { x: 1560, y: 980, opacity: 1 }, 0.7);
+      moveTo([1290, 330], 0.75, 0.85);
+      click([1296, 334], 1.64);
+      tl.to("#s1-sel", { opacity: 1, duration: 0.08 }, 1.64)
+        .to("#s1-word", { color: "#6d28d9", duration: 0.4, ease: "power2.out" }, 1.75)
+        .to("#tok-strike", { scaleX: 1, duration: 0.18, ease: "power2.in" }, 1.72)
+        .to(["#tok-old", "#tok-strike"], { y: -36, opacity: 0, duration: 0.22, ease: "power2.in" }, 1.92)
+        .to(cur, { x: 1700, y: 1000, opacity: 0, duration: 0.5, ease: "power2.in" }, 2.2);
+      typeInto("#tok-new", "text-brand-500", 2.0, 0.045);
+      tl.from("#s1-cap", { y: 26, opacity: 0, duration: 0.5, ease: E }, 2.73); // beat-grid: 2.73
+
+      // ---------- Scene 2: reveal (4.91 – 9.29) ----------
+      tl.from("#s2-mark", { scale: 1.12, opacity: 0, duration: 0.5, ease: "expo.out" }, 4.91) // beat-locked: 4.91
+        .from("#s2-tag", { y: 30, opacity: 0, duration: 0.55, ease: E }, 5.45);
+      // beat-grid: 6.56, 7.09, 7.64, 8.19 (short labels, held afterwards)
+      [6.56, 7.09, 7.64, 8.19].forEach((t, i) => tl.to(`#s2-fw span:nth-child(${i + 1})`, { opacity: 1, duration: 0.25 }, t).from(`#s2-fw span:nth-child(${i + 1})`, { y: 18, duration: 0.35, ease: E }, t));
+
+      // ---------- Scene 3: canvas → source (9.29 – 18.02) ----------
+      show("#sh0", 9.29);
+      tl.from("#win", { y: 70, opacity: 0, duration: 0.55, ease: E }, 9.29) // beat-locked: 9.29
+        .from(["#lab1", "#ed-repo"], { opacity: 0, duration: 0.4 }, 9.4)
+        .set(cur, { x: 1500, y: 960, opacity: 1, scale: 1 }, 9.3);
+      moveTo(P(560, 345), 9.32, 0.45);
+      click(P(560, 345), 9.83);
+      show("#sh1", 9.83);
+      tl.to("#chip1", { opacity: 1, duration: 0.25 }, 9.88).to("#chip1", { opacity: 0, duration: 0.2 }, 12.5);
+      // zoom into the properties panel
+      show("#sh1b", 12.55);
+      tl.to("#cam", { x: camA.x, y: camA.y, scale: camA.z, duration: 0.55, ease: "power2.inOut" }, 12.55)
+        .to(cur, { opacity: 0, duration: 0.15 }, 12.55)
+        .set(cur, { x: P(1600, 900, camA)[0], y: 1000 }, 12.75)
+        .to(cur, { opacity: 1, duration: 0.15 }, 13.0);
+      moveTo(P(1675, 666, camA), 13.05, 0.5);
+      click(P(1675, 666, camA), 13.64); // beat-locked: 13.64
+      show("#sh2", 13.64);
+      show("#sh2b", 14.55);
+      moveTo(P(1774, 803, camA), 14.7, 0.45);
+      click(P(1774, 803, camA), 15.29);
+      show("#sh3", 15.29);
+      tl.to("#cam", { x: 0, y: 0, scale: 1, duration: 0.55, ease: "power2.inOut" }, 15.32)
+        .to(cur, { opacity: 0, duration: 0.2 }, 15.32)
+        .fromTo("#diff1", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: E }, 15.84) // beat-locked: 15.84
+        .to("#diff1", { opacity: 0, y: 30, duration: 0.25, ease: "power2.in" }, 17.8);
+
+      // ---------- Scene 4: edit scopes (18.02 – 26.74) ----------
+      tl.to("#lab1", { opacity: 0, duration: 0.2 }, 18.02).to("#lab2", { opacity: 1, duration: 0.3 }, 18.1)
+        .set(cur, { x: 1300, y: 900, scale: 1 }, 18.1)
+        .to(cur, { opacity: 1, duration: 0.15 }, 18.15);
+      moveTo(P(452, 466), 18.15, 0.35);
+      click(P(452, 466), 18.56); // beat-locked: 18.56
+      show("#sh4", 18.56);
+      tl.to("#chip2", { opacity: 1, duration: 0.25 }, 18.65).to("#chip2", { opacity: 0, duration: 0.2 }, 21.6);
+      tl.to("#cam", { x: camB.x, y: camB.y, scale: camB.z, duration: 0.5, ease: "power2.inOut" }, 19.0)
+        .to(cur, { x: P(1770, 154, camB)[0] - 6, y: P(1770, 154, camB)[1] - 4, duration: 0.5, ease: "power2.inOut" }, 19.0);
+      click(P(1770, 154, camB), 19.66);
+      tl.fromTo("#menu", { opacity: 0, scaleY: 0.9 }, { opacity: 1, scaleY: 1, duration: 0.16, ease: "power2.out" }, 19.66);
+      moveTo(P(1760, 281, camB), 20.3, 0.4);
+      tl.set("#menu .cur", { className: "" }, 20.75).set("#opt4", { className: "on" }, 20.75);
+      click(P(1760, 281, camB), 21.84);
+      tl.set("#menu", { opacity: 0 }, 21.9);
+      show("#sh5", 21.9);
+      tl.fromTo("#fs-chip", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: E }, 21.95)
+        .to("#fs-chip", { opacity: 0, duration: 0.2 }, 23.75);
+      show("#sh6", 22.37);
+      tl.to("#cam", { x: 0, y: 0, scale: 1, duration: 0.55, ease: "power2.inOut" }, 22.37)
+        .to(cur, { opacity: 0, duration: 0.2 }, 22.37);
+      // highlight both large buttons (06 shot coords)
+      const box = (id, x1, y1, x2, y2) => { const [a, b] = P(x1, y1), [c, d] = P(x2, y2); tl.set(id, { left: a - 8, top: b - 8, width: c - a + 16, height: d - b + 16 }, 22.9); };
+      box("#hl1", 385, 441, 529, 489);
+      box("#hl2", 539, 443, 668, 487);
+      tl.to(["#hl1", "#hl2"], { opacity: 1, duration: 0.2 }, 22.93).to(["#hl1", "#hl2"], { opacity: 0, duration: 0.3 }, 23.9);
+      tl.fromTo("#diff2", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: E }, 22.93); // beat-locked: 22.93
+      // labels would sit on top of the zoomed panel: hide them while zoomed
+      [[12.55, 15.65], [19.0, 22.75]].forEach(([a, b]) => tl.to("#labs", { opacity: 0, duration: 0.2 }, a).to("#labs", { opacity: 1, duration: 0.3 }, b));
+
+      // ---------- Scene 5: under the hood (26.74 – 31.65) ----------
+      tl.from("#s5-tag", { opacity: 0, duration: 0.35 }, 26.85);
+      // beat-grid: every other beat, then held
+      [27.3, 28.37, 29.47].forEach((t, i) => tl.fromTo(`#s5 .row:nth-of-type(${i + 1})`, { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.45, ease: E }, t));
+
+      // ---------- Scene 6: proof (31.65 – 35.47) ----------
+      tl.from("#s6-tag", { opacity: 0, duration: 0.3 }, 31.7);
+      [["#n1", 183, 32.19], ["#n2", 505, 32.74], ["#n3", 408, 33.29]].forEach(([id, n, land], i) => {
+        const o = { v: 0 }, el = document.querySelector(id);
+        tl.fromTo(`#s6 .stat:nth-of-type(${i + 2})`, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, land - 0.5);
+        tl.to(o, { v: n, duration: 0.5, ease: "power2.out", onUpdate: () => (el.textContent = Math.round(o.v)) }, land - 0.5); // beat-grid: lands on the beat
+      });
+
+      // ---------- Scene 7: open source (35.47 – 39.82) ----------
+      tl.fromTo("#s7-a", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 35.47) // beat-locked: 35.47
+        .fromTo("#s7-b", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 36.01)
+        .to("#s7-term", { opacity: 1, duration: 0.3 }, 36.4);
+      typeInto("#cmd", "npx @srivarsank/glide 5173", 36.55, 0.035);
+      tl.fromTo("#s7-url", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, 37.64);
+
+      // ---------- Scene 8: hire card (39.82 – 45.3) ----------
+      tl.fromTo("#s8-logo", { opacity: 0, x: -120 }, { opacity: 1, x: 0, duration: 0.7, ease: "expo.out" }, 39.82)
+        .fromTo("#s8-name", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 40.38)
+        .fromTo("#s8-bio", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 40.91)
+        .fromTo("#s8-pill", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 41.47) // beat-locked: 41.47
+        .fromTo("#s8-url", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, 42.0);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

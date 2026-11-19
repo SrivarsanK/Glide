@@ -1,0 +1,1 @@
+I built Glide: click any element in your running React, Vue, Svelte or Astro app, change it visually, and Glide edits that exact line in your source. Open source (Apache 2.0) with 183 stars and 408 passing tests, contributions welcome, and I'm open to roles. github.com/SrivarsanK/Glide

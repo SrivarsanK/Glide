@@ -1,0 +1,4 @@
+# third-party reference clip (not ours to redistribute) and render intermediates
+work/inspo/
+work/*.raw.mp4
+work/demo-app/
