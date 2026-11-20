@@ -89,7 +89,7 @@ test('the page gets the bridge script verbatim, even where it contains replaceme
   const page = '<html><head><title>App</title></head><body>x</body></html>';
   const html: string = plugin.transformIndexHtml.handler(page);
   const script = html.match(/<head><script>([\s\S]*?)<\/script>/)![1];
-  expect(script).toContain("'__reactFiber$'");
+  expect(script).toMatch(/["']__reactFiber\$["']/);
   expect(() => new vm.Script(script)).not.toThrow();
   expect(html.endsWith('<title>App</title></head><body>x</body></html>')).toBe(true);
   expect(html.split('<title>').length).toBe(2);

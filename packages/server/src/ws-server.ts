@@ -181,8 +181,10 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     return undefined;
   }
 
-  function sendMsgForAny(type, el, isShift) {
+  // \`refresh\` re-reports an element that is already selected (it moved or re-rendered); it is not a click.
+  function sendMsgForAny(type, el, isShift, refresh) {
     if (!el) return;
+    if (type === 'glide:element-selected') rememberSlot(el);
     var src = getElId(el);
     var r = el.getBoundingClientRect();
     var cs = window.getComputedStyle(el);
@@ -203,12 +205,13 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       borderRadius: cs.borderRadius, boxShadow: cs.boxShadow,
       transform: cs.transform, width: cs.width, height: cs.height,
       position: cs.position, top: cs.top, left: cs.left,
-      flex: cs.flex, flexGrow: cs.flexGrow, alignSelf: cs.alignSelf
+      flex: cs.flex, flexGrow: cs.flexGrow, alignSelf: cs.alignSelf,
+      inlineStyle: (el.getAttribute && el.getAttribute('style')) || ''
     };
     window.parent.postMessage({ type: type, source: src,
-      tagName: el.tagName.toLowerCase(), classNames: el.className,
-      isShift: !!isShift, rect: { left: r.left, top: r.top, width: r.width, height: r.height } }, '*');
-    window.parent.postMessage({ type: 'glide:overlay', source: src, isShift: !!isShift,
+      tagName: el.tagName.toLowerCase(), classNames: el.className, isShift: !!isShift, refresh: !!refresh,
+      rect: { left: r.left, top: r.top, width: r.width, height: r.height } }, '*');
+    window.parent.postMessage({ type: 'glide:overlay', source: src, isShift: !!isShift, refresh: !!refresh,
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
       isHover: type === 'glide:element-hovered', computedStyles: styles,
       textContent: getElementTextContent(el)
@@ -216,6 +219,12 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   }
 
   var hovered = null, selected = null;
+  // Where the selection sits among the stamped elements: a remount after a save can move every stamp.
+  var selectedSlot = null;
+  function rememberSlot(el) {
+    var stamped = document.querySelectorAll('[${sourceAttr}]');
+    selectedSlot = { index: Array.prototype.indexOf.call(stamped, el), count: stamped.length };
+  }
 
   // ── DOM tree serializer ─────────────────────────────────────────────────
   // Builds a lightweight node tree from live DOM for the Layers panel.
@@ -233,9 +242,9 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     // Gather direct text content
     var text = '';
     el.childNodes.forEach(function(n) { if (n.nodeType === 3) text += n.textContent; });
-    text = text.trim().replace(/\s+/g, ' ');
+    text = text.trim().replace(/\\s+/g, ' ');
     if (!text && (!el.children || el.children.length === 0)) {
-      text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+      text = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ');
     }
     if (text) text = text.slice(0, 60);
 
@@ -305,7 +314,8 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
     return { id: id, tag: tag, rect: sceneRect, children: children };
   }
 
-  function sendDOMTree() {
+  // \`rendered\`: the page was just rendered from source (loaded, or elements or stamps changed), so its stamps are current.
+  function sendDOMTree(rendered) {
     var body = document.body;
     if (!body) return;
     var tree = [];
@@ -313,7 +323,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       var node = serializeDOMNode(body.children[i], 0);
       if (node) tree.push(node);
     }
-    window.parent.postMessage({ type: 'glide:dom-tree', tree: tree }, '*');
+    window.parent.postMessage({ type: 'glide:dom-tree', tree: tree, rendered: !!rendered }, '*');
     // Also send scene nodes (with rects) for the spatial hit-test SceneGraph
     var sceneNodes = [];
     for (var j = 0; j < body.children.length; j++) {
@@ -326,24 +336,40 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   // Send ready + tree once DOM is available
   function initBridge() {
     window.parent.postMessage({ type: 'glide:ready', source: '__glide_cst_body' }, '*');
-    sendDOMTree();
+    sendDOMTree(true);
     // Re-send tree on dynamic mutations (throttled)
     if (window.MutationObserver) {
       var mutTimer = null;
+      // Stamped elements were added or removed, or stamps moved: the source was re-rendered. A class change may be the
+      // editor's preview, and a <style> swap is Tailwind's CSS update; neither means the stamps are current.
+      var mutRendered = false;
+      var stamped = function(node) {
+        return node.nodeType === 1 && (node.hasAttribute('${sourceAttr}') || !!node.querySelector('[${sourceAttr}]'));
+      };
+      var rendersSource = function(record) {
+        if (record.type === 'attributes') return record.attributeName === '${sourceAttr}';
+        return record.type === 'childList' && (Array.prototype.some.call(record.addedNodes || [], stamped)
+          || Array.prototype.some.call(record.removedNodes || [], stamped));
+      };
       var obs = new MutationObserver(function(records) {
         var changed = records.some(function(record) {
           if (record.type === 'attributes' && (record.attributeName === '${hoverAttr}' || record.attributeName === '${selectedAttr}' || record.attributeName === 'data-glide-design-mode')) return false;
           var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
           return !target || ((target.id || '').indexOf('__glide_') !== 0 && !(target.closest && target.closest('[data-glide-bridge]')));
         });
+        if (records.some(rendersSource)) mutRendered = true;
         if (!changed || mutTimer !== null) return;
         mutTimer = setTimeout(function() {
           mutTimer = null;
+          // The tree goes first: it tells the editor the page re-rendered, so the stamps that follow are current.
+          sendDOMTree(mutRendered);
+          mutRendered = false;
           if (selected && selected.isConnected === false) {
             var source = selected.getAttribute('${sourceAttr}');
-            selected = null;
             var candidates = document.querySelectorAll('[${sourceAttr}]');
-            for (var i = 0; source && i < candidates.length; i++) {
+            // A remount after a save can move every stamp; with the same stamped elements, the selection is the one in its place.
+            selected = selectedSlot && selectedSlot.index >= 0 && selectedSlot.count === candidates.length ? candidates[selectedSlot.index] : null;
+            for (var i = 0; !selected && source && i < candidates.length; i++) {
               if (candidates[i].getAttribute('${sourceAttr}') === source) { selected = candidates[i]; break; }
             }
             if (selected && !interactionMode) selected.setAttribute('${selectedAttr}', '');
@@ -353,8 +379,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
             hovered = null;
             window.parent.postMessage({ type: 'glide:element-hover-exit' }, '*');
           }
-          if (selected && !interactionMode) sendMsgForAny('glide:element-selected', selected);
-          sendDOMTree();
+          if (selected && !interactionMode) sendMsgForAny('glide:element-selected', selected, false, true);
         }, 50);
       });
       obs.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
@@ -384,7 +409,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
         for (var m = 0; m < marked.length; m++) marked[m].removeAttribute('${selectedAttr}');
       } else if (selected && selected.isConnected !== false) {
         selected.setAttribute('${selectedAttr}', '');
-        sendMsgForAny('glide:element-selected', selected);
+        sendMsgForAny('glide:element-selected', selected, false, true);
       }
       return;
     }
@@ -428,7 +453,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       if (hovered) { hovered.removeAttribute('${hoverAttr}'); hovered = null; }
     }
     if (e.data.type === 'glide:refresh-rects' || e.data.type === 'glide:refresh-selection') {
-      if (selected) sendMsgForAny('glide:element-selected', selected);
+      if (selected) sendMsgForAny('glide:element-selected', selected, false, true);
       if (hovered) sendMsgForAny('glide:element-hovered', hovered);
     }
     if (e.data.type === 'glide:optimistic-text') {
@@ -497,7 +522,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
   });
 
   function updateRectsOnScrollOrResize() {
-    if (selected) sendMsgForAny('glide:element-selected', selected);
+    if (selected) sendMsgForAny('glide:element-selected', selected, false, true);
     if (hovered) sendMsgForAny('glide:element-hovered', hovered);
   }
   window.addEventListener('scroll', updateRectsOnScrollOrResize, { passive: true, capture: true });
@@ -886,6 +911,17 @@ function normalizePathKey(filePath: string): string {
   return path.resolve(filePath).replace(/\\/g, '/').toLowerCase();
 }
 
+/**
+ * The editor saves text on every keystroke. Keystrokes in one word of one element share a key, so
+ * history merges them into one undo step; the first letter of the next word starts a new step.
+ */
+export function typingStep(operations: MutationOperation[]): { squashKey?: string } {
+  const [op] = operations;
+  if (operations.length !== 1 || op.change?.type !== 'text' || typeof op.change.value !== 'string') return {};
+  const words = op.change.value.trimEnd().split(/\s+/).length;
+  return { squashKey: `text:${op.filePath}:${op.line}:${op.column}:${words}` };
+}
+
 export class GlideServer {
   private sessionToken = randomBytes(32).toString('hex');
   private authenticated = new WeakSet<WebSocket>();
@@ -926,9 +962,9 @@ export class GlideServer {
 
   constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG, projectRoot = process.cwd()) {
     this.projectPaths = new ProjectPaths(projectRoot);
-    this.mutations = new MutationService(this.projectPaths.root, { onPersist: diffs => {
+    this.mutations = new MutationService(this.projectPaths.root, { onPersist: (diffs, operations) => {
       if (!diffs.length) return;
-      this.history.push({ description: 'Apply source changes', diffs });
+      this.history.push({ description: 'Apply source changes', diffs, ...typingStep(operations) });
       for (const diff of diffs) this.recordSelfWrite(diff.file);
     } });
     this.port = port;

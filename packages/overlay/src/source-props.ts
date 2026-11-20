@@ -45,7 +45,8 @@ export function createSourceProps(options: {
         field.checked = prop.value === true; field.value = prop.value === undefined ? '' : String(prop.value);
       }
       input.disabled = !!prop.reason;
-      if (prop.reason) { input.title = prop.reason; const reason = document.createElement('small'); reason.textContent = prop.reason; label.append(reason); }
+      let reason: HTMLElement | null = null;
+      if (prop.reason) { input.title = prop.reason; reason = document.createElement('small'); reason.textContent = prop.reason; reason.style.display = 'block'; }
       input.addEventListener('change', () => {
         if (options.selected() !== requestedSource || !requestedSource) return;
         const value = prop.kind === 'enum' ? JSON.parse(input.value) : prop.kind === 'boolean' ? (input as HTMLInputElement).checked
@@ -54,6 +55,8 @@ export function createSourceProps(options: {
         options.edit(requestedSource, { type: 'prop', property: prop.name, value, scope: message.scope }, message.digest);
       });
       label.append(input); container.append(label);
+      // Below the row: inside it, the hint squeezes into a narrow column between the name and the input.
+      if (reason) container.append(reason);
     }
     if (!message.props.length) { const note = document.createElement('p'); note.textContent = 'No literal props are authored here.'; container.append(note); }
   }

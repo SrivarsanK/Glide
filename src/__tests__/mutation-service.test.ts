@@ -73,6 +73,24 @@ describe('Mutation transactions', () => {
     expect(f.history).toHaveLength(0);
   });
 
+  test('retries a rename that Windows refuses while another process has the file open', async () => {
+    let calls = 0;
+    const f = fixture((from, to) => {
+      if (++calls <= 2) throw Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' });
+      fs.renameSync(from, to);
+    });
+    const result = await f.service.execute('busy', [f.operation('A.tsx', 'one')]);
+    expect(result.success).toBe(true);
+    expect(f.read('A.tsx')).not.toBe(f.source);
+  });
+
+  test('says there is nothing to undo or redo instead of reporting a history error', async () => {
+    const f = fixture();
+    const store = new HistoryStore();
+    await expect(f.service.restoreHistory('undo', store, 'undo')).rejects.toThrow(/^NOTHING_TO_UNDO: Nothing to undo\.$/);
+    await expect(f.service.restoreHistory('redo', store, 'redo')).rejects.toThrow(/^NOTHING_TO_REDO: Nothing to redo\.$/);
+  });
+
   test('restores file one when the second rename fails', async () => {
     let calls = 0;
     const f = fixture((from, to) => {

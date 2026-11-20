@@ -9,3 +9,9 @@ export { setAstroClassAt, setAstroStyleAt, setAstroTextAt } from '@srivarsank/ad
 export { GlideServer, HistoryStore, saveUploadedAsset } from '@srivarsank/server';
 export { getEditorHTML } from '@srivarsank/overlay';
 export { glideSourceStamping } from '@srivarsank/vite-plugin';
+
+// The types these functions use, so consumers can name them.
+export type { ComponentTreeNode, FileDiff, FrameworkId, GlideConfig, GlideEditorTheme, GlideViewport, HistoryEntry,
+  MetaFrameworkId, MutationScope, ProjectMeta, TailwindTheme } from '@srivarsank/core';
+export type { StructuralChange, VariantOption } from '@srivarsank/ast-writer';
+export type { EditCallback, EditChange } from '@srivarsank/server';

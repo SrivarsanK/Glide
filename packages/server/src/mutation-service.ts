@@ -12,6 +12,21 @@ export function contentDigest(content: string): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+/**
+ * Windows refuses to replace a file that another process (the dev server's watcher, antivirus)
+ * has open for a moment. Retry briefly, as graceful-fs does, instead of failing the edit.
+ */
+function retryBusy(rename: typeof fs.renameSync): typeof fs.renameSync {
+  return (from, to) => {
+    for (let attempt = 0; ; attempt++) {
+      try { return rename(from, to); } catch (error: any) {
+        if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code) || attempt >= 40) throw error;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      }
+    }
+  };
+}
+
 export interface MutationOperation extends Pick<JSXMutation, 'breakpoint' | 'pseudoState' | 'authoringRepresentation'> {
   operationId: string;
   filePath: string;
@@ -50,7 +65,7 @@ export class MutationService {
 
   constructor(projectRoot: string, private readonly options: {
     rename?: typeof fs.renameSync;
-    onPersist?: (diffs: { file: string; before: string; after: string }[]) => void;
+    onPersist?: (diffs: { file: string; before: string; after: string }[], operations: MutationOperation[]) => void;
     /** Tailwind theme for class edits; defaults to the project's own theme. */
     theme?: () => TailwindTheme;
   } = {}) {
@@ -74,6 +89,9 @@ export class MutationService {
       }
       const state = history.getState();
       const target = typeof action === 'number' ? action : action === 'undo' ? state.currentIndex - 1 : state.currentIndex + 1;
+      // Undo at the start of history, or redo at its end, is a plain no-op for the user, not a history error.
+      if (action === 'undo' && target < -1) throw new Error('NOTHING_TO_UNDO: Nothing to undo.');
+      if (action === 'redo' && target >= state.stack.length) throw new Error('NOTHING_TO_REDO: Nothing to redo.');
       const plan = history.prepareRestore(target);
       const operations = plan.writes.map((diff, index): MutationOperation => ({
         operationId: `${transactionId}:${index}`, filePath: diff.file, expectedDigest: contentDigest(diff.before),
@@ -102,7 +120,7 @@ export class MutationService {
     });
     const buffers = new Map<string, BufferState>();
     const written: BufferState[] = [];
-    const rename = this.options.rename ?? fs.renameSync;
+    const rename = retryBusy(this.options.rename ?? fs.renameSync);
     try {
       if (!transactionId || !operations.length) throw new Error('INVALID_TRANSACTION: A transaction needs an ID and operations.');
       const signature = restoration?.signature || contentDigest(JSON.stringify(operations));
@@ -190,7 +208,7 @@ export class MutationService {
         written.push(buffer);
       }
       if (restoration) restoration.confirm();
-      else if (written.length) this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })));
+      else if (written.length) this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })), operations);
       const result: MutationResult = {
         transactionId, success: true,
         changedFiles: written.map(buffer => ({ path: buffer.file, newDigest: contentDigest(buffer.after), revisionId: randomUUID() })),
@@ -211,7 +229,7 @@ export class MutationService {
           }
           const recovery = path.join(path.dirname(buffer.file), `.glide-${randomUUID()}.tmp`);
           fs.writeFileSync(recovery, buffer.before, { encoding: 'utf8', flag: 'wx', mode: buffer.mode });
-          fs.renameSync(recovery, buffer.file);
+          retryBusy(fs.renameSync)(recovery, buffer.file);
         } catch (rollbackError) {
           reason += ` ${String(rollbackError)}`;
         }

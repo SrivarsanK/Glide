@@ -38,3 +38,16 @@ for (const project of projects) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
+
+// The bundled typings are what consumers compile against. skipLibCheck stays off: with it on,
+// TypeScript checks no .d.ts file at all.
+const typings = ['index', 'cli', 'vite-plugin', 'babel-plugin'].map(name => path.join(root, 'dist', `${name}.d.ts`));
+console.log('Typechecking dist typings...');
+const typingsResult = spawnSync(process.execPath, [compiler, '--noEmit', '--strict', '--skipLibCheck', 'false',
+  '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', '--types', 'node', ...typings], {
+  cwd: root,
+  stdio: 'inherit',
+  windowsHide: true,
+});
+if (typingsResult.error) throw typingsResult.error;
+if (typingsResult.status !== 0) process.exit(typingsResult.status ?? 1);

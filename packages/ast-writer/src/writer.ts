@@ -12,7 +12,7 @@ import { layoutStyles } from './layout.js';
 import { readClassExpression, type BindingScope, type ClassPiece, type VariantOption } from './class-expression.js';
 import { spliceChanges } from './splice.js';
 import { mutationVariants, splitClassVariants, defaultTailwindTheme, isColorValue, isFontSizeValue, colorToken,
-  spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, type MutationScope, type TailwindTheme } from '@srivarsank/core';
+  spacingToken, spacingTokenPx, fontSizeToken, lengthToPx, formattingWhitespace, type MutationScope, type TailwindTheme } from '@srivarsank/core';
 
 const tsxParser = {
   parse(source: string, options?: any) {
@@ -634,9 +634,8 @@ function mutateText(node: t.JSXElement, newText: string): void {
   }
   const child = candidates[0];
   if (t.isJSXText(child)) {
-    const existingRaw = child.value;
-    const leadingWs = existingRaw.match(/^(\s*)/)?.[1] ?? '';
-    const trailingWs = existingRaw.match(/(\s*)$/)?.[1] ?? '';
+    const index = children.indexOf(child);
+    const [leadingWs, trailingWs] = formattingWhitespace(child.value, { before: index > 0, after: index < children.length - 1 });
     if (/[&<>{}\r\n]/.test(newText) || newText === '') {
       // A string expression preserves special characters and line breaks.
       const replacement = [

@@ -76,6 +76,8 @@ test('the served editor executes the typed mapper and consumes successful transa
     const fileDigests = new Map();
     const normalizePathSlash = value => value.split(String.fromCharCode(92)).join('/');
     const parseSource = value => sourceMapping.parse(value, currentFile);
+    const _styleTimers = new Map(), _pendingEdits = [];
+    function trackStaleStamps() {}
     ${handler}
     const message = { success: true, changedFiles: [], selectionRemaps: [{ oldSourceId: 'App.tsx:1:1', oldHash: 'aaaaaaaa',
       newHash: 'bbbbbbbb', newDigest: 'digest-two', newCoordinates: { line: 3, column: 4 } }] };

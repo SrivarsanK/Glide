@@ -8,6 +8,16 @@ export function computeNodeHash(sourceCodeSlice: string): string {
   return crypto.createHash('sha1').update(sourceCodeSlice.trim()).digest('hex').substring(0, 8);
 }
 
+/**
+ * The whitespace before and after a text node to keep when its text is replaced: a run that holds a
+ * line break (formatting) or that separates the text from a sibling. A same-line space at the
+ * element's own edge is part of the old text, so the new text replaces it.
+ */
+export function formattingWhitespace(raw: string, siblings: { before?: boolean; after?: boolean } = {}): [string, string] {
+  const lead = raw.match(/^\s*/)![0], trail = raw.match(/\s*$/)![0];
+  return [siblings.before || lead.includes('\n') ? lead : '', siblings.after || trail.includes('\n') ? trail : ''];
+}
+
 export function stampHTMLTemplate(code: string, filepath: string, sourceAttribute: string = 'data-gl-source'): string {
   let cleanCode = code
     .replace(/^\s*---[\s\S]*?\n---/m, match => ' '.repeat(match.length))

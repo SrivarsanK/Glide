@@ -41,11 +41,11 @@ test('selection bounds remain live while a persisted position update is pending'
   vm.runInContext(`
     const sourceMapping = createSourceMapping();
     let currentFile = 'App.tsx', isResizing = false, isDragging = false, isPendingPositionUpdate = true;
-    let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [];
+    let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
     const document = { querySelectorAll() { return []; } };
     let draws = 0;
     function drawOverlay() { draws++; } function populatePropsFromComputed() {}
-    ${fn('parseSource')}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
     const data = { type: 'glide:overlay', source: 'App.tsx:1:1', rect: { x: 40, y: 25, width: 200, height: 50 } };
     (function() { ${branch('glide:overlay')} })();
   `, context);

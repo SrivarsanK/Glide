@@ -6,7 +6,7 @@ export * from './types.js';
 export * from './mutation-scope.js';
 export * from './tailwind-tokens.js';
 export { loadTailwindTheme } from './tailwind-theme.js';
-export { computeNodeHash, stampHTMLTemplate } from './utils.js';
+export { computeNodeHash, stampHTMLTemplate, formattingWhitespace } from './utils.js';
 export { detectProjectMeta } from './detect.js';
 export { buildComponentTree, getNestingPath } from './tree.js';
 export { DEFAULT_CONFIG, resolveConfig } from './config.js';
