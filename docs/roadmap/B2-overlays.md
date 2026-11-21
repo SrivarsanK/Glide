@@ -1,6 +1,6 @@
 # B2: Overlays with the Popover API
 
-Status: todo · Size: M · Depends on: B1 · Branch: `feat/b2-overlays`
+Status: **in review** · Size: M · Depends on: B1 · Branch: `feat/b2-overlays`
 
 ## Goal
 
@@ -31,12 +31,21 @@ A closed popover is hidden, so it can't be selected or edited.
   `el.showPopover()` in the preview. That file must stay self-contained.
 - Add "Show overlay" to the Layers panel.
 
+## As built (2026-11-21)
+
+- Overlays are elements that already have a unique id and the `popover` attribute (A2's Add attribute
+  sets both); the panel lists them. Making an overlay from the selection is deferred.
+- Each action is one `retag` carrying the attributes, like B1. An existing `type="submit"` button is
+  refused as a trigger.
+- A Show button calls the new `show-popover` frame query, so an overlay can be opened and edited on the canvas.
+- Checked with React 19 (renders `popovertarget`). React 18 is unverified.
+
 ## Steps
 
-- [ ] An "Open overlay" action in the Interactions panel: pick the overlay frame, or make one from the selection
-- [ ] A "Close overlay" action for buttons inside it
+- [x] An "Open overlay" action in the Interactions panel: pick the overlay frame, or make one from the selection
+- [x] A "Close overlay" action for buttons inside it
 - [ ] Position and backdrop options
-- [ ] The `show-popover` query and the Layers action
+- [x] The `show-popover` query and the Layers action
 
 ## Tests
 

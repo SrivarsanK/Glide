@@ -103,13 +103,26 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       case 'sources': return stampedElements().map(el => el.getAttribute(attributes.source));
       case 'link-info': {
         const el = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source)[0];
-        return el ? { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel') } : null;
+        if (!el) return null;
+        const overlay = el.parentElement && el.parentElement.closest ? el.parentElement.closest('[popover]') : null;
+        return { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel'),
+          type: el.getAttribute('type'), popoverTarget: el.getAttribute('popovertarget'), popoverAction: el.getAttribute('popovertargetaction'),
+          inPopover: overlay ? overlay.id || null : null };
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
-        const counts: Record<string, number> = {};
-        Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => { counts[el.id] = (counts[el.id] || 0) + 1; });
-        return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id] }));
+        const counts: Record<string, number> = {}, popovers: Record<string, boolean> = {};
+        Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => {
+          counts[el.id] = (counts[el.id] || 0) + 1;
+          if (el.hasAttribute('popover')) popovers[el.id] = true;
+        });
+        return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id], popover: !!popovers[id] }));
+      }
+      case 'show-popover': {
+        // A closed overlay is not rendered, so the editor opens it to make it selectable.
+        const el = doc.getElementById(String(payload.id || ''));
+        if (!el || typeof el.showPopover !== 'function') return false;
+        try { el.showPopover(); return true; } catch (_) { return false; }
       }
       case 'export': return exportData(typeof payload.source === 'string' ? payload.source : undefined);
       case 'print': win.focus(); win.print(); return true;
