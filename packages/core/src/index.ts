@@ -8,6 +8,7 @@ export * from './tailwind-tokens.js';
 export { loadTailwindTheme } from './tailwind-theme.js';
 export { computeNodeHash, stampHTMLTemplate, formattingWhitespace } from './utils.js';
 export { detectProjectMeta } from './detect.js';
+export { listRoutes, type RouteEntry } from './routes.js';
 export { buildComponentTree, getNestingPath } from './tree.js';
 export { DEFAULT_CONFIG, resolveConfig } from './config.js';
 export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from './config.js';
