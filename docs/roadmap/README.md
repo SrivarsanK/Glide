@@ -25,7 +25,7 @@ at a time. Each item has its own spec file in this folder.
 
 | # | ID | Feature | Size | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in progress**: committed on `feat/f0-layout-first-insert`; manual check and PR left |
+| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **needs push**: checked and committed on `feat/f0-layout-first-insert`; push, open a PR, merge, then start A1 |
 | 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | todo |
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | todo |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | todo |
@@ -134,3 +134,5 @@ flowchart LR
 - 2026-11-21: F0 committed as `5504bb1` on `feat/f0-layout-first-insert`, and this roadmap committed
   on the same branch. Not pushed. Left for F0: the manual check in `test-site/`, then a PR. Its
   changelog entry goes in with the release.
+- 2026-11-21: F0 manual check done in the real editor; placements correct. Fixed new elements sharing
+  a line with their neighbour (`59e701d`, 448 tests pass). Not pushed yet: pushing needs the user's go-ahead.

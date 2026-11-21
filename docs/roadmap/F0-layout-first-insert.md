@@ -32,12 +32,15 @@ Status: **in progress** · Size: S · Depends on: none · Branch: `feat/f0-layou
 
 - [x] `git checkout -b feat/f0-layout-first-insert`, then commit (`5504bb1`)
 - [x] `npm run build && npm run typecheck && npm test && npm run test:artifact`: all pass (444 tests)
-- [ ] Manual check in `test-site/` after a rebuild:
-  - Draw inside a flex row, a flex column, a grid and a plain block. Check the element order and that
-    there's no `absolute`.
-  - Check the output: classes in a Tailwind project, inline styles with Style format set to Inline.
-  - Check that a pasteboard draft still shows its preview.
-- [ ] Push the branch and open a PR, when the user asks
+- [x] Manual check in `test-site/` (2026-11-21, real editor driven with Playwright, inline-style project):
+  - Flex row (between two children, and after the last), flex column and grid: every element landed
+    next to the right sibling, with no `absolute`.
+  - The pasteboard draft was written as `{false && …}` with inline styles and showed its preview.
+  - Found and fixed: new elements shared a line with the next sibling or the closing tag. They now get
+    their own indented line (`59e701d`, tests in `transaction-structures.test.ts`).
+  - Not checked by hand: Tailwind output (no Tailwind in `test-site`; covered by unit tests).
+- [ ] Push the branch and open a PR (needs the user's go-ahead)
+- [ ] Merge the PR
 - [ ] Changelog entry at release time (this repo adds entries under a version heading when it releases)
 
 ## Accepted limits
