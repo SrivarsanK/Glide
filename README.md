@@ -1,160 +1,54 @@
 <p align="center">
-  <img src="./.github/assets/ascii-art.png" alt="Glide" width="500">
+  <img src=".github/assets/docs/hero.svg" alt="Glide. Design visually. Ship real source code. Works with React, Vue, Svelte, Astro and HTML." width="100%">
 </p>
 
 <p align="center">
-  <strong>Local visual design tool for React, Vue, Svelte, and Astro.</strong><br>
-  Select elements on a live canvas, adjust styles and layout visually, and write changes directly back to your source files.
+  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img alt="npm version" src="https://img.shields.io/npm/v/@srivarsank/glide?style=flat-square&label=npm&labelColor=0b0e14&color=38bdf8"></a>
+  <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/SrivarsanK/Glide/ci.yml?branch=main&style=flat-square&label=ci&labelColor=0b0e14&color=8b95a7"></a>
+  <img alt="Node.js 20 or later" src="https://img.shields.io/badge/node-%E2%89%A5%2020-8b95a7?style=flat-square&labelColor=0b0e14">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache%202.0-8b95a7?style=flat-square&labelColor=0b0e14"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img src="https://img.shields.io/badge/npm-v1.1.2-blue.svg" alt="npm version"></a>
-  <a href="https://github.com/SrivarsanK/Glide/pkgs/npm/glide"><img src="https://img.shields.io/badge/GitHub%20Packages-v1.1.2-black?logo=github" alt="GitHub Packages"></a>
-  <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img src="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D20-green" alt="node">
-  <img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="license">
-  <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Svelte%20%7C%20Astro-purple" alt="frameworks">
+  <a href="#quick-start"><b>Quick start</b></a>
+  &nbsp;·&nbsp;
+  <a href="#how-it-works"><b>How it works</b></a>
+  &nbsp;·&nbsp;
+  <a href="#edits-you-can-review"><b>Safe edits</b></a>
+  &nbsp;·&nbsp;
+  <a href="#features"><b>Features</b></a>
+  &nbsp;·&nbsp;
+  <a href="#ai-agent-skills"><b>Agent skills</b></a>
+  &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md"><b>Contributing</b></a>
 </p>
 
----
+<br>
 
-## What is Glide?
+Glide is a visual editor for the app you already run. Open it on your dev server, select an element on the live page, and change it the way you would in a design tool. Glide writes each change into the JSX, Vue, Svelte, Astro or HTML that renders the element, so every edit ends up as an ordinary diff that you review and commit.
 
-Glide is a local visual editor for frontend projects. It runs in your browser and connects to your local dev server, letting you select elements on screen, move them, and change their styling.
+There is no design file to keep in sync and no export step. Your source files are the design.
 
-Unlike design tools that export mockups or save into closed formats, Glide modifies your actual source files. When you change a color, adjust padding, or drag an element into a new container, Glide edits that element in your JSX, TSX, Vue, Svelte, Astro, or HTML file. Your code remains clean, formatting stays intact, and you stay in control of version control.
-
----
-
-## How it works
-
-Glide shows your running app in an iframe. A local WebSocket server receives each visual edit and writes it to your source files.
-
-```mermaid
-flowchart LR
-    App["Your dev server\n(Vite)"]
-    Canvas["Glide editor\n(/__glide/ or port 7777)"]
-    Server["Glide server"]
-    Files["Source files\n(TSX, Vue, Svelte, Astro, HTML)"]
-
-    App -->|"shown in"| Canvas
-    Canvas -->|"visual edits"| Server
-    Server -->|"source edits"| Files
-    Files -->|"Vite HMR"| App
-```
-
-1. Add the `glideSourceStamping()` plugin to your Vite config. In dev mode, it marks each element with its file, line and column.
-2. Run your dev server as usual (`npm run dev`).
-3. Open the editor address that the dev server prints, such as `http://127.0.0.1:5173/__glide/`.
-4. Click elements on the canvas to inspect their properties, change styles, or drag them.
-5. Glide writes each change to the exact element in your source file.
-6. When you change a file in your code editor, the canvas updates without an iframe reload.
-
-You can also run Glide as a separate command: `npx @srivarsank/glide 5173`, then open `http://localhost:7777`. In this mode Glide shows your app through a proxy.
-
-### What Glide can save
-
-| File type | Class, inline style, text, drag and resize | Structural edits (insert, delete, move, group) |
-|---|---|---|
-| JSX / TSX | Yes | Yes |
-| Vue, Svelte, Astro | Yes | No |
-| HTML | Yes, in projects with no UI framework | No |
-
-Glide refuses an edit that it cannot make exactly, for example a dynamic `:class` binding or a `{...spread}`. The message gives the reason, and the file stays unchanged.
-
----
-
-## Architecture
-
-```
-Canvas edits                               External code edits
-     │                                              │
-     ▼                                              ▼
-Editor sends one transaction                File watcher
-(with a digest of the file)                 (ignores Glide's own writes)
-     │                                              │
-     ▼                                              ▼
-Server checks session, path, digest         Tree and scene update events
-     │                                              │
-     ▼                                              ▼
-Source edit in memory → temp file → rename  Editor refreshes the canvas
-```
-
-- **Exact targeting:** Each element is found by its file, line and column. JSX elements also have a content hash, so an edit to a changed element is refused (`STALE_NODE`).
-- **Safe writes:** Each transaction carries a SHA-256 digest of the file. If the file changed since you selected the element, Glide refuses the edit (`STALE_DIGEST`). A transaction writes all of its files or none of them.
-- **Minimal diffs:** Glide changes only the edited text. Formatting, comments and quotes stay as you wrote them.
-- **Surgical Tailwind updates:** Glide replaces only the classes for the edited property, such as `bg-` or `text-`. Responsive and state variants stay. Values that match your Tailwind theme are written as theme tokens.
-- **Class expressions:** In JSX, Glide edits classes inside `cn(...)`, `clsx(...)`, `cva(...)` and template literals. It refuses an edit that a condition or shared definition would override.
-- **Edit scopes:** For an element inside a component, you can apply a class to the component definition, to one usage, or to one `cva` variant.
-- **Staged edits:** You can preview many changes and write them in one transaction from the staging bar.
-- **Drag and resize:** The result is written to source as layout styles. Elements in normal flow get `position: relative`, so flex and grid layout stays.
-- **Session security:** The server listens on `127.0.0.1` only, checks the `Host` and `Origin` of each request, and accepts a socket only after a session token handshake.
-
----
+<p align="center">
+  <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
+  <br>
+  <sub>The headline is selected. The <code>className</code> in the properties panel is read from <code>Hero.tsx</code>.</sub>
+</p>
 
 ## Quick start
 
-Glide is available on the public npm registry and GitHub Packages.
+Glide works with Vite projects and needs Node.js 20 or later.
 
-### Option A: Run directly via npx
-
-Start your app in one terminal, then point Glide at its port:
-
-```bash
-# Terminal 1: your app
-npm run dev
-
-# Terminal 2: start Glide targeting your app's port
-npx @srivarsank/glide 5173
-```
-
-Then open **http://localhost:7777** in your browser.
-
-### Option B: Install as a dev dependency
+**1. Install it as a dev dependency.**
 
 ```bash
 npm install -D @srivarsank/glide
 ```
 
-You can add a script to `package.json`:
+**2. Add the plugin to your Vite config.** In development it marks each element with the file, line and column that rendered it.
 
-```json
-{
-  "scripts": {
-    "glide": "glide 5173"
-  }
-}
-```
-
-### Option C: GitHub Packages
-
-If your team consumes packages from GitHub Packages:
-
-1. Add the scope mapping to your `.npmrc`:
-   ```ini
-   @srivarsank:registry=https://npm.pkg.github.com
-   ```
-2. Authenticate with a personal access token:
-   ```bash
-   npm login --registry=https://npm.pkg.github.com
-   ```
-3. Run via npx:
-   ```bash
-   npx @srivarsank/glide 5173
-   ```
-
----
-
-## Vite plugin configuration
-
-To enable click-to-element mapping, add the `glideSourceStamping` plugin to your Vite configuration. This stamps elements with source file locations during development.
-
-With the plugin installed you do not need the `glide` command: run your dev server as usual and open the address it prints, such as **http://127.0.0.1:5173/__glide/**. The editor is served by Vite itself, so the preview loads your app directly and hot module replacement works as it does without Glide.
-
-The editor uses the loopback IP address and the preview loads your app from `localhost`. These are different origins for the browser, so scripts in your app cannot read the editor page or send edits. If you open `http://localhost:5173/__glide/`, Glide sends you to the IP address. Pass `glideSourceStamping({ editor: false })` to keep using the `glide` command instead.
-
-**React (`vite.config.ts`):**
 ```ts
+// vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
@@ -164,7 +58,13 @@ export default defineConfig({
 });
 ```
 
-**Vue (`vite.config.ts`):**
+<details>
+<summary><b>Vue, Svelte, Astro and plain HTML</b></summary>
+
+<br>
+
+**Vue** (`vite.config.ts`)
+
 ```ts
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
@@ -175,7 +75,8 @@ export default defineConfig({
 });
 ```
 
-**Svelte (`vite.config.ts`):**
+**Svelte** (`vite.config.ts`)
+
 ```ts
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -186,7 +87,8 @@ export default defineConfig({
 });
 ```
 
-**Astro (`astro.config.mjs`):**
+**Astro** (`astro.config.mjs`)
+
 ```ts
 import { defineConfig } from 'astro/config';
 import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
@@ -198,7 +100,8 @@ export default defineConfig({
 });
 ```
 
-**Plain HTML with Vite:**
+**Plain HTML** (`vite.config.ts`, no framework plugin needed)
+
 ```ts
 import { defineConfig } from 'vite';
 import { glideSourceStamping } from '@srivarsank/glide/vite-plugin';
@@ -208,31 +111,188 @@ export default defineConfig({
 });
 ```
 
----
+</details>
+
+**3. Run your dev server as usual and open the editor** at the address it prints, such as `http://127.0.0.1:5173/__glide/`.
+
+```bash
+npm run dev
+```
+
+Vite serves the editor itself, so the preview loads your app directly and hot module replacement works as it does without Glide.
+
+<details>
+<summary><b>Run the editor as a separate command instead</b></summary>
+
+<br>
+
+Start your app, then start Glide in a second terminal and open `http://localhost:7777`. With no port, Glide looks for your dev server.
+
+```bash
+npx @srivarsank/glide          # or: npx @srivarsank/glide 5173
+```
+
+To keep it with your other scripts, add `"glide": "glide"` to the `scripts` in `package.json`. In this mode Glide shows your app through a proxy. Keep the plugin in your Vite config so elements can be selected; to turn off the editor at `/__glide/`, pass `glideSourceStamping({ editor: false })`. Set `PORT` to change the editor port. Other settings are read from `glide.config.json`; see the [installation guide](docs/INSTALL.md).
+
+</details>
+
+<details>
+<summary><b>Install from GitHub Packages</b></summary>
+
+<br>
+
+1. Map the scope in your `.npmrc`:
+   ```ini
+   @srivarsank:registry=https://npm.pkg.github.com
+   ```
+2. Sign in with a personal access token:
+   ```bash
+   npm login --registry=https://npm.pkg.github.com
+   ```
+3. Install as above: `npm install -D @srivarsank/glide`.
+
+</details>
+
+> [!NOTE]
+> The editor page uses the loopback address (`127.0.0.1`) and the preview loads your app from `localhost`. The browser treats these as different origins, so scripts in your app cannot read the editor page or send edits. If you open `http://localhost:5173/__glide/`, Glide sends you to the IP address.
+
+## How it works
+
+<p align="center">
+  <img src=".github/assets/docs/edit-loop.svg" alt="The edit loop. Vite stamps your source files and serves a live preview to the Glide editor. The editor sends each edit as a transaction to the Glide server, which writes it atomically back to the source file." width="100%">
+</p>
+
+1. **Stamp.** The Vite plugin marks each element with its source location while your app compiles.
+2. **Edit.** The editor shows your running app. Each change you make is sent as one transaction to a local server, with a digest of every file it touches.
+3. **Write.** The server checks the transaction, edits only the affected text, and writes the file. Vite's hot reload updates the canvas without reloading the page.
+
+Edits you make in your code editor go around the same loop, from your files through Vite to the canvas, so the two stay in sync.
+
+### What Glide can save
+
+| File type | Class, inline style, text, drag and resize | Structural edits (insert, delete, move, group) |
+|---|:---:|:---:|
+| JSX / TSX | Yes | Yes |
+| Vue, Svelte, Astro | Yes | No |
+| HTML | Yes, in projects with no UI framework | No |
+
+Glide refuses an edit that it cannot make exactly, such as one inside a dynamic `:class` binding or a `{...spread}`. The message gives the reason, and the file stays unchanged.
+
+## Edits you can review
+
+<p align="center">
+  <img src=".github/assets/docs/one-diff.svg" alt="Setting a button's fill to #38BDF8 in the properties panel changes only bg-slate-800 to bg-sky-400 in Button.tsx. The padding classes, the hover variant and the comment stay as written." width="100%">
+</p>
+
+Glide changes the text of the edit and nothing else. Formatting, comments and quotes stay as you wrote them. With Tailwind, it replaces only the classes for the property you changed, keeps responsive and state variants such as `md:` and `hover:`, and writes values that match your theme as theme tokens.
+
+<p align="center">
+  <img src=".github/assets/docs/write-path.svg" alt="The write path. A transaction must come from a trusted request, find its source unchanged, and be an edit Glide can make exactly. If any check fails, the edit is refused with a code such as STALE_DIGEST and the file is left as it was. If all pass, Glide writes every file through a temp file and a rename." width="100%">
+</p>
+
+- **Exact targeting.** Each element is found by its file, line and column. JSX elements also carry a content hash, so an edit to an element that changed since you selected it is refused (`STALE_NODE`).
+- **Stale-file checks.** Each transaction carries a SHA-256 digest of every file it touches. If a file changed since you selected the element, the edit is refused (`STALE_DIGEST`).
+- **All or nothing.** A transaction writes all of its files or none of them, each through a temp file and a rename.
+- **Class expressions.** In JSX, Glide edits classes inside `cn(...)`, `clsx(...)`, `cva(...)` and template literals. It refuses an edit that a condition or a shared definition would override.
+- **Edit scopes.** For an element inside a component, you choose where a class goes: the component definition, one usage, or one `cva` variant.
+- **Instant or staged.** Write each edit as you make it, or stage many edits, preview them, and apply them in one transaction.
+- **Layout-safe drag and resize.** Results are written as layout styles. Elements in normal flow get `position: relative`, so flex and grid layout keeps working.
+- **Local only.** The server listens on `127.0.0.1`, checks the `Host` and `Origin` of each request, and accepts a socket only after a session token handshake.
+
+## Features
+
+<table>
+<tr>
+<th align="left" width="33%">On the canvas</th>
+<th align="left" width="33%">In your source</th>
+<th align="left" width="33%">Around your workflow</th>
+</tr>
+<tr>
+<td valign="top">
+
+- Select, drag, resize, zoom and pan on the live page
+- Snapping to siblings, centers and the pixel grid, with guides
+- Layers panel for each file's element tree
+- Properties for size, layout, spacing, type, fill, borders and shadows
+- Color picker with presets, hex input and the eyedropper
+- Device presets and custom canvas sizes
+- Frame, rectangle, ellipse and text tools
+- A pasteboard: move an element off the page and it stays in source without rendering
+
+</td>
+<td valign="top">
+
+- Class, inline style, text and layout edits in five file types
+- Tailwind edits per property, with breakpoint (`sm` to `2xl`) and state (`hover`, `focus` and others) targets
+- Style format: Auto, Tailwind or Inline
+- `cn`, `clsx`, `cva` and template-literal classes
+- Edit scopes for components and `cva` variants
+- Insert, delete, move, group and reparent in JSX
+- Jump from a component usage to its definition
+
+</td>
+<td valign="top">
+
+- Instant writes or staged edits
+- Undo and redo for the whole session, with a history panel
+- Canvas updates when you edit code, without a reload
+- Branch mode for trying changes on a Git branch
+- Comments, reactions, and PNG or JPG export
+- A component registry and skills for AI coding agents
+
+</td>
+</tr>
+</table>
+
+The color picker has 16 presets, hex input and the eyedropper. On some Chromium builds the browser's eyedropper does not close; type a hex value or choose a preset instead.
+
+<details>
+<summary><b>Keyboard shortcuts</b></summary>
+
+<br>
+
+`Ctrl` is `⌘` on macOS.
+
+| Tools | | Editing | | View | |
+|---|---|---|---|---|---|
+| `V` | Select | `Ctrl Z` | Undo | `Ctrl 0` | Fit to screen |
+| `H` | Hand | `Ctrl Shift Z` or `Ctrl Y` | Redo | `Ctrl 1` | Zoom to 100% |
+| `F` or `A` | Frame | `Ctrl C` / `Ctrl V` | Copy / paste | `[` / `]` | Toggle left / right panel |
+| `R` | Rectangle | `Ctrl D` | Duplicate | `\` | Toggle both panels |
+| `O` | Ellipse | `Delete` or `Backspace` | Delete | `Ctrl Alt H` | History panel |
+| `T` | Text | `Ctrl G` / `Ctrl Shift G` | Group / ungroup | `Ctrl E` | Export |
+| `C` | Comment | `]` / `[` | Bring to front / send to back | `Esc` | Cancel or deselect |
+| `E` | Reactions (`1` to `8` sends one) | `Ctrl ]` / `Ctrl [` | Forward / backward | | |
+| | | Arrow keys | Nudge 1 px (`Shift`: 10 px) | | |
+
+With an element selected, `[` and `]` arrange it; with nothing selected, they toggle the panels.
+
+</details>
 
 ## AI agent skills
 
-Glide ships three skills that teach AI coding agents how to work in a project that uses Glide.
-
-### Installing skills
-
-Run the installer from your project root:
+Glide ships three skills that teach AI coding agents to work in a project that uses Glide. Install them from your project root:
 
 ```bash
 npx @srivarsank/glide install-skills
 ```
 
-This copies the skills into `.agents/skills/`. If the project uses Claude Code (it has a `.claude` folder or a `CLAUDE.md`), it also copies them into `.claude/skills/`. To choose the place yourself, add `--agent claude`, `--agent agents` or `--agent all`.
+This copies the skills into `.agents/skills/`. If the project uses Claude Code (it has a `.claude` folder or a `CLAUDE.md`), it also copies them into `.claude/skills/`. Add `--agent claude`, `--agent agents` or `--agent all` to choose the place yourself. With Cursor, the installer also creates `.cursor/rules/glide.mdc`.
 
-- `glide`: how to find an element, edit source so that the canvas keeps working, and explain a refused edit.
-- `glide-component-segregator`: how to use `glide-components.json` to find a component by name.
-- `glide-setup`: how to install and configure Glide, and fix a setup that does not work.
+| Skill | Teaches the agent to |
+|---|---|
+| `glide` | find an element, edit source so the canvas keeps working, and explain a refused edit |
+| `glide-component-segregator` | find a component by name through `glide-components.json` |
+| `glide-setup` | install and configure Glide, and fix a setup that does not work |
 
-Glide does not install skills by itself. When the skills are not in the project, the `glide` command prints a one-line tip. If you use Cursor, the installer also creates `.cursor/rules/glide.mdc`.
+Glide never installs skills by itself. When they are missing, the `glide` command prints a one-line tip.
 
-### The component registry (`glide-components.json`)
+<details>
+<summary><b>The component registry, <code>glide-components.json</code></b></summary>
 
-When Glide starts, it indexes every component in your project into `glide-components.json`. AI agents use this registry to locate components by name rather than searching raw file trees:
+<br>
+
+When Glide starts, it indexes every component in your project into `glide-components.json`, so agents can find a component by name instead of searching the file tree. Both the `glide` command and the editor at `/__glide/` write this file, and it updates within 300 ms when you create, rename or delete a component.
 
 ```json
 {
@@ -252,122 +312,33 @@ When Glide starts, it indexes every component in your project into `glide-compon
 }
 ```
 
-The file updates within 300 ms when you create, rename, or delete components. Both the `glide` command and the editor at `/__glide/` write this file.
+An agent that changes a component visually:
+
+1. reads `glide-components.json`;
+2. finds the bucket for the component, such as `Card`;
+3. picks the target `data-gl-source` id by tag name, root element or classes;
+4. opens the file in `cssFiles` for a CSS module change;
+5. makes the edit and checks it on the canvas.
 
 Add the registry to your `.gitignore`:
+
 ```gitignore
 glide-components.json
 ```
 
-### Agent workflow
-
-When an AI assistant needs to modify a component visually, it follows these steps:
-1. Read `glide-components.json`.
-2. Locate the bucket matching the component name (such as "Card" or "Header").
-3. Inspect elements to find the target `data-gl-source` id by tag name, root wrapper, or classes.
-4. For CSS module modifications, open the file listed in `cssFiles`.
-5. Apply the surgical edit and verify on canvas.
-
----
-
-## Features
-
-<p align="center">
-  <img src="./.github/assets/guide.png" alt="Glide Visual Editor Guide" width="100%"/>
-</p>
-
-| Feature | Description |
-|---|---|
-| Visual canvas | Select, drag, resize, zoom, and pan elements on a live canvas |
-| Code-to-canvas sync | External code changes update the canvas without reloading the page |
-| Smart snapping | Snaps to sibling edges, centers, and grid lines with visual guides |
-| Source write-back | Class, style, text and layout edits for JSX/TSX, Vue, Svelte, Astro, and HTML |
-| Surgical Tailwind rewriter | Replaces specific utility tokens while preserving other classes |
-| Class expressions | Edits classes in `cn`, `clsx`, `cva` and template literals (JSX) |
-| Edit scopes | Apply a class to a component definition, one usage, or one `cva` variant |
-| Canvas reparenting | Drag elements between containers to update parent-child JSX structure |
-| Canvas pasteboard | Detach elements to the canvas; they stay in source and do not render |
-| Component definition jump | Jump from an instantiated sub-component to its origin file in one click |
-| Conflict safety | File digest checks and all-or-nothing transactions prevent lost or partial writes |
-| Layers panel | Hierarchical element tree with visibility and selection controls |
-| Properties panel | Control dimensions, margins, padding, borders, shadows, and typography |
-| Color picker | Custom popup picker with hex input and preset palettes |
-| Device preview | Toggle between responsive presets or define custom canvas dimensions |
-| Git sandbox mode | Test visual changes on a dedicated branch before committing |
-| Quick toggles bar | Compact controls for snapping, pixel grid, rulers, and file paths |
-| Undo and redo | Full session history with undo and redo controls |
-| Component registry | Automatic component indexing saved to `glide-components.json` |
-
----
-
-## Keyboard shortcuts
-
-| Key | Action |
-|---|---|
-| `V` | Select tool |
-| `H` | Hand and pan tool |
-| `F` | Frame tool |
-| `R` | Rectangle tool |
-| `O` | Ellipse tool |
-| `T` | Text tool |
-| `C` | Comment tool |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` | Redo |
-| `Escape` | Deselect or close modal |
-
----
-
-## Color picker
-
-Glide uses a custom popup color picker rather than the native operating system dialog. Click any color swatch in the properties panel to open it.
-
-You can select from 16 presets, type a hex color code, or use the eyedropper tool. Note that on some Chromium builds, the browser eyedropper API can occasionally fail to close; typing hex codes or choosing presets is recommended if you encounter this browser issue.
-
----
-
-## Project structure
-
-```
-Glide/
-├── packages/
-│   ├── cli/            # CLI launcher (npx @srivarsank/glide)
-│   ├── overlay/        # Editor UI (served at /__glide/ or localhost:7777)
-│   ├── server/         # WebSocket server, proxy, transactions, history
-│   ├── core/           # Shared types, config, component registry, Tailwind theme
-│   ├── ast-writer/     # JSX source edits (Recast and Babel)
-│   ├── adapters/       # Template writers (Vue, Svelte, Astro/HTML)
-│   ├── babel-plugin/   # JSX source stamping
-│   └── vite-plugin/    # Stamping, bridge injection, editor hosting (glideSourceStamping)
-├── docs/               # Architecture specs, design docs, and guides
-│   ├── reports/        # Audit, completion, and remaining work reports
-│   └── INSTALL.md      # Detailed manual & agent installation guide
-├── src/                # Package root entrypoints & version resolution
-│   └── __tests__/      # Centralized Vitest test suite
-├── skills/             # Bundled AI agent skills
-│   ├── glide/
-│   ├── glide-component-segregator/
-│   └── glide-setup/
-└── README.md
-```
-
----
+</details>
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers setting up a checkout, the package map, the checks to run and how to open a pull request.
 
-- Review the [Contributing Guide](CONTRIBUTING.md) for local architecture details and testing procedures.
-- We follow conventional commit conventions for atomic commits.
-- Use the [documentation index](docs/README.md) to distinguish current guides from historical specifications and audit reports.
-- Check [skills/glide/references/](skills/glide/references/) for the architecture, the WebSocket protocol, and the write-back rules for each file type.
-
----
+- The [documentation index](docs/README.md) separates current guides from historical specifications.
+- [`skills/glide/references/`](skills/glide/references/) describes the architecture, the WebSocket protocol, and the write-back rules for each file type.
+- Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
-
----
+[Apache License 2.0](LICENSE)
 
 ## Star history
 
@@ -375,6 +346,6 @@ This project is licensed under the [Apache License 2.0](LICENSE).
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=srivarsank/glide&type=date&theme=dark&legend=bottom-right" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=srivarsank/glide&type=date&legend=bottom-right" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=srivarsank/glide&type=date&legend=bottom-right" />
+    <img alt="Star history chart for SrivarsanK/Glide" src="https://api.star-history.com/chart?repos=srivarsank/glide&type=date&legend=bottom-right" />
   </picture>
 </a>
