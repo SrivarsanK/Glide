@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { transformJSXBatch } from '../../packages/ast-writer/src/writer.js';
+import { defaultTailwindTheme } from '../../packages/core/src/tailwind-tokens.js';
 
 /** Apply one change to the element starting at `marker`. */
 function edit(source: string, marker: string, change: Record<string, unknown>) {
@@ -37,4 +38,14 @@ test('a radius edit replaces every radius class, and a corner edit keeps the ove
   expect(all).toContain('className="p-1 rounded-[8px]"');
   const corner = edit(app('className="rounded-[50%] p-1"'), '<section', { type: 'class', property: 'borderTopLeftRadius', value: '4px' });
   expect(corner).toContain('className="rounded-[50%] p-1 rounded-tl-[4px]"');
+});
+
+test('in Tailwind v4, hiding an inline-block element uses `hidden!`, because v4 sorts `inline-block` after `hidden`', () => {
+  const v4 = { ...defaultTailwindTheme(), version: 4 as const };
+  const at = (source: string) => { const before = source.slice(0, source.indexOf('<section')).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const run = (source: string, value: string) => transformJSXBatch(source, [{ ...at(source), change: display(value) } as any], { theme: v4 }).code;
+  const hidden = run(app('className="inline-block p-2"'), 'none');
+  expect(hidden).toContain('className="inline-block p-2 hidden!"');
+  expect(run(hidden, '')).toContain('className="inline-block p-2"');
+  expect(run(app('className="flex p-2"'), 'none')).toContain('className="flex p-2 hidden"');
 });

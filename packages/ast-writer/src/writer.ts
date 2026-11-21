@@ -338,11 +338,15 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
 
   // Hide and show toggle `hidden` beside the element's own display class, so showing restores it.
   const toggle = property === 'display' && (valStr === 'none' || valStr === '');
+  const bare = (c: string) => splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
   const replaces = (c: string) => inScope(c)
-    && (toggle ? splitClassVariants(c).pop() === 'hidden' : matchesProperty(c, property, theme));
+    && (toggle ? bare(c) === 'hidden' : matchesProperty(c, property, theme));
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
   const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
-  const newClass = toggle ? (valStr === 'none' ? 'hidden' : '') : getNewClass(property, finalValue, theme, existingTokens);
+  // Tailwind v4 orders display classes alphabetically, so `inline-block` would beat a plain `hidden`.
+  const outranked = theme.version === 4 && classes.some(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) > 'hidden');
+  const newClass = toggle ? (valStr === 'none' ? (outranked ? 'hidden!' : 'hidden') : '')
+    : getNewClass(property, finalValue, theme, existingTokens);
   if (!newClass && !toggle) return null;
 
   const related = overlappingProperties(property);

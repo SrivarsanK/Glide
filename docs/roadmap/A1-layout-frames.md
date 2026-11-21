@@ -29,8 +29,9 @@ hugs its content, and `display` and `border-radius` become properties that can b
    - `matchesProperty('display')` matches exactly those class names.
    - Hiding must not lose the element's own display value. A frame is `flex flex-col gap-4`; if hide
      replaced `flex` with `hidden`, show would leave a block. In Tailwind, hide adds `hidden` next to
-     the existing display class, and show removes only `hidden` (check that `hidden` wins in the CSS
-     order of both v3 and v4). In inline format, refuse hide when the element sets its own `display`,
+     the existing display class, and show removes only `hidden`. Checked: v3 defines `.hidden` last,
+     but v4 orders display classes alphabetically, so `inline`, `inline-block` and `inline-flex` beat
+     `hidden`; hide writes `hidden!` in v4 when one of those is present. In inline format, refuse hide when the element sets its own `display`,
      unless the old value can be restored. `mutateClass` currently rejects values that have no class
      rule, so the removal needs an explicit path.
 3. [x] Add a `borderRadius` rule.
