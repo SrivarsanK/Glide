@@ -1717,6 +1717,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
                 <span>Properties</span>
                 <span id="selected-tag" style="font-size:10px;color:var(--accent-color);font-weight:400;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+                <select id="selected-tag-picker" class="props-select" aria-label="Change tag" title="What this element is (writes the tag in source)" style="display:none;font-size:10px;height:20px;"></select>
               </div>
               <button id="btn-jump-definition" title="Jump to Component Definition" style="display: none; background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.4); color: #c4b5fd; font-size: 10px; border-radius: 4px; padding: 2px 6px; cursor: pointer; align-items: center; gap: 4px; white-space: nowrap;">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -5959,6 +5960,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             document.getElementById('no-selection-msg').style.display = 'none';
             document.getElementById('props-content').style.display = 'block';
             document.getElementById('selected-tag').textContent = '<' + (tagName || '?') + '>';
+            // HTML elements can switch to another tag; components render what they decide.
+            const tagPicker = document.getElementById('selected-tag-picker');
+            const tag = String(tagName || '').toLowerCase();
+            const retaggable = !!(selectedElement && parseSource(selectedElement.source)) && RETAG_TAGS.includes(tag);
+            tagPicker.style.display = retaggable ? '' : 'none';
+            document.getElementById('selected-tag').style.display = retaggable ? 'none' : '';
+            if (retaggable) {
+              tagPicker.replaceChildren(...RETAG_TAGS.map(name => { const option = document.createElement('option'); option.value = name; option.textContent = '<' + name + '>'; return option; }));
+              tagPicker.value = tag;
+              tagPicker.dataset.current = tag;
+            }
 
             const isComponent = tagName && /^[A-Z]/.test(tagName);
             const jumpBtn = document.getElementById('btn-jump-definition');
@@ -7225,6 +7237,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const menu = document.getElementById('glide-context-menu');
             if (menu) menu.style.display = 'none';
           }
+
+          const RETAG_TAGS = ['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'a', 'button',
+            'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'figure', 'figcaption'];
+          document.getElementById('selected-tag-picker').addEventListener('change', event => {
+            const parsed = selectedElement && parseSource(selectedElement.source);
+            if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
+              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              change: { type: 'retag', tagName: event.target.value } }));
+            // Show the tag the source has until the save re-renders it; a refused change leaves it as it was.
+            event.target.value = event.target.dataset.current || event.target.value;
+          });
 
           function triggerUngroup() {
             if (!selectedElement || !selectedElement.source) {
