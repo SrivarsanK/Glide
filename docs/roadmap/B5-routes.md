@@ -1,6 +1,6 @@
 # B5: Real route list (Pages panel and link targets)
 
-Status: todo · Size: M · Depends on: B1 · Branch: `feat/b5-routes`
+Status: **in review** · Size: M · Depends on: B1 · Branch: `feat/b5-routes`
 
 ## Goal
 

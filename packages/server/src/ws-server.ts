@@ -4,7 +4,7 @@ import type { Duplex } from 'stream';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme, listRoutes } from '@srivarsank/core';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassName, activeVariants } from '@srivarsank/ast-writer';
@@ -1212,6 +1212,11 @@ export class GlideServer {
 
               if (['edit', 'batch-edit', 'insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange'].includes(message.type)) {
                 await this.handleSourceMutation(ws, message);
+                return;
+              }
+
+              if (message.type === 'list-routes') {
+                ws.send(JSON.stringify({ type: 'routes', routes: listRoutes(this.projectPaths.root) }));
                 return;
               }
 
