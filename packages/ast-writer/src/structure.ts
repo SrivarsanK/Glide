@@ -158,20 +158,30 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (change.elementType === 'ellipse') styles.borderRadius = '50%';
     openParent(target);
     const inserted = t.jsxElement(t.jsxOpeningElement(t.jsxIdentifier(tag), []), t.jsxClosingElement(t.jsxIdentifier(tag)), text ? [t.jsxText('New text')] : [], false);
+    const kids = target.children;
+    const blank = (child: t.Node | undefined): child is t.JSXText => t.isJSXText(child) && !child.value.trim();
+    // Give the new child its own line, indented like its siblings, when the children are on separate lines.
+    const addChild = (child: t.JSXElement | t.JSXExpressionContainer, at: number) => {
+      const separator = kids.find((item, i) => blank(item) && item.value.includes('\n') && i + 1 < kids.length && !blank(kids[i + 1]));
+      if (!separator) kids.splice(at, 0, child);
+      else if (blank(kids[at - 1])) kids.splice(at, 0, child, t.jsxText((separator as t.JSXText).value));
+      else kids.splice(at, 0, t.jsxText((separator as t.JSXText).value), child);
+    };
+    // Without a sibling the child goes last, before the whitespace that indents the closing tag.
+    const last = blank(kids[kids.length - 1]) ? kids.length - 1 : kids.length;
     if (change.detached) {
       // The pasteboard previews read inline styles only.
       inlineStyles(inserted, styles);
       setWorkspace(inserted);
-      target.children.push(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)));
+      addChild(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)), last);
       return;
     }
     applyStyles(inserted, styles);
     place(inserted);
-    // Join the layout beside the child nearest the drawn point; without one, the element goes last.
+    // Join the layout beside the child nearest the drawn point.
     const sibling = change.siblingId ? resolve(change.siblingId) : undefined;
-    const index = sibling ? target.children.indexOf(sibling) : -1;
-    if (index < 0) target.children.push(inserted);
-    else target.children.splice(change.position === 'before' ? index : index + 1, 0, inserted);
+    const index = sibling ? kids.indexOf(sibling) : -1;
+    addChild(inserted, index < 0 ? last : change.position === 'before' ? index : index + 1);
     return;
   }
   if (change.type === 'paste') {

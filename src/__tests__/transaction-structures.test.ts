@@ -150,3 +150,35 @@ test('an insert writes its starting styles in the project format, like an edit',
   expect(g.read()).not.toContain('className');
   expect(g.read()).toMatch(/style=\{\{\s*width: "96px",\s*height: "80px"\s*\}\}/);
 });
+
+test.each(['before', 'after', 'last'])('an insert %s a child gets its own line, indented like its siblings', async where => {
+  const code = 'const App = () => (\n  <main>\n    <section>\n      <span>A</span>\n      <span>B</span>\n    </section>\n  </main>\n);\n';
+  const f = fixture(code);
+  const at = (tag: string) => { const before = code.slice(0, code.indexOf(tag)).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const b = at('<span>B');
+  const change = { type: 'insert', elementType: 'frame', width: 40, height: 40,
+    ...(where === 'last' ? {} : { siblingId: `App.tsx:${b.line}:${b.column}`, position: where }) };
+  const result = await f.service.execute('lines', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code), ...at('<section'), change }]);
+  expect(result.success, result.error).toBe(true);
+  const lines = f.read().split('\n');
+  const inserted = lines.findIndex(line => line.startsWith('      <div'));
+  expect(inserted, f.read()).toBeGreaterThan(0);
+  expect(lines.find(line => line.includes('<span>B</span>'))).toBe('      <span>B</span>');
+  expect(lines.indexOf('    </section>')).toBeGreaterThan(inserted);
+  if (where === 'before') expect(inserted).toBeLessThan(lines.indexOf('      <span>B</span>'));
+  else expect(inserted).toBeGreaterThan(lines.indexOf('      <span>B</span>'));
+});
+
+test('a pasteboard draft gets its own line and leaves the closing tag on its own line', async () => {
+  const code = 'const App = () => (\n  <main>\n    <section>\n      <span>A</span>\n    </section>\n  </main>\n);\n';
+  const f = fixture(code);
+  const before = code.slice(0, code.indexOf('<section')).split('\n');
+  const result = await f.service.execute('draft', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code),
+    line: before.length, column: before.at(-1)!.length + 1,
+    change: { type: 'insert', elementType: 'rectangle', detached: true, workspaceId: 'draft-1', x: -200, y: 10 } }]);
+  expect(result.success, result.error).toBe(true);
+  const lines = f.read().split('\n');
+  const draft = lines.findIndex(line => line.startsWith('      {false && <div'));
+  expect(draft, f.read()).toBeGreaterThan(lines.indexOf('      <span>A</span>'));
+  expect(lines.indexOf('    </section>')).toBeGreaterThan(draft);
+});
