@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { parse } from '@babel/parser';
 import { MutationService, contentDigest } from '../../packages/server/src/mutation-service.js';
 import { HistoryStore } from '../../packages/server/src/history-manager.js';
+import { defaultTailwindTheme } from '../../packages/core/src/tailwind-tokens.js';
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
@@ -120,4 +121,64 @@ test('a structural no-op does not create an empty undo entry', async () => {
   expect(result.success, result.error).toBe(true);
   expect(result.changedFiles).toEqual([]);
   expect(f.history.getState().stack).toHaveLength(0);
+});
+
+test.each(['before', 'after'])('an insert joins the layout %s the nearest child instead of floating over it', async position => {
+  const f = fixture();
+  const result = await f.service.execute('insert', [f.op('<section', { type: 'insert', elementType: 'rectangle', width: 120, height: 80,
+    siblingId: f.ref('<span>B'), position })]);
+  expect(result.success, result.error).toBe(true);
+  const code = f.read(), inserted = code.indexOf('<div');
+  expect(inserted).toBeGreaterThan(code.indexOf('>A</span>'));
+  if (position === 'before') expect(inserted).toBeLessThan(code.indexOf('>B</span>'));
+  else expect(inserted).toBeGreaterThan(code.indexOf('>B</span>'));
+  expect(inserted).toBeLessThan(code.indexOf('</section>'));
+  expect(code).not.toContain('absolute');
+});
+
+test('an insert writes its starting styles in the project format, like an edit', async () => {
+  // A project theme: Tailwind is installed and sky-400 is #38bdf8.
+  const theme = () => ({ ...defaultTailwindTheme(), version: 4 as const,
+    colors: new Map([...defaultTailwindTheme().colors, ['sky-400', '#38bdf8']]) });
+  const f = fixture();
+  const auto = await new MutationService(f.root, { theme }).execute('auto', [f.op('<aside', { type: 'insert', elementType: 'ellipse', width: 96, height: 80 })]);
+  expect(auto.success, auto.error).toBe(true);
+  expect(f.read()).toContain('<aside><div className="w-24 h-20 bg-sky-400 rounded-[50%]"></div></aside>');
+  const g = fixture();
+  const inline = await new MutationService(g.root, { theme }).execute('inline', [{ ...g.op('<aside', { type: 'insert', elementType: 'frame', width: 96, height: 80 }), authoringRepresentation: 'inline' }]);
+  expect(inline.success, inline.error).toBe(true);
+  expect(g.read()).not.toContain('className');
+  expect(g.read()).toMatch(/style=\{\{\s*width: "96px",\s*height: "80px"\s*\}\}/);
+});
+
+test.each(['before', 'after', 'last'])('an insert %s a child gets its own line, indented like its siblings', async where => {
+  const code = 'const App = () => (\n  <main>\n    <section>\n      <span>A</span>\n      <span>B</span>\n    </section>\n  </main>\n);\n';
+  const f = fixture(code);
+  const at = (tag: string) => { const before = code.slice(0, code.indexOf(tag)).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const b = at('<span>B');
+  const change = { type: 'insert', elementType: 'frame', width: 40, height: 40,
+    ...(where === 'last' ? {} : { siblingId: `App.tsx:${b.line}:${b.column}`, position: where }) };
+  const result = await f.service.execute('lines', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code), ...at('<section'), change }]);
+  expect(result.success, result.error).toBe(true);
+  const lines = f.read().split('\n');
+  const inserted = lines.findIndex(line => line.startsWith('      <div'));
+  expect(inserted, f.read()).toBeGreaterThan(0);
+  expect(lines.find(line => line.includes('<span>B</span>'))).toBe('      <span>B</span>');
+  expect(lines.indexOf('    </section>')).toBeGreaterThan(inserted);
+  if (where === 'before') expect(inserted).toBeLessThan(lines.indexOf('      <span>B</span>'));
+  else expect(inserted).toBeGreaterThan(lines.indexOf('      <span>B</span>'));
+});
+
+test('a pasteboard draft gets its own line and leaves the closing tag on its own line', async () => {
+  const code = 'const App = () => (\n  <main>\n    <section>\n      <span>A</span>\n    </section>\n  </main>\n);\n';
+  const f = fixture(code);
+  const before = code.slice(0, code.indexOf('<section')).split('\n');
+  const result = await f.service.execute('draft', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code),
+    line: before.length, column: before.at(-1)!.length + 1,
+    change: { type: 'insert', elementType: 'rectangle', detached: true, workspaceId: 'draft-1', x: -200, y: 10 } }]);
+  expect(result.success, result.error).toBe(true);
+  const lines = f.read().split('\n');
+  const draft = lines.findIndex(line => line.startsWith('      {false && <div'));
+  expect(draft, f.read()).toBeGreaterThan(lines.indexOf('      <span>A</span>'));
+  expect(lines.indexOf('    </section>')).toBeGreaterThan(draft);
 });
