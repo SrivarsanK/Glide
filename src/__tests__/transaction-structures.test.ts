@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { parse } from '@babel/parser';
 import { MutationService, contentDigest } from '../../packages/server/src/mutation-service.js';
 import { HistoryStore } from '../../packages/server/src/history-manager.js';
+import { defaultTailwindTheme } from '../../packages/core/src/tailwind-tokens.js';
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
@@ -120,4 +121,32 @@ test('a structural no-op does not create an empty undo entry', async () => {
   expect(result.success, result.error).toBe(true);
   expect(result.changedFiles).toEqual([]);
   expect(f.history.getState().stack).toHaveLength(0);
+});
+
+test.each(['before', 'after'])('an insert joins the layout %s the nearest child instead of floating over it', async position => {
+  const f = fixture();
+  const result = await f.service.execute('insert', [f.op('<section', { type: 'insert', elementType: 'rectangle', width: 120, height: 80,
+    siblingId: f.ref('<span>B'), position })]);
+  expect(result.success, result.error).toBe(true);
+  const code = f.read(), inserted = code.indexOf('<div');
+  expect(inserted).toBeGreaterThan(code.indexOf('>A</span>'));
+  if (position === 'before') expect(inserted).toBeLessThan(code.indexOf('>B</span>'));
+  else expect(inserted).toBeGreaterThan(code.indexOf('>B</span>'));
+  expect(inserted).toBeLessThan(code.indexOf('</section>'));
+  expect(code).not.toContain('absolute');
+});
+
+test('an insert writes its starting styles in the project format, like an edit', async () => {
+  // A project theme: Tailwind is installed and sky-400 is #38bdf8.
+  const theme = () => ({ ...defaultTailwindTheme(), version: 4 as const,
+    colors: new Map([...defaultTailwindTheme().colors, ['sky-400', '#38bdf8']]) });
+  const f = fixture();
+  const auto = await new MutationService(f.root, { theme }).execute('auto', [f.op('<aside', { type: 'insert', elementType: 'ellipse', width: 96, height: 80 })]);
+  expect(auto.success, auto.error).toBe(true);
+  expect(f.read()).toContain('<aside><div className="w-24 h-20 bg-sky-400 rounded-[50%]"></div></aside>');
+  const g = fixture();
+  const inline = await new MutationService(g.root, { theme }).execute('inline', [{ ...g.op('<aside', { type: 'insert', elementType: 'frame', width: 96, height: 80 }), authoringRepresentation: 'inline' }]);
+  expect(inline.success, inline.error).toBe(true);
+  expect(g.read()).not.toContain('className');
+  expect(g.read()).toMatch(/style=\{\{\s*width: "96px",\s*height: "80px"\s*\}\}/);
 });

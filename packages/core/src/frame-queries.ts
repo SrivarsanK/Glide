@@ -19,11 +19,38 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     let block = stamped;
     while (block && win.getComputedStyle(block).position === 'static' && win.getComputedStyle(block).transform === 'none') block = block.parentElement;
     const rect = block ? block.getBoundingClientRect() : { left: -win.scrollX, top: -win.scrollY };
+    const parentId = stamped.getAttribute(attributes.source) || '';
     return {
-      parentId: stamped.getAttribute(attributes.source) || '',
+      parentId,
       x: Math.round(x - rect.left - (block ? block.clientLeft : 0) + (block ? block.scrollLeft : 0)),
       y: Math.round(y - rect.top - (block ? block.clientTop : 0) + (block ? block.scrollTop : 0)),
+      ...siblingAt(stamped, parentId, x, y),
     };
+  }
+
+  /**
+   * The in-flow child a new element goes next to, in the container's reading order.
+   * Only children stamped from the container's own file can be its direct JSX children.
+   */
+  function siblingAt(container: any, parentId: string, x: number, y: number): { siblingId?: string; position?: 'before' | 'after' } {
+    const file = (id: string) => id.replace(/:\d+:\d+(?::[a-fA-F0-9]+)?$/, '');
+    const style = win.getComputedStyle(container);
+    const display = String(style.display || ''), direction = String(style.flexDirection || '');
+    const flex = display.indexOf('flex') >= 0, reverse = flex && direction.indexOf('reverse') >= 0;
+    const row = flex && direction.indexOf('row') === 0;
+    const wraps = display.indexOf('grid') >= 0 || (row && style.flexWrap && style.flexWrap !== 'nowrap');
+    let last: any = null;
+    for (const child of Array.prototype.slice.call(container.children || [])) {
+      const id = child.getAttribute(attributes.source);
+      const position = win.getComputedStyle(child).position;
+      if (!id || file(id) !== file(parentId) || position === 'absolute' || position === 'fixed') continue;
+      const r = child.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const after = wraps ? r.top > y || (r.top + r.height > y && cx > x)
+        : row ? (reverse ? cx < x : cx > x) : (reverse ? cy < y : cy > y);
+      if (after) return { siblingId: id, position: 'before' };
+      last = child;
+    }
+    return last ? { siblingId: last.getAttribute(attributes.source), position: 'after' } : {};
   }
 
   function stampedElements(): any[] {

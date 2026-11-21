@@ -22,6 +22,11 @@ export interface StructuralChange {
 export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position']);
 
 const traverse = (traverseModule as any).default || traverseModule;
+
+function inlineStyles(node: t.JSXElement, styles: Record<string, string>): void {
+  node.openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('style'), t.jsxExpressionContainer(t.objectExpression(
+    Object.entries(styles).map(([key, value]) => t.objectProperty(t.identifier(key), t.stringLiteral(value)))))));
+}
 const workspaceAttributes = ['data-gl-workspace-id', 'data-gl-workspace-x', 'data-gl-workspace-y'];
 
 export function workspaceAttribute(node: t.JSXElement, name: string): string | undefined {
@@ -37,7 +42,9 @@ export function dormantElement(child: t.Node): t.JSXElement | null {
 
 /** Structural edits deliberately require direct JSX children, never inferred runtime instances. */
 export function mutateStructure(ast: any, target: t.JSXElement, change: StructuralChange,
-  resolve: (source: string) => t.JSXElement): void {
+  resolve: (source: string) => t.JSXElement,
+  /** Writes a new element's starting styles in the project's format; inline styles without it. */
+  applyStyles: (node: t.JSXElement, styles: Record<string, string>) => void = inlineStyles): void {
   function slotOf(node: t.JSXElement) {
     let result: { parent: t.JSXElement | t.JSXFragment; child: t.JSXElement | t.JSXExpressionContainer } | undefined;
     t.traverseFast(ast, item => {
@@ -142,23 +149,29 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     const tag = text ? 'span' : 'div';
     const styles: Record<string, string> = {
       width: `${Math.round(change.width || (text ? 120 : 100))}px`, height: `${Math.round(change.height || (text ? 32 : 100))}px`,
-      ...(text ? { display: 'inline-block' } : { backgroundColor: change.elementType === 'frame' ? 'transparent' : '#38bdf8' }),
+      // A frame starts without a fill, so it adds no color the user did not choose.
+      ...(text ? { display: 'inline-block' } : change.elementType === 'frame' ? {} : { backgroundColor: '#38bdf8' }),
     };
     for (const size of [change.width, change.height]) {
       if (size !== undefined && (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > 10000)) throw new Error('INVALID_OPERATION: Invalid inserted dimensions.');
     }
     if (change.elementType === 'ellipse') styles.borderRadius = '50%';
-    const attributes = Object.keys(styles).length ? [t.jsxAttribute(t.jsxIdentifier('style'), t.jsxExpressionContainer(t.objectExpression(
-      Object.entries(styles).map(([key, value]) => t.objectProperty(t.identifier(key), t.stringLiteral(value))))))] : [];
     openParent(target);
-    const inserted = t.jsxElement(t.jsxOpeningElement(t.jsxIdentifier(tag), attributes), t.jsxClosingElement(t.jsxIdentifier(tag)), text ? [t.jsxText('New text')] : [], false);
+    const inserted = t.jsxElement(t.jsxOpeningElement(t.jsxIdentifier(tag), []), t.jsxClosingElement(t.jsxIdentifier(tag)), text ? [t.jsxText('New text')] : [], false);
     if (change.detached) {
+      // The pasteboard previews read inline styles only.
+      inlineStyles(inserted, styles);
       setWorkspace(inserted);
       target.children.push(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)));
-    } else {
-      place(inserted);
-      target.children.push(inserted);
+      return;
     }
+    applyStyles(inserted, styles);
+    place(inserted);
+    // Join the layout beside the child nearest the drawn point; without one, the element goes last.
+    const sibling = change.siblingId ? resolve(change.siblingId) : undefined;
+    const index = sibling ? target.children.indexOf(sibling) : -1;
+    if (index < 0) target.children.push(inserted);
+    else target.children.splice(change.position === 'before' ? index : index + 1, 0, inserted);
     return;
   }
   if (change.type === 'paste') {

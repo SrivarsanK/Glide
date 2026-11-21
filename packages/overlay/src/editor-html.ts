@@ -4179,7 +4179,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!insideFrame(x, y)) return Promise.resolve(null);
             return frameAsk('container-at', { x, y }).then(hit => {
               const parsed = hit && parseSource(hit.parentId);
-              return parsed ? { parentId: hit.parentId, file: parsed.file, x: hit.x, y: hit.y } : null;
+              return parsed ? { parentId: hit.parentId, file: parsed.file, x: hit.x, y: hit.y,
+                siblingId: hit.siblingId, position: hit.position } : null;
             });
           }
 
@@ -4216,15 +4217,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             await ensureDigest(targetFile);
             if (socket && socket.readyState === WebSocket.OPEN) {
+              // Inside the page a new element joins the layout next to the nearest child instead of
+              // floating at the drawn point, so it moves with the content around it.
               socket.send(JSON.stringify({
                 type: 'insert',
                 file: targetFile,
                 parentId: parentId,
                 elementType: elementType,
-                x: detached ? x : resolved.x + x - origin.x,
-                y: detached ? y : resolved.y + y - origin.y,
+                ...(detached ? { x, y, workspaceId: crypto.randomUUID() }
+                  : { siblingId: resolved.siblingId, position: resolved.position }),
                 detached,
-                workspaceId: detached ? crypto.randomUUID() : undefined,
+                authoringRepresentation: mutationScope.capture({ type: 'style' }).authoringRepresentation,
                 width: Math.round(width),
                 height: Math.round(height)
               }));

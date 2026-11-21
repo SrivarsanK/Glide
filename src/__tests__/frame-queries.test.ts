@@ -59,3 +59,25 @@ test('the bridge answers a query from the editor with the same id', () => {
   for (const listener of listeners.message || []) listener(message('http://127.0.0.1:5173'));
   expect(sent.filter(item => item.type === 'glide:query-result')).toEqual([{ type: 'glide:query-result', id: 7, result: { parentId: 'App.tsx:3:5' } }]);
 });
+
+function row(display: string, flexDirection = 'row') {
+  const box = (source: string | null, left: number, top: number, position = 'static') => ({ ...element('div', source, null, position),
+    getBoundingClientRect: () => ({ left, top, width: 100, height: 50 }) });
+  const children = [box('App.tsx:4:7', 0, 0), box('Card.tsx:1:1', 120, 0), box('App.tsx:6:7', 240, 0), box('App.tsx:7:7', 360, 0, 'absolute')];
+  const container = { ...element('section', 'App.tsx:3:5', null, 'relative'), children };
+  const win = { scrollX: 0, scrollY: 0, getComputedStyle: (el: any) => el === container
+    ? { position: 'relative', transform: 'none', display, flexDirection, flexWrap: 'nowrap' } : { position: el.position, transform: 'none' },
+  document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
+  return createFrameQueries(win, attributes);
+}
+
+test('a drop point names the in-flow sibling from the same file that a new element goes next to', () => {
+  // Between the first and third children; the second is another file's component, the last is out of flow.
+  expect(row('flex')('container-at', { x: 150, y: 25 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'before' });
+  expect(row('flex')('container-at', { x: 60, y: 25 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'before' });
+  expect(row('flex')('container-at', { x: 20, y: 25 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
+  expect(row('flex')('container-at', { x: 500, y: 25 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'after' });
+  expect(row('flex', 'row-reverse')('container-at', { x: 500, y: 25 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
+  // In a block container, order follows the vertical axis.
+  expect(row('block')('container-at', { x: 500, y: 10 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
+});
