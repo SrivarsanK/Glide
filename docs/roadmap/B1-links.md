@@ -1,6 +1,6 @@
 # B1: Interactions panel: go to page, open URL, scroll to
 
-Status: todo · Size: M · Depends on: A2, A3 · Branch: `feat/b1-links`
+Status: **in review** · Size: M · Depends on: A2, A3 · Branch: `feat/b1-links`
 
 ## Goal
 
@@ -29,12 +29,21 @@ no JavaScript.
 - **Router links come in v2.** Switching to `next/link` or React Router's `Link` needs an import to be
   added. A plain `<a>` works everywhere; in a single-page app it does a full page load.
 
+## As built (2026-11-21)
+
+- The interaction is one `retag` change that also carries `attributes` (set first, then the tag checks),
+  instead of separate transactions; structural changes must run alone, and separate edits would need
+  coordinate remaps in between.
+- Scroll to offers the ids already used exactly once on the page (frame query `ids`). Picking a target
+  on the canvas, and writing an id for it, is deferred: add the id with A2's Add attribute first.
+- Turning a button into a link also removes its `type`.
+
 ## Steps
 
-- [ ] The `interactions.ts` module, with tests
-- [ ] The inspector section, wired to the A2 and A3 changes
+- [x] The `interactions.ts` module, with tests
+- [x] The inspector section, wired to the A2 and A3 changes
 - [ ] "Pick on canvas" target mode for scroll to
-- [ ] A note in `skills/glide/SKILL.md` on how interactions are stored, so agents keep them intact
+- [x] A note in `skills/glide/SKILL.md` on how interactions are stored, so agents keep them intact
 
 ## Tests
 

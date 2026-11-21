@@ -31,8 +31,8 @@ at a time. Each item has its own spec file in this folder.
 | 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in review**: PR #24 from `feat/f0-layout-first-insert`; `done` when merged |
 | 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR #25 (stacked on #24) |
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **in review**: PR #26 (stacked on #25) |
-| 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **in review**: PR from `feat/a3-retag` (stacked on A2) |
-| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | todo |
+| 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **in review**: PR #27 (stacked on #26) |
+| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR from `feat/b1-links` (stacked on A3) |
 | 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | todo |
 | 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | todo |
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | todo |
@@ -156,3 +156,8 @@ flowchart LR
   dropdown in the Properties header. Checked both A2 and A3 in the editor: the tag dropdown rewrote `div` to
   `section`; Add attribute wrote `title`; a `javascript:` href was refused with a visible message. Prop
   edits queue in Staged mode like every other prop edit. 464 tests pass.
+- 2026-11-21: B1 done on `feat/b1-links`: an Interactions panel (Nothing, Go to page, Open URL, Scroll to)
+  backed by `packages/overlay/src/interactions.ts`. Each interaction is one `retag` that also carries the link
+  attributes, so it is a single exact edit. Scroll-to offers the page's unique ids; picking a target on the
+  canvas is deferred (give the target an id with A2 first). Checked in the editor: a div became
+  `<a href="#features">` and the panel read it back. 470 tests pass.

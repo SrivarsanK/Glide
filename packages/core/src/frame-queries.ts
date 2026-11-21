@@ -101,6 +101,16 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       case 'container-at': return containerAt(Number(payload.x), Number(payload.y));
       case 'first-container': return firstContainer();
       case 'sources': return stampedElements().map(el => el.getAttribute(attributes.source));
+      case 'link-info': {
+        const el = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source)[0];
+        return el ? { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel') } : null;
+      }
+      case 'ids': {
+        // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
+        const counts: Record<string, number> = {};
+        Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => { counts[el.id] = (counts[el.id] || 0) + 1; });
+        return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id] }));
+      }
       case 'export': return exportData(typeof payload.source === 'string' ? payload.source : undefined);
       case 'print': win.focus(); win.print(); return true;
       default: return null;
