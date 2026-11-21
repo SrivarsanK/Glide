@@ -81,3 +81,12 @@ test('a drop point names the in-flow sibling from the same file that a new eleme
   // In a block container, order follows the vertical axis.
   expect(row('block')('container-at', { x: 500, y: 10 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
 });
+
+test('a reversed wrapping row orders each line right to left', () => {
+  const box = (source: string, left: number, top: number) => ({ ...element('div', source), getBoundingClientRect: () => ({ left, top, width: 100, height: 50 }) });
+  const container = { ...element('section', 'App.tsx:3:5', null, 'relative'), children: [box('App.tsx:4:7', 120, 0), box('App.tsx:5:7', 0, 0), box('App.tsx:6:7', 120, 60)] };
+  const win = { scrollX: 0, scrollY: 0, getComputedStyle: (el: any) => el === container
+    ? { position: 'relative', transform: 'none', display: 'flex', flexDirection: 'row-reverse', flexWrap: 'wrap' } : { position: 'static', transform: 'none' },
+  document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
+  expect(createFrameQueries(win, attributes)('container-at', { x: 250, y: 25 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
+});

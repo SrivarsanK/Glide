@@ -4178,9 +4178,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function resolveParentAtPoint(x, y) {
             if (!insideFrame(x, y)) return Promise.resolve(null);
             return frameAsk('container-at', { x, y }).then(hit => {
-              const parsed = hit && parseSource(hit.parentId);
-              return parsed ? { parentId: hit.parentId, file: parsed.file, x: hit.x, y: hit.y,
-                siblingId: hit.siblingId, position: hit.position } : null;
+              // A page that has not re-rendered a save yet reports the coordinates from before it.
+              const current = id => id && pendingStampRemaps.length ? sourceMapping.remap(id, pendingStampRemaps, currentFile) : id;
+              const parentId = hit && current(hit.parentId);
+              const parsed = parentId && parseSource(parentId);
+              return parsed ? { parentId, file: parsed.file, x: hit.x, y: hit.y,
+                siblingId: current(hit.siblingId), position: hit.position } : null;
             });
           }
 

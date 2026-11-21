@@ -45,8 +45,10 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       const position = win.getComputedStyle(child).position;
       if (!id || file(id) !== file(parentId) || position === 'absolute' || position === 'fixed') continue;
       const r = child.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const after = wraps ? r.top > y || (r.top + r.height > y && cx > x)
-        : row ? (reverse ? cx < x : cx > x) : (reverse ? cy < y : cy > y);
+      // A reversed row runs right to left, also within each wrapped line.
+      const later = reverse && row ? cx < x : cx > x;
+      const after = wraps ? r.top > y || (r.top + r.height > y && later)
+        : row ? later : (reverse ? cy < y : cy > y);
       if (after) return { siblingId: id, position: 'before' };
       last = child;
     }
