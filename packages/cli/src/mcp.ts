@@ -1,7 +1,7 @@
 /**
  * `glide mcp`: an MCP server over stdio for coding agents. Each JSON-RPC line is forwarded to the running
  * Glide server (found through its run file); without one, the tools are still listed so agents can start.
- * `glide mcp install` adds Glide to this project's `.mcp.json` for Claude Code.
+ * `glide mcp install [--agent claude|cursor|vscode|all]` adds Glide to this project's agent config.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -30,29 +30,42 @@ async function forward(message: unknown): Promise<unknown> {
   return Array.isArray(message) ? message.map(offline).filter(Boolean) : offline(message);
 }
 
-function install() {
-  const file = path.join(project, '.mcp.json');
+/** Project-level MCP configs: each agent reads its own file and key. */
+const CONFIGS: Record<string, { file: string; key: string; entry: (command: string, args: string[]) => object }> = {
+  claude: { file: '.mcp.json', key: 'mcpServers', entry: (command, args) => ({ command, args }) },
+  cursor: { file: '.cursor/mcp.json', key: 'mcpServers', entry: (command, args) => ({ command, args }) },
+  vscode: { file: '.vscode/mcp.json', key: 'servers', entry: (command, args) => ({ type: 'stdio', command, args }) },
+};
+
+function install(agent: string) {
+  const { file: relative, key, entry } = CONFIGS[agent];
+  const file = path.join(project, relative);
   let config: any = {};
   if (fs.existsSync(file)) {
     try { config = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {
-      console.error(`${file} is not valid JSON, so it was left unchanged. Fix it and run this again.`);
-      process.exit(1);
+      console.error(`${file} is not valid JSON (comments are not supported here), so it was left unchanged. Add Glide by hand: npx -y @srivarsank/glide mcp`);
+      return false;
     }
   }
   // Native Windows runs npx through cmd.
-  const command = process.platform === 'win32' ? { command: 'cmd', args: ['/c', 'npx', '-y', '@srivarsank/glide', 'mcp'] }
-    : { command: 'npx', args: ['-y', '@srivarsank/glide', 'mcp'] };
-  config.mcpServers = { ...config.mcpServers, glide: command };
+  const [command, ...rest] = process.platform === 'win32' ? ['cmd', '/c', 'npx', '-y', '@srivarsank/glide', 'mcp'] : ['npx', '-y', '@srivarsank/glide', 'mcp'];
+  config[key] = { ...config[key], glide: entry(command, rest) };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
-  console.log(`Added Glide to ${file}. Restart Claude Code in this project, then run /mcp to check it is connected.`);
+  console.log(`Added Glide to ${file}.`);
+  return true;
 }
 
 if (args[1] === 'install') {
-  if (args.includes('--agent') && args[args.indexOf('--agent') + 1] !== 'claude') {
-    console.error('Only Claude Code (--agent claude) is set up automatically for now. Other agents can run `npx -y @srivarsank/glide mcp` as a stdio server.');
+  const asked = args.includes('--agent') ? args[args.indexOf('--agent') + 1] : 'claude';
+  const agents = asked === 'all' ? Object.keys(CONFIGS) : [asked];
+  if (!agents.every(agent => agent in CONFIGS)) {
+    console.error(`Unknown agent "${asked}". Use claude, cursor, vscode or all. Other agents can run \`npx -y @srivarsank/glide mcp\` as a stdio server.`);
     process.exit(1);
   }
-  install();
+  const ok = agents.map(install).every(Boolean);
+  console.log('Restart the agent in this project so it picks up the Glide MCP server.');
+  if (!ok) process.exit(1);
 } else {
   const lines = readline.createInterface({ input: process.stdin });
   lines.on('line', async line => {

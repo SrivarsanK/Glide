@@ -1,6 +1,15 @@
 # C3: Page transitions (View Transitions)
 
-Status: todo · Size: M · Depends on: B1, B5 · Branch: `feat/c3-transitions`
+Status: **deferred** · Size: M · Depends on: B1, B5 · Branch: `feat/c3-transitions`
+
+## Why deferred (2026-11-21)
+
+- It only helps multi-page sites; the React, Next.js and SvelteKit apps Glide mostly sees need framework code.
+- The "none" option needs an injected `pageswap` handler, and Glide's ground rule is plain HTML and CSS.
+- It needs a CSS-file writer, and undo only tracks the files the editor changes per element.
+- Meanwhile an agent can add `@view-transition { navigation: auto; }` itself; the MCP tools (C1, C5)
+  can then set `view-transition-name` as a style.
+- Pick it up again when someone asks for it on a multi-page site.
 
 ## Goal
 
