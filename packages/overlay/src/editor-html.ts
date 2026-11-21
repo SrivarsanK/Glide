@@ -1878,9 +1878,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 </div>
               </div>
 
+              <!-- Auto layout — shown when the element does not lay out its children yet -->
+              <div class="props-section" id="section-auto-layout" style="display:none;">
+                <div class="props-row">
+                  <button class="icon-btn" id="btn-auto-layout" title="Lay out the children in a column (display: flex)" style="flex:1;">Add auto layout</button>
+                </div>
+              </div>
+
               <!-- Layout (Flex) — shown only when display=flex -->
               <div class="props-section" id="section-flex" style="display:none;">
                 <div class="props-section-title">Layout (Flex)</div>
+                <div class="props-row">
+                  <button class="icon-btn" id="btn-remove-auto-layout" title="Stop laying out the children (display: block)" style="flex:1;">Remove auto layout</button>
+                </div>
                 <div class="props-row">
                   <span class="props-label" style="min-width:60px;">Direction</span>
                   <div class="icon-btn-group" style="flex:1;">
@@ -6058,6 +6068,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const isFlexContainer = styles.display === 'flex' || styles.display === 'inline-flex';
             const flexSec = document.getElementById('section-flex');
             if (flexSec) flexSec.style.display = isFlexContainer ? 'block' : 'none';
+            const autoSec = document.getElementById('section-auto-layout');
+            if (autoSec) autoSec.style.display = isFlexContainer || styles.display === 'none' ? 'none' : 'block';
             if (isFlexContainer) {
               setActiveBtn(['flex-row','flex-col'], styles.flexDirection === 'column' ? 'flex-col' : 'flex-row');
               const jcMap = {'flex-start':'jc-start','center':'jc-center','flex-end':'jc-end','space-between':'jc-between','space-around':'jc-around'};
@@ -6409,6 +6421,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           });
 
           // Flex direction
+          const autoLayout = document.getElementById('btn-auto-layout');
+          if (autoLayout) autoLayout.addEventListener('click', () => sendEdit({ type: 'multi-class', value: { display: 'flex', flexDirection: 'column' } }));
+          const removeAutoLayout = document.getElementById('btn-remove-auto-layout');
+          if (removeAutoLayout) removeAutoLayout.addEventListener('click', () => sendEdit({ type: 'class', property: 'display', value: 'block' }));
           const flexRow = document.getElementById('flex-row');
           if (flexRow) flexRow.addEventListener('click', () => { setActiveBtn(['flex-row','flex-col'],'flex-row'); sendEdit({type:'class',property:'flexDirection',value:'row'}); });
           const flexCol = document.getElementById('flex-col');
