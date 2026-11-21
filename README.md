@@ -30,6 +30,12 @@ Glide is a visual editor for the app you already run. Open it on your dev server
 There is no design file to keep in sync and no export step. Your source files are the design.
 
 <p align="center">
+  <a href="https://www.youtube.com/watch?v=itpLGY9rQKU"><img src=".github/assets/docs/demo-video.png" alt="Watch the Glide demo on YouTube (2 minutes 22 seconds). A still from the video shows the editor beside App.tsx, with the new text-brand-500 class highlighted in the source." width="100%"></a>
+  <br>
+  <sub>Two minutes: install Glide, edit the page, and watch each change land in the source.</sub>
+</p>
+
+<p align="center">
   <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
   <br>
   <sub>The headline is selected. The <code>className</code> in the properties panel is read from <code>Hero.tsx</code>.</sub>
