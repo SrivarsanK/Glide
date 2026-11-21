@@ -13,6 +13,8 @@ Figma's Open overlay, Close overlay and "close when clicking outside", with no J
 - **On the trigger:** it must be a `button` (A3), because `popovertarget` works only on buttons and
   inputs. It gets `popoverTarget="<id>"`.
 - **On the close button inside the overlay:** `popoverTarget="<id>"` and `popoverTargetAction="hide"`.
+- **Both generated buttons get `type="button"`.** Inside a form, a button without a type submits the
+  form instead of toggling the popover. An existing `type="submit"` button is refused as a trigger.
 - **Placement:** the browser centers popovers by default. Top, bottom and corner positions are done
   with classes, and the backdrop with `backdrop:bg-black/40` (Tailwind's `backdrop:` variant).
 

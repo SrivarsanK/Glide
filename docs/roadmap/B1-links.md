@@ -11,7 +11,7 @@ no JavaScript.
 |---|---|
 | Go to page | retag to `a` (A3), plus `href="/pricing"` (A2) |
 | Open URL | `a` with `href`, `target="_blank"` and `rel="noopener noreferrer"` |
-| Scroll to | the target gets an `id` (A2; a slug from its text or layer name, unique in the file), and the trigger gets `href="#id"` |
+| Scroll to | the target gets an `id` (A2; a slug from its text or layer name), and the trigger gets `href="#id"`. The id must be unique in the file **and** in the rendered page, because another component's file can render the same id; check the preview with a frame query (`document.querySelectorAll('#' + CSS.escape(id))`) |
 
 ## Design
 
@@ -40,6 +40,7 @@ no JavaScript.
 
 - unit tests for the interactions module
 - writer tests: a `div` becomes an `a` with an `href`; scroll to writes the target's `id` and the trigger's `href`
+- an id already rendered by another file is not reused
 
 ## Done when
 

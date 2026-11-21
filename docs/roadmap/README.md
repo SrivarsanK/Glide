@@ -12,8 +12,11 @@ at a time. Each item has its own spec file in this folder.
 > implement it step by step. When it's done, update the status board and the progress log.
 
 **The routine, for Claude or by hand:**
-1. Read this file. Take the row marked `in progress`, or else the first `todo` row whose
-   dependencies are all `done`.
+1. Read this file. Take the row marked `in progress`. Otherwise, if a row is `needs commit`,
+   `needs push` or `in review`, do the next step its note names. Committing, pushing and opening a
+   PR still need the user's go-ahead. Otherwise take the first `todo` row whose dependencies are
+   `done` or `in review`. When a dependency is only `in review`, branch from that dependency's
+   branch (stacked PRs).
 2. Read only that item's spec. Each spec is self-contained.
 3. Run `git status`. Create or check out the branch named in the spec.
 4. Follow the spec's steps in order. Write the failing test first where the spec says so.
@@ -25,7 +28,7 @@ at a time. Each item has its own spec file in this folder.
 
 | # | ID | Feature | Size | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **needs push**: checked and committed on `feat/f0-layout-first-insert`; push, open a PR, merge, then start A1 |
+| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in review**: PR #24 from `feat/f0-layout-first-insert`; `done` when merged |
 | 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | todo |
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | todo |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | todo |
@@ -40,7 +43,8 @@ at a time. Each item has its own spec file in this folder.
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | todo |
 | 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | todo |
 
-Status values: `todo`, `in progress`, `needs commit`, `done`.
+Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
+(committed, not on GitHub), `in review` (PR open), `done` (merged).
 Sizes: **S** is one focused change (a few files, roughly 100 lines with tests). **M** is several
 files plus a piece of editor UI. **L** is a new subsystem; its spec splits it into steps.
 
@@ -136,3 +140,6 @@ flowchart LR
   changelog entry goes in with the release.
 - 2026-11-21: F0 manual check done in the real editor; placements correct. Fixed new elements sharing
   a line with their neighbour (`59e701d`, 448 tests pass). Not pushed yet: pushing needs the user's go-ahead.
+- 2026-11-21: Pushed; PR #24 opened. Addressed CodeRabbit's review: reversed wrapping rows and stale
+  sibling ids in code, plus the spec gaps it found. The user approved continuing with the rest of
+  the roadmap after the review.

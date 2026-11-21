@@ -27,8 +27,12 @@ hugs its content, and `display` and `border-radius` become properties that can b
    - `getNewClass` maps `block`, `inline-block`, `inline`, `flex`, `inline-flex`, `grid`,
      `inline-grid`, `contents`, and `none` → `hidden`.
    - `matchesProperty('display')` matches exactly those class names.
-   - An empty value (show) must *remove* the display class. `mutateClass` currently rejects any value
-     that has no class rule, so add an explicit removal path.
+   - Hiding must not lose the element's own display value. A frame is `flex flex-col gap-4`; if hide
+     replaced `flex` with `hidden`, show would leave a block. In Tailwind, hide adds `hidden` next to
+     the existing display class, and show removes only `hidden` (check that `hidden` wins in the CSS
+     order of both v3 and v4). In inline format, refuse hide when the element sets its own `display`,
+     unless the old value can be restored. `mutateClass` currently rejects values that have no class
+     rule, so the removal needs an explicit path.
 3. [ ] Add a `borderRadius` rule.
    - Writes `rounded-<theme token>` or `rounded-[value]`.
    - `matchesProperty` matches `rounded` and `rounded-*`, except the side and corner forms
@@ -46,7 +50,7 @@ hugs its content, and `display` and `border-radius` become properties that can b
 ## Tests
 
 In `src/__tests__/minimal-diff.test.ts` and `transaction-structures.test.ts`:
-- hide and show work in a Tailwind fixture
+- hide and show work in a Tailwind fixture, and hiding then showing a `flex` frame keeps `flex`
 - a radius edit replaces `rounded-[50%]` and any corner classes
 - a frame insert writes `flex flex-col gap-4`
 - a text insert has no height

@@ -1,6 +1,6 @@
 # F0: Land layout-first inserts
 
-Status: **in progress** · Size: S · Depends on: none · Branch: `feat/f0-layout-first-insert`
+Status: **in review** (PR #24) · Size: S · Depends on: none · Branch: `feat/f0-layout-first-insert`
 
 ## What it does (committed as `5504bb1` on the branch above, 2026-11-21)
 
@@ -39,7 +39,7 @@ Status: **in progress** · Size: S · Depends on: none · Branch: `feat/f0-layou
   - Found and fixed: new elements shared a line with the next sibling or the closing tag. They now get
     their own indented line (`59e701d`, tests in `transaction-structures.test.ts`).
   - Not checked by hand: Tailwind output (no Tailwind in `test-site`; covered by unit tests).
-- [ ] Push the branch and open a PR (needs the user's go-ahead)
+- [x] Push the branch and open a PR (#24), and address CodeRabbit's review
 - [ ] Merge the PR
 - [ ] Changelog entry at release time (this repo adds entries under a version heading when it releases)
 

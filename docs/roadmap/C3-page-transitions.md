@@ -23,7 +23,10 @@ Figma's Smart Animate and slide transitions between pages, using the browser's V
 ## Steps
 
 - [ ] The CSS-rule writer, with tests: appends once and leaves the rest of the file unchanged
-- [ ] A "Transition" option on "Go to page" (B1): none, or dissolve via the default cross-fade
+- [ ] A "Transition" option on "Go to page" (B1): none, or dissolve via the default cross-fade.
+  The global rule makes every same-origin navigation animate, so "none" needs a per-link opt-out:
+  mark the link (for example `data-transition="none"`) and skip the transition in a small `pageswap`
+  or `pagereveal` handler. Test both settings.
 - [ ] "Match this element across pages", which writes `view-transition-name`
 
 ## Done when

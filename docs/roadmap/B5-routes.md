@@ -22,7 +22,8 @@ The Pages panel lists the app's real routes. Clicking one navigates the preview,
 - **A new core function,** `listRoutes(projectRoot, meta)`, returning `{ path, file, dynamic }[]`:
   - Next.js app router: `app/**/page.{tsx,jsx,ts,js,mdx}` and the same under `src/app`. Skip
     `(group)` and `@slot` folders; mark `[param]` segments as dynamic.
-  - Next.js pages router: `pages/**/*.{tsx,jsx,ts,js}`, excluding `_app`, `_document` and `api/`.
+  - Next.js pages router: `pages/**/*.{tsx,jsx,ts,js}` and the same under `src/pages`, excluding
+    `_app`, `_document`, `_error` and `api/`.
   - SvelteKit: `src/routes/**/+page.svelte`.
   - Astro: `src/pages/**/*.{astro,md,mdx}`.
   - Everything else, such as a Vite React app: return no file routes.

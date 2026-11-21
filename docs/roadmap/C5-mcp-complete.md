@@ -22,8 +22,9 @@ Status: todo · Size: L · Depends on: C1 · Branch: `feat/c5-mcp-<step>`
 
 ## Step 3: one-click setup and distribution
 
-- [ ] **Project-scoped configs** first: Cursor `.cursor/mcp.json` and VS Code `.vscode/mcp.json`
-  (`{"servers":{"glide":{"type":"stdio","command":"npx","args":["-y","@srivarsank/glide","mcp"]}}}`).
+- [ ] **Project-scoped configs** first. The two files use different keys:
+  - VS Code `.vscode/mcp.json`: `{"servers":{"glide":{"type":"stdio","command":"npx","args":["-y","@srivarsank/glide","mcp"]}}}`
+  - Cursor `.cursor/mcp.json`: `{"mcpServers":{"glide":{"command":"npx","args":["-y","@srivarsank/glide","mcp"]}}}`
 - [ ] **Codex:** `codex mcp add glide -- npx -y @srivarsank/glide mcp`.
 - [ ] **Copilot CLI, opencode, Antigravity:** only on request, because these edit user-level files.
   Preserve comments (JSONC), write atomically, and back the file up first.
