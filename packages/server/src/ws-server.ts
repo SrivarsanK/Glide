@@ -622,7 +622,13 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
       else leaf.setAttribute('contenteditable', originalContentEditable);
       var text = leaf.textContent ? leaf.textContent.trim() : '';
       var src = getElId(leaf);
-      if (text !== originalText.trim()) window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
+      if (text !== originalText.trim()) {
+        // The edit is trimmed, but an edge space that separates the text from adjacent page text is a word break.
+        var before = leaf.previousSibling, after = leaf.nextSibling;
+        if (text && originalText.charAt(0) === ' ' && before && before.nodeType === 3 && (before.nodeValue || '').slice(-1).trim()) text = ' ' + text;
+        if (text && originalText.slice(-1) === ' ' && after && after.nodeType === 3 && (after.nodeValue || '').charAt(0).trim()) text += ' ';
+        window.parent.postMessage({ type: 'glide:inline-text-edit', source: src, value: text }, '*');
+      }
       leaf.removeEventListener('blur', onBlur);
       leaf.removeEventListener('keydown', onKeyDown);
     }

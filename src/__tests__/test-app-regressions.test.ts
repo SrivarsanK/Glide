@@ -241,7 +241,7 @@ describe('served scripts', () => {
     };
     const window: any = {
       __glide_initialized__: false, get top() { return {}; }, parent: { postMessage: (data: any) => messages.push(data) },
-      addEventListener: on, removeEventListener: () => {}, getComputedStyle: () => ({}),
+      addEventListener: on, removeEventListener: () => {}, getComputedStyle: () => ({}), getSelection: () => null,
     };
     const stamped = [el];
     const document: any = {
@@ -250,7 +250,7 @@ describe('served scripts', () => {
       documentElement: { setAttribute: () => {}, removeAttribute: () => {}, hasAttribute: () => false },
       body: { children: [el], firstElementChild: el }, querySelector: () => null,
       querySelectorAll: (selector: string) => (selector === '[data-gl-source]' ? stamped : []),
-      elementFromPoint: () => el,
+      elementFromPoint: () => el, createRange: () => ({ selectNodeContents() {} }),
     };
     const requestAnimationFrame = (fn: Function) => frames.push(fn);
     const MutationObserver = class { constructor(fn: Function) { observers.push(fn); } observe() {} disconnect() {} };
@@ -320,6 +320,23 @@ describe('served scripts', () => {
     observers.forEach(fn => fn([{ type: 'childList', target: el, addedNodes: [], removedNodes: [section] }]));
     flush();
     expect(messages.filter(m => m.type === 'glide:dom-tree').some(m => m.rendered)).toBe(true);
+  });
+
+  test.each(bridges)('the %s keeps the space between edited text and the page text next to it', (_name, script) => {
+    const edit = (text: string, typed: string, next: string) => {
+      const { messages, listeners, el } = runBridge(script(), text);
+      const handlers: Record<string, Function> = {};
+      Object.assign(el, { textContent: text, style: {}, focus() {}, blur() { handlers.blur?.(); },
+        addEventListener: (type: string, fn: Function) => { handlers[type] = fn; }, removeEventListener() {},
+        nextSibling: { nodeType: 3, nodeValue: next } });
+      for (const listener of listeners.dblclick || []) listener({ target: el, clientX: 20, clientY: 20, preventDefault() {}, stopPropagation() {} });
+      el.textContent = typed;
+      handlers.blur?.();
+      return messages.find(m => m.type === 'glide:inline-text-edit')?.value;
+    };
+    expect(edit('Hello ', 'Welcome', 'world')).toBe('Welcome ');
+    expect(edit('Hello ', 'Welcome', ' world')).toBe('Welcome');
+    expect(edit('Hello', 'Welcome', 'world')).toBe('Welcome');
   });
 
   test.each(bridges)('the %s keeps the letter s in layer text', (_name, script) => {

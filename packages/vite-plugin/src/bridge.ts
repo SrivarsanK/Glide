@@ -1393,10 +1393,14 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
           var newText = el.textContent ? el.textContent.trim() : '';
           var src = (el.getAttribute && el.getAttribute('__GLIDE_SOURCE_ATTR__')) || el.getAttribute('data-gl-source') || getElId(el);
           if (newText !== (originalText ? originalText.trim() : '')) {
+            // The edit is trimmed, but an edge space that separates the text from adjacent page text is a word break.
+            var value = newText, before = el.previousSibling, after = el.nextSibling;
+            if (value && (originalText || '').charAt(0) === ' ' && before && before.nodeType === 3 && (before.nodeValue || '').slice(-1).trim()) value = ' ' + value;
+            if (value && (originalText || '').slice(-1) === ' ' && after && after.nodeType === 3 && (after.nodeValue || '').charAt(0).trim()) value += ' ';
             window.parent.postMessage({
               type: 'glide:inline-text-edit',
               source: src,
-              value: newText
+              value: value
             }, '*');
             window.parent.postMessage({
               type: 'glide:text-edited',
