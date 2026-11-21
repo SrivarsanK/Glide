@@ -40,3 +40,24 @@ test('allows ordinary links, mail and phone links, and aria attributes', () => {
   expect(edit(app('<div>A</div>'), '<div', 'aria-label', 'Hero')).toContain('aria-label="Hero"');
   expect(edit(app('<div>A</div>'), '<div', 'id', 'hero')).toContain('id="hero"');
 });
+
+test('refuses character references in links, because JSX decodes them into a script scheme', () => {
+  expect(() => edit(app('<a>Go</a>'), '<a', 'href', 'javascript&#58;alert(1)')).toThrow(/Character references/);
+  expect(() => edit(app('<a>Go</a>'), '<a', 'href', 'javascript&colon;alert(1)')).toThrow(/Character references/);
+  expect(edit(app('<a>Go</a>'), '<a', 'href', '/search?a=1&b=2')).toContain('href="/search?a=1&b=2"');
+});
+
+test('a new tab refuses duplicate rel attributes', () => {
+  expect(() => edit(app('<a href="/x" rel="a" rel={b}>Go</a>'), '<a', 'target', '_blank')).toThrow(/Duplicate rel/);
+});
+
+test('typed prop edits of HTML attributes keep working: false removes disabled, numbers become text', () => {
+  const prop = (source: string, marker: string, property: string, value: unknown) => {
+    const before = source.slice(0, source.indexOf(marker)).split('\n');
+    return transformJSXBatch(source, [{ line: before.length, column: before.at(-1)!.length + 1,
+      change: { type: 'prop', property, value, scope: 'source-element' } } as any]).code;
+  };
+  expect(prop(app('<button disabled>Go</button>'), '<button', 'disabled', false)).toContain('<button>Go</button>');
+  expect(prop(app('<div aria-expanded="true">A</div>'), '<div', 'aria-expanded', false)).toContain('aria-expanded="false"');
+  expect(prop(app('<div aria-level="1">A</div>'), '<div', 'aria-level', 3)).toContain('aria-level="3"');
+});
