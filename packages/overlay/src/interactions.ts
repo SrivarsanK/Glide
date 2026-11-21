@@ -54,5 +54,15 @@ export function createInteractions() {
       ...(!newTab && ownRel ? { rel: null } : {}), ...(info.tag === 'button' ? { type: null } : {}) } };
   }
 
-  return { read, problem, plan };
+  /** The classes an element changes to while hovered, pressed or focused (base scope only). */
+  function states(className: string) {
+    const found: Record<string, string[]> = { hover: [], active: [], 'focus-visible': [] };
+    for (const name of className.split(/\s+/)) {
+      const match = name.match(/^(hover|active|focus-visible):(.+)$/);
+      if (match) found[match[1]].push(match[2]);
+    }
+    return found;
+  }
+
+  return { read, problem, plan, states };
 }

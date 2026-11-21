@@ -107,7 +107,7 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
         const overlay = el.parentElement && el.parentElement.closest ? el.parentElement.closest('[popover]') : null;
         return { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel'),
           type: el.getAttribute('type'), popoverTarget: el.getAttribute('popovertarget'), popoverAction: el.getAttribute('popovertargetaction'),
-          inPopover: overlay ? overlay.id || null : null };
+          inPopover: overlay ? overlay.id || null : null, className: el.getAttribute('class') || '' };
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
