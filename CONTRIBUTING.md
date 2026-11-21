@@ -98,7 +98,8 @@ The workflow gates both registry publish jobs on `npm run verify:release`.
 
 `publish-npm` uses `NPM_TOKEN` and publishes with provenance. `publish-github`
 uses the repository `GITHUB_TOKEN`. Normal PR CI independently builds, checks
-all workspace types, runs the source tests and verifies the bundled editor.
+all workspace types, runs the source tests, verifies the bundled editor and runs
+the consumer and hosted browser checks.
 
 Manual publishing commands (`publish:npm`, `publish:gpr`, `publish:all` and
 `release`) publish existing build output. Run `npm run verify:release` first;
