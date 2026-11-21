@@ -28,8 +28,7 @@
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "repository": {
     "type": "git",
@@ -74,7 +73,7 @@
     "test:hosted": "node scripts/hosted-acceptance.mjs",
     "verify:release": "npm run build && npm run typecheck && npm test && npm run test:artifact && npm run test:consumer && npm run test:hosted",
     "publish:npm": "npm publish --access public --registry https://registry.npmjs.org/",
-    "publish:gpr": "npm publish --access public --registry https://npm.pkg.github.com/",
+    "publish:gpr": "npm publish --access public --@srivarsank:registry=https://npm.pkg.github.com/",
     "publish:all": "npm run publish:npm && npm run publish:gpr",
     "release": "npm run publish:all"
   },
