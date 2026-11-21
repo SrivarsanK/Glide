@@ -80,8 +80,10 @@ export function findJSXElementAt(
 }
 
 const DEFAULT_THEME = defaultTailwindTheme();
-/** Starting styles of inserted elements that have no per-property class rule. */
-const INSERT_CLASSES: Record<string, string> = { 'display:inline-block': 'inline-block', 'borderRadius:50%': 'rounded-[50%]' };
+/** `display` values and their classes; `none` is `hidden`, which hide and show toggle separately. */
+const DISPLAY_CLASSES: Record<string, string> = { block: 'block', 'inline-block': 'inline-block', inline: 'inline',
+  flex: 'flex', 'inline-flex': 'inline-flex', grid: 'grid', 'inline-grid': 'inline-grid', contents: 'contents', none: 'hidden' };
+const DISPLAY_NAMES = new Set(Object.values(DISPLAY_CLASSES));
 const SPACING_PREFIXES: Record<string, string> = {
   marginLeft: 'ml-', marginRight: 'mr-', marginTop: 'mt-', marginBottom: 'mb-', margin: 'm-',
   paddingLeft: 'pl-', paddingRight: 'pr-', paddingTop: 'pt-', paddingBottom: 'pb-', padding: 'p-',
@@ -89,7 +91,7 @@ const SPACING_PREFIXES: Record<string, string> = {
 };
 const COLOR_PREFIXES: Record<string, string> = { color: 'text-', backgroundColor: 'bg-', borderColor: 'border-' };
 const OTHER_PREFIXES: Record<string, string> = {
-  opacity: 'opacity-', borderTopLeftRadius: 'rounded-tl-', borderTopRightRadius: 'rounded-tr-',
+  opacity: 'opacity-', borderRadius: 'rounded-', borderTopLeftRadius: 'rounded-tl-', borderTopRightRadius: 'rounded-tr-',
   borderBottomRightRadius: 'rounded-br-', borderBottomLeftRadius: 'rounded-bl-', borderWidth: 'border-',
 };
 
@@ -117,6 +119,9 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'gap': return name.startsWith('gap-') && !name.startsWith('gap-y') && !name.startsWith('gap-x');
     case 'rowGap': return name.startsWith('gap-y-');
     case 'opacity': return name.startsWith('opacity-');
+    case 'display': { const shown = name.replace(/^!|!$/g, ''); return DISPLAY_NAMES.has(shown) && shown !== 'hidden'; }
+    // The overall radius replaces corner and side radii too.
+    case 'borderRadius': return name === 'rounded' || name.startsWith('rounded-');
     case 'borderTopLeftRadius': return name.startsWith('rounded-tl');
     case 'borderTopRightRadius': return name.startsWith('rounded-tr');
     case 'borderBottomRightRadius': return name.startsWith('rounded-br');
@@ -169,6 +174,8 @@ function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAUL
   const isNumber = /^-?\d*\.?\d+$/.test(clean);
 
   switch (property) {
+    case 'display':
+      return DISPLAY_CLASSES[clean] ?? '';
     case 'flexDirection':
       return clean === 'column' ? 'flex-col' : 'flex-row';
     case 'justifyContent':
@@ -259,7 +266,7 @@ export function updateClassString(
   const classes = existingClasses.split(/\s+/).filter(Boolean);
   const plan = planClassEdit(classes, property, value, breakpoint, pseudoState, theme);
   if (!plan) return existingClasses;
-  return [...classes.filter(c => !plan.replaces(c)), plan.added].join(' ');
+  return [...classes.filter(c => !plan.replaces(c)), plan.added].filter(Boolean).join(' ');
 }
 
 const SIDES: Record<string, string> = {
@@ -329,21 +336,36 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
     }
   }
 
-  const replaces = (c: string) => inScope(c) && matchesProperty(c, property, theme);
+  // Hide and show toggle `hidden` beside the element's own display class, so showing restores it.
+  const toggle = property === 'display' && (valStr === 'none' || valStr === '');
+  const bare = (c: string) => splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
+  const replaces = (c: string) => inScope(c)
+    && (toggle ? bare(c) === 'hidden' : matchesProperty(c, property, theme));
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
   const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
-  const newClass = getNewClass(property, finalValue, theme, existingTokens);
-  if (!newClass) return null;
+  // The hiding class must beat the display class: an important one wins over a plain one, and
+  // Tailwind v4 orders same-property classes alphabetically, so `inline-block` beats a plain `hidden`.
+  const important = (c: string) => /^!|!$/.test(splitClassVariants(c).pop()!);
+  const hiding = (displays: string[]) => displays.some(c => important(c) || (theme.version === 4 && bare(c) > 'hidden'))
+    ? (theme.version === 4 ? 'hidden!' : '!hidden') : 'hidden';
+  const displays = classes.filter(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) !== 'hidden');
+  const newClass = toggle ? (valStr === 'none' ? hiding(displays) : '')
+    : getNewClass(property, finalValue, theme, existingTokens);
+  if (!newClass && !toggle) return null;
+  // A display edit on a hidden element keeps it hidden: the hiding class is upgraded if the new display would win.
+  const hidden = classes.filter(c => inScope(c) && bare(c) === 'hidden');
+  const upgrade = property === 'display' && !toggle && hidden.length > 0 && hidden.every(c => !important(c)) && hiding([newClass]) !== 'hidden';
 
   const related = overlappingProperties(property);
   const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
     || (p === 'fontSize' ? 'text-' : []));
   const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(splitClassVariants(c).pop()!.replace(/^-/, ''));
   return {
-    added: [...variants, newClass].join(':'),
-    replaces,
-    overlaps: c => inScope(c)
-      && (related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
+    added: newClass ? [...variants, newClass].join(':') + (upgrade ? ' ' + [...variants, hiding([newClass])].join(':') : '') : '',
+    replaces: c => replaces(c) || (upgrade && hidden.includes(c)),
+    // Showing cannot undo a `hidden` that a condition adds, so that case is refused.
+    overlaps: c => inScope(c) && ((toggle && valStr === '' && bare(c) === 'hidden')
+      || related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
     overlapsPartial: start => {
       const name = splitClassVariants(start).pop()!.replace(/^-/, '');
       return inScope(start) && (relatedPrefixes.some(p => name.startsWith(p)) || alsoSets(start));
@@ -474,7 +496,8 @@ function mutateVariant(pieces: ClassPiece[], property: string, value: any, break
 /** With `scope`, className may be a cn/clsx/template/cva expression; without it, only a string. */
 function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string,
   theme: TailwindTheme = DEFAULT_THEME, scope?: BindingScope, variant?: VariantOption): string {
-  if (property !== 'className' && !getNewClass(property, value, theme)) {
+  const showing = property === 'display' && String(value).trim() === '';
+  if (property !== 'className' && !showing && !getNewClass(property, value, theme)) {
     throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
   }
   const openingEl = node.openingElement;
@@ -604,7 +627,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
           const tailwind = change.authoringRepresentation === 'tailwind'
             || (!change.authoringRepresentation && theme.version !== null);
           if (!tailwind) return mutateStyle(node, styles);
-          const classes = Object.entries(styles).map(([property, value]) => INSERT_CLASSES[`${property}:${value}`] ?? getNewClass(property, value, theme));
+          const classes = Object.entries(styles).map(([property, value]) => getNewClass(property, value, theme));
           mutateClass(node, 'className', classes.join(' '), undefined, undefined, theme);
         });
     }
@@ -682,14 +705,25 @@ function mutateStyle(node: t.JSXElement, styles: Record<string, string>, scope?:
     }
   }
 
-  const newProperties = Object.entries(styles).map(([key, val]) => {
+  // An empty value unsets the property, as showing an element unsets `display: none`.
+  const unset = new Set(Object.keys(styles).filter(key => styles[key] === ''));
+  const keyOf = (p: any) => t.isIdentifier(p.key) ? p.key.name : p.key.value;
+  const newProperties = Object.entries(styles).filter(([key]) => !unset.has(key)).map(([key, val]) => {
     return t.objectProperty(t.isValidIdentifier(key) ? t.identifier(key) : t.stringLiteral(key), t.stringLiteral(val));
   });
 
   if (styleAttr) {
     if (styleAttr.value && styleAttr.value.type === 'JSXExpressionContainer' && styleAttr.value.expression.type === 'ObjectExpression') {
       const existingProperties = styleAttr.value.expression.properties as any[];
-      const mergedProperties = [...existingProperties];
+      const display = existingProperties.find(p => keyOf(p) === 'display');
+      if (styles.display === 'none' && display && display.value.value !== 'none') {
+        throw new Error('UNSUPPORTED_OPERATION: This element sets its own display, which inline hiding would lose. Use Tailwind format, or hide it in source.');
+      }
+      const mergedProperties = existingProperties.filter(p => !unset.has(keyOf(p)));
+      if (!mergedProperties.length && !newProperties.length) {
+        openingEl.attributes.splice(openingEl.attributes.indexOf(styleAttr), 1);
+        return;
+      }
       newProperties.forEach(newProp => {
         const keyName = t.isIdentifier(newProp.key) ? newProp.key.name : (newProp.key as t.StringLiteral).value;
         const idx = mergedProperties.findIndex(p => p.type === 'ObjectProperty' &&
@@ -704,7 +738,7 @@ function mutateStyle(node: t.JSXElement, styles: Record<string, string>, scope?:
     } else {
       styleAttr.value = t.jsxExpressionContainer(t.objectExpression(newProperties));
     }
-  } else {
+  } else if (newProperties.length) {
     openingEl.attributes.push(
       t.jsxAttribute(
         t.jsxIdentifier('style'),
