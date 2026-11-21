@@ -7,7 +7,7 @@ import { parse as recastParse, print as recastPrint } from 'recast';
 import * as babelParser from 'recast/parsers/babel.js';
 import getBabelOptions from 'recast/parsers/_babel_options.js';
 import { mutateStructure, structuralKinds, type StructuralChange } from './structure.js';
-import { mutateProp } from './props.js';
+import { mutateProp, setAttribute } from './props.js';
 import { layoutStyles } from './layout.js';
 import { readClassExpression, type BindingScope, type ClassPiece, type VariantOption } from './class-expression.js';
 import { spliceChanges } from './splice.js';
@@ -579,6 +579,7 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
     }
     switch (change.type) {
       case 'prop': mutateProp(ast, targets[index], change.property, change.value, change.scope); break;
+      case 'attribute': setAttribute(ast, targets[index], change.property, change.value); break;
       case 'class':
         if (!change.property) throw new Error('INVALID_OPERATION: Class edits need a property.');
         if (change.authoringRepresentation === 'inline') mutateStyle(targets[index], { [change.property]: change.value }, scope);

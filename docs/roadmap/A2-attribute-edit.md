@@ -1,6 +1,6 @@
 # A2: Attribute edit for HTML elements
 
-Status: todo · Size: M · Depends on: F0 · Branch: `feat/a2-attribute-edit`
+Status: **in review** · Size: M · Depends on: F0 · Branch: `feat/a2-attribute-edit`
 
 ## Goal
 
@@ -45,11 +45,11 @@ B1, B2 and C2 all build on this.
 
 ## Steps
 
-- [ ] Tests first, in `src/__tests__/props.test.ts`
-- [ ] `setAttribute` and the new writer case
-- [ ] Confirm `handleSourceMutation` in ws-server.ts passes the change through unchanged
-- [ ] Inspector UI
-- [ ] A note in `skills/glide/SKILL.md`
+- [x] Tests first, in `src/__tests__/props.test.ts`
+- [x] `setAttribute` and the new writer case
+- [x] Confirm `handleSourceMutation` in ws-server.ts passes the change through unchanged
+- [x] Inspector UI
+- [x] A note in `skills/glide/SKILL.md`
 
 ## Tests
 

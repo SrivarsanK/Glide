@@ -29,8 +29,8 @@ at a time. Each item has its own spec file in this folder.
 | # | ID | Feature | Size | Depends on | Status |
 |---|---|---|---|---|---|
 | 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in review**: PR #24 from `feat/f0-layout-first-insert`; `done` when merged |
-| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR from `feat/a1-layout-frames` (stacked on F0) |
-| 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | todo |
+| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR #25 (stacked on #24) |
+| 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **in review**: PR from `feat/a2-attribute-edit` (stacked on A1) |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | todo |
 | 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | todo |
 | 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | todo |
@@ -148,3 +148,7 @@ flowchart LR
   and children of an empty multi-line frame get their own lines. Confirmed hiding was refused in Tailwind
   projects before the fix. 455 tests pass; checked in the editor. The optional pasteboard attach step was
   not done.
+- 2026-11-21: A1 follow-up: Tailwind v4 sorts `inline-block` after `hidden`, so hide writes `hidden!` there
+  (checked against Tailwind 4.0.0; v3 defines `hidden` last). A2 done on `feat/a2-attribute-edit`: an
+  `attribute` change with an allowlist, script-link and duplicate-id refusals, automatic `rel` for new tabs,
+  and Add/remove controls in the props inspector. 460 tests pass. The UI was not clicked through live.

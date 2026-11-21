@@ -54,11 +54,44 @@ export function createSourceProps(options: {
         if (prop.kind === 'number' && (!input.value.trim() || !Number.isFinite(value))) return;
         options.edit(requestedSource, { type: 'prop', property: prop.name, value, scope: message.scope }, message.digest);
       });
-      label.append(input); container.append(label);
+      label.append(input);
+      if (message.scope === 'source-element' && !prop.reason && attributes.includes(prop.name)) {
+        const remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'icon-btn'; remove.textContent = '×';
+        remove.title = 'Remove ' + prop.name; remove.setAttribute('aria-label', 'Remove ' + prop.name);
+        remove.addEventListener('click', event => {
+          event.preventDefault();
+          if (options.selected() === requestedSource && requestedSource) options.edit(requestedSource, { type: 'attribute', property: prop.name, value: null }, message.digest);
+        });
+        label.append(remove);
+      }
+      container.append(label);
       // Below the row: inside it, the hint squeezes into a narrow column between the name and the input.
       if (reason) container.append(reason);
     }
     if (!message.props.length) { const note = document.createElement('p'); note.textContent = 'No literal props are authored here.'; container.append(note); }
+    if (message.scope === 'source-element' && !message.spread) container.append(addRow(message));
+  }
+  // Attributes the editor can add to an HTML element; `true` marks ones written without a value.
+  const attributes = ['href', 'target', 'id', 'type', 'title', 'alt', 'src', 'role', 'aria-label', 'popover', 'popoverTarget', 'disabled'];
+  const flags = ['popover', 'disabled'];
+  function addRow(message: any) {
+    const row = document.createElement('div'); row.className = 'props-row';
+    const name = document.createElement('select'); name.className = 'props-select'; name.setAttribute('aria-label', 'Attribute to add');
+    const present = message.props.map((prop: any) => prop.name);
+    for (const attribute of attributes.filter(item => !present.includes(item))) {
+      const option = document.createElement('option'); option.value = attribute; option.textContent = attribute; name.append(option);
+    }
+    const value = document.createElement('input'); value.className = 'props-input'; value.setAttribute('aria-label', 'Attribute value');
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'icon-btn'; add.textContent = 'Add';
+    add.addEventListener('click', () => {
+      if (options.selected() !== requestedSource || !requestedSource || !name.value) return;
+      const text = value.value.trim();
+      if (!text && !flags.includes(name.value)) { value.focus(); return; }
+      options.edit(requestedSource, { type: 'attribute', property: name.value, value: text || true }, message.digest);
+    });
+    row.append(name, value, add);
+    return row;
   }
   return { request, accept };
 }

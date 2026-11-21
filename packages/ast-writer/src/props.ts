@@ -63,7 +63,9 @@ function describe(ast: any, node: t.JSXElement) {
   }
   for (const prop of props.values()) {
     if (spread) prop.reason = 'A spread may supply or override this prop; edit it in source.';
-    if (/^(on[A-Z]|data-gl-)/.test(prop.name) || ['key', 'ref', 'id', 'style', 'className', 'dangerouslySetInnerHTML', 'children'].includes(prop.name)) {
+    // On HTML elements the attribute editor sets `id`; on components it stays a source-only identity prop.
+    if (/^(on[A-Z]|data-gl-)/.test(prop.name) || ['key', 'ref', 'style', 'className', 'dangerouslySetInnerHTML', 'children'].includes(prop.name)
+      || (prop.name === 'id' && component)) {
       prop.reason = 'Use the dedicated source control for this property.';
     }
     if (attributes.filter(a => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name: prop.name })).length > 1) prop.reason = 'Duplicate attributes are ambiguous.';
@@ -79,9 +81,58 @@ export function inspectJSXProps(source: string, line: number, column: number) {
   return describe(ast, node);
 }
 
+/** HTML attributes the editor may add, change or remove; handlers and identity attributes stay in source. */
+const ATTRIBUTES = new Set(['href', 'target', 'rel', 'id', 'type', 'title', 'alt', 'src', 'name', 'placeholder',
+  'disabled', 'popover', 'popoverTarget', 'popoverTargetAction', 'role']);
+export const isEditableAttribute = (name: string) => ATTRIBUTES.has(name) || /^aria-[a-z]+$/.test(name);
+const URL_SCHEMES: Record<string, Set<string>> = { href: new Set(['http', 'https', 'mailto', 'tel']), src: new Set(['http', 'https']) };
+
+/** Add, change (`string` or `true`) or remove (`null`) an attribute on a plain HTML element. */
+export function setAttribute(ast: any, node: t.JSXElement, name: string | undefined, value: unknown) {
+  const opening = node.openingElement;
+  if (!name || !isEditableAttribute(name)) throw new Error(`UNSUPPORTED_OPERATION: ${name} is not an attribute the editor can set. Edit it in source.`);
+  if (!t.isJSXIdentifier(opening.name) || !/^[a-z]/.test(opening.name.name)) {
+    throw new Error('UNSUPPORTED_OPERATION: Components take props they declare; set this on an HTML element, or add the prop in source.');
+  }
+  if (opening.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may supply or override this attribute; edit it in source.');
+  if (value !== null && value !== true && typeof value !== 'string') throw new Error('INVALID_PROP: An attribute value is text, true, or null to remove it.');
+  const named = (key: string) => opening.attributes.filter((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name: key }));
+  const existing = named(name);
+  if (existing.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
+  if (existing[0] && literal(existing[0].value) === undefined) throw new Error('UNSUPPORTED_OPERATION: This attribute is computed; edit it in source.');
+  if (typeof value === 'string') {
+    // Browsers ignore whitespace and control characters inside a scheme, so `java\nscript:` is still script.
+    const scheme = value.replace(/[\u0000- ]/g, '').match(/^([a-z][a-z0-9+.-]*):/i)?.[1].toLowerCase();
+    if (URL_SCHEMES[name] && scheme && !URL_SCHEMES[name].has(scheme)) throw new Error(`INVALID_PROP: ${scheme}: links are not allowed in ${name}.`);
+    if (name === 'id') {
+      if (!/^[A-Za-z][\w-]*$/.test(value)) throw new Error('INVALID_PROP: An id starts with a letter and uses letters, digits, - and _.');
+      t.traverseFast(ast, item => {
+        if (t.isJSXAttribute(item) && !existing.includes(item) && t.isJSXIdentifier(item.name, { name: 'id' }) && literal(item.value) === value) {
+          throw new Error(`INVALID_PROP: The id "${value}" is already used in this file.`);
+        }
+      });
+    }
+  }
+  const write = (key: string, next: string | true | null) => {
+    const current = named(key)[0];
+    if (next === null) { if (current) opening.attributes.splice(opening.attributes.indexOf(current), 1); return; }
+    const node = next === true ? null : t.stringLiteral(next);
+    if (current) current.value = node; else opening.attributes.push(t.jsxAttribute(t.jsxIdentifier(key), node));
+  };
+  write(name, value as string | true | null);
+  // A new tab must not get a handle on this page.
+  if (name === 'target' && value === '_blank') {
+    const rel = named('rel')[0], tokens = new Set(String(rel ? literal(rel.value) ?? '' : '').split(/\s+/).filter(Boolean));
+    if (rel && literal(rel.value) === undefined) throw new Error('UNSUPPORTED_OPERATION: rel is computed; add noopener in source.');
+    write('rel', [...new Set([...tokens, 'noopener', 'noreferrer'])].join(' '));
+  }
+}
+
 export function mutateProp(ast: any, node: t.JSXElement, property: string | undefined, value: unknown, scope?: string) {
   const info = describe(ast, node);
   if (scope !== info.scope) throw new Error('INVALID_SCOPE: Confirm the authored call site or source element scope.');
+  // HTML attributes go through the same checks whichever control edits them.
+  if (info.scope === 'source-element' && property && isEditableAttribute(property)) return setAttribute(ast, node, property, value);
   const prop = info.props.find(item => item.name === property);
   if (!prop || prop.reason) throw new Error('UNSUPPORTED_OPERATION: ' + (prop?.reason || 'Only existing literal props are editable.'));
   if (prop.kind === 'enum' ? !prop.choices?.includes(value as Scalar) : typeof value !== prop.kind) throw new Error('INVALID_PROP: The value does not match the authored type.');
