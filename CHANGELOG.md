@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] — 2026-11-21
+
+### Documentation
+- Redesigned the README and the contributing guide, with new figures for the edit loop, the write path and the package map, and a current editor screenshot. No code changes.
+
+---
+
 ## [2.0.0] — 2026-11-21
 
 ### Removed (breaking)
