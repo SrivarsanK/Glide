@@ -105,6 +105,6 @@ The figures in the README and in this guide live in [`.github/assets/docs/`](.gi
 
 `.github/workflows/publish.yml` runs when a GitHub Release is published or when the workflow is started by hand. A tag push alone does not start it. The workflow gates both registry publish jobs on `npm run verify:release`.
 
-`publish-npm` uses `NPM_TOKEN` and publishes with provenance. `publish-github` uses the repository `GITHUB_TOKEN`. CI on every pull request builds, checks the types of all workspaces, runs the source tests, checks the bundled editor, and runs the consumer and hosted browser checks.
+`publish-npm` uses `NPM_TOKEN` and publishes with provenance. `publish-github` uses the repository `GITHUB_TOKEN`; the repository `.npmrc` pins the `@srivarsank` scope to npmjs, so it passes `--@srivarsank:registry` rather than `--registry`. To finish a release whose GitHub Packages job failed, start the workflow by hand: the npm job skips a version npm already has. CI on every pull request builds, checks the types of all workspaces, runs the source tests, checks the bundled editor, and runs the consumer and hosted browser checks.
 
 The manual publishing scripts (`publish:npm`, `publish:gpr`, `publish:all` and `release`) publish the existing build output and do not check it. Run `npm run verify:release` first.
