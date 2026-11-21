@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4] — 2026-11-21
+
+### Documentation
+- Added a labelled guide to the editor's bars, panels and tools to the README. No code changes.
+
+---
+
 ## [2.0.3] — 2026-11-21
 
 ### Documentation

@@ -214,6 +214,12 @@ Glide changes the text of the edit and nothing else. Formatting, comments and qu
 
 ## Features
 
+<p align="center">
+  <img src=".github/assets/docs/editor-guide.png" alt="A labelled map of the Glide editor. Top bar: panel and history toggles, Preview and Move to canvas, Instant or Staged writes, canvas toggles for snapping, grid, rulers and branch mode, device presets and frame size, and zoom. Left: the URL and connection status, Pages, and Layers. Right: where edits go (breakpoint, state, format), authored props, align, position and layout, and appearance with the sections below it. Bottom: the selection on the canvas, the tools bar, and the status bar." width="100%">
+  <br>
+  <sub>Open the image for full size. The keyboard shortcuts are listed below the feature table.</sub>
+</p>
+
 <table>
 <tr>
 <th align="left" width="33%">On the canvas</th>
