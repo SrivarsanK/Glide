@@ -21,6 +21,8 @@ export interface StructuralChange {
   tagName?: string;
   /** Attributes a retag sets (or removes with null) before checking the new tag, in one transaction. */
   attributes?: Record<string, string | true | null>;
+  /** False when the user clicked instead of dragging, so the size is only a default. */
+  drawn?: boolean;
 }
 
 export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag']);
@@ -236,7 +238,7 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     // In the page, a frame lays out what is drawn into it, and text hugs its content
     // (a fixed height would clip it); drafts above keep a fixed box for the preview.
     const flow: Record<string, string> = change.elementType === 'frame' ? { ...styles, display: 'flex', flexDirection: 'column', gap: '16px' }
-      : text ? (change.width ? { display: 'inline-block', width: styles.width } : {}) : styles;
+      : text ? (change.width && change.drawn !== false ? { display: 'inline-block', width: styles.width } : {}) : styles;
     if (Object.keys(flow).length) applyStyles(inserted, flow);
     place(inserted);
     // Join the layout beside the child nearest the drawn point.
