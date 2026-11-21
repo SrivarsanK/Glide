@@ -207,3 +207,13 @@ test('the first child of an empty parent written over several lines gets its own
   expect(child, f.read()).toBeGreaterThan(lines.findIndex(line => line.includes('width: "300px"')));
   expect(lines.slice(child).find(line => line.trim() === '</div>')).toBe('    </div>');
 });
+
+test('text created by a click, not a drag, has no fixed width', async () => {
+  const f = fixture();
+  const result = await f.service.execute('click', [f.op('<aside', { type: 'insert', elementType: 'text', width: 120, height: 32, drawn: false })]);
+  expect(result.success, result.error).toBe(true);
+  expect(f.read()).toContain('<aside><span>New text</span></aside>');
+  const g = fixture();
+  await g.service.execute('drag', [g.op('<aside', { type: 'insert', elementType: 'text', width: 240, height: 32 })]);
+  expect(g.read()).toMatch(/width: "240px"/);
+});
