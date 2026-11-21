@@ -1,6 +1,6 @@
 # C1: MCP bridge, step 1: read tools and safe edits
 
-Status: todo · Size: L · Depends on: F0 (independent of A and B; can be pulled forward) · Branch: `feat/c1-mcp`
+Status: **in review** · Size: L · Depends on: F0 (independent of A and B; can be pulled forward) · Branch: `feat/c1-mcp`
 
 ## Goal
 
@@ -43,14 +43,23 @@ of editing files blindly. Background: `paper-re/GLIDE-BLUEPRINT.md` (Paper's des
   (a project-scoped Claude Code config) instead of editing the user's global config. Other agents
   are in C5.
 
+## As built (2026-11-21)
+
+- No `@modelcontextprotocol/sdk`: MCP's HTTP transport only needs JSON-RPC POSTs with JSON replies here
+  (`packages/server/src/mcp.ts`), so no dependency was added. Endpoint `/__glide/mcp` works standalone and attached.
+- Run file `node_modules/.cache/glide/mcp.json` holds the real listening address (Vite may listen on IPv6 only).
+- Tools: get_project_info, get_selection, get_tree, get_source, update_styles, set_text, delete_element
+  (definitions in `packages/core/src/mcp-tools.ts`, shared with the CLI).
+- `glide mcp install` writes `.mcp.json` for Claude Code (`cmd /c npx` on Windows) and refuses an invalid file.
+
 ## Steps
 
-- [ ] C1a: the `/mcp` route, token run file and security tests (extend `src/__tests__/server-security.test.ts`)
-- [ ] C1b: the source-level read tools, tested against `MutationService` fixtures
-- [ ] C1c: the editor round trip, then `get_selection` and `get_computed_styles`
-- [ ] C1d: the write tools through `MutationService.execute`, with the digest checks
-- [ ] C1e: the `glide mcp` bridge, the static tool list, and `glide mcp install --agent claude`
-- [ ] C1f: update `skills/glide/SKILL.md` to prefer these tools when they're available
+- [x] C1a: the `/mcp` route, token run file and security tests (extend `src/__tests__/server-security.test.ts`)
+- [x] C1b: the source-level read tools, tested against `MutationService` fixtures
+- [x] C1c: the editor round trip, then `get_selection` and `get_computed_styles`
+- [x] C1d: the write tools through `MutationService.execute`, with the digest checks
+- [x] C1e: the `glide mcp` bridge, the static tool list, and `glide mcp install --agent claude`
+- [x] C1f: update `skills/glide/SKILL.md` to prefer these tools when they're available
 
 ## Done when
 
