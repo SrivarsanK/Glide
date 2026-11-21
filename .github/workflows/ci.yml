@@ -38,3 +38,10 @@ jobs:
 
       - name: Verify bundled editor
         run: npm run test:artifact
+
+      # The release gate runs these too; running them here keeps a browser failure out of release day.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser acceptance checks
+        run: npm run test:consumer && npm run test:hosted

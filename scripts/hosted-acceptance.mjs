@@ -78,9 +78,15 @@ try {
   // The context menu opens at the pointer when the canvas is zoomed.
   await page.locator('#zoom-label').click();
   await page.locator('[data-canvas-zoom="0.5"]').click();
-  const target = await frame.getByRole('button', { name: 'Hosted button' }).boundingBox();
-  await page.mouse.click(target.x + 10, target.y + 10, { button: 'right' });
-  await page.locator('#glide-context-menu').waitFor({ state: 'visible' });
+  // The width save reloads the page (no HMR here) whenever the polling watcher notices it, which on
+  // Linux can be now; a right-click during the reload has no bridge to answer it, so click again.
+  let target;
+  for (let attempt = 1; ; attempt++) {
+    target = await frame.getByRole('button', { name: 'Hosted button' }).boundingBox();
+    await page.mouse.click(target.x + 10, target.y + 10, { button: 'right' });
+    try { await page.locator('#glide-context-menu').waitFor({ state: 'visible', timeout: 3000 }); break; }
+    catch (error) { if (attempt === 5) throw error; }
+  }
   const menu = await page.locator('#glide-context-menu').boundingBox();
   assert.ok(Math.abs(menu.x - target.x - 10) < 3 && Math.abs(menu.y - target.y - 10) < 3, `menu at ${menu.x},${menu.y}, pointer at ${target.x + 10},${target.y + 10}`);
   await page.keyboard.press('Escape');
