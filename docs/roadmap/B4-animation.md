@@ -1,6 +1,6 @@
 # B4: Animation: transition duration and easing
 
-Status: todo · Size: S–M · Depends on: F0 · Branch: `feat/b4-animation`
+Status: **in review** · Size: S–M · Depends on: F0 · Branch: `feat/b4-animation`
 
 ## Goal
 
@@ -13,15 +13,15 @@ spacing, colors, font size, opacity, borders, corner radius and position.
 
 ## Steps
 
-1. [ ] Add class rules in `getNewClass()` and `matchesProperty()`, with tests first:
+1. [x] Add class rules in `getNewClass()` and `matchesProperty()`, with tests first:
    - `transitionProperty`: `transition`, `transition-colors`, `transition-opacity`,
      `transition-transform`, `transition-all`, `transition-none`
    - `transitionDuration`: `duration-<n>`, or `duration-[250ms]`
    - `transitionTimingFunction`: `ease-linear`, `ease-in`, `ease-out`, `ease-in-out`, or
      `ease-[cubic-bezier(...)]`
    - `transitionDelay`: `delay-<n>`
-2. [ ] Inline format writes the same values as style properties.
-3. [ ] Add an "Animation" section in the inspector with duration and easing presets. Name the presets
+2. [x] Inline format writes the same values as style properties.
+3. [x] Add an "Animation" section in the inspector with duration and easing presets. Name the presets
    the way Figma does: Ease in, Ease out, Ease in and out, Linear, Gentle, Quick. Gentle and Quick are
    cubic-bezier approximations.
 4. [ ] Enter animations for overlays (B2) use `@starting-style`. Tailwind v4 has a `starting:`

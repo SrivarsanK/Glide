@@ -84,6 +84,11 @@ const DEFAULT_THEME = defaultTailwindTheme();
 const DISPLAY_CLASSES: Record<string, string> = { block: 'block', 'inline-block': 'inline-block', inline: 'inline',
   flex: 'flex', 'inline-flex': 'inline-flex', grid: 'grid', 'inline-grid': 'inline-grid', contents: 'contents', none: 'hidden' };
 const DISPLAY_NAMES = new Set(Object.values(DISPLAY_CLASSES));
+/** `transition-property` values that have a class; others are arbitrary. */
+const TRANSITIONS: Record<string, string> = { all: 'transition-all', none: 'transition-none', opacity: 'transition-opacity', transform: 'transition-transform' };
+const EASINGS: Record<string, string> = { linear: 'ease-linear', 'ease-in': 'ease-in', 'ease-out': 'ease-out', 'ease-in-out': 'ease-in-out' };
+// Tailwind v3's duration scale; v4 accepts any whole number of milliseconds.
+const DURATIONS = new Set([0, 75, 100, 150, 200, 300, 500, 700, 1000]);
 const SPACING_PREFIXES: Record<string, string> = {
   marginLeft: 'ml-', marginRight: 'mr-', marginTop: 'mt-', marginBottom: 'mb-', margin: 'm-',
   paddingLeft: 'pl-', paddingRight: 'pr-', paddingTop: 'pt-', paddingBottom: 'pb-', padding: 'p-',
@@ -120,6 +125,9 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'rowGap': return name.startsWith('gap-y-');
     case 'opacity': return name.startsWith('opacity-');
     case 'display': return DISPLAY_NAMES.has(name) && name !== 'hidden';
+    case 'transitionProperty': return name === 'transition' || name.startsWith('transition-');
+    case 'transitionDuration': return name.startsWith('duration-');
+    case 'transitionTimingFunction': return name.startsWith('ease-');
     // The overall radius replaces corner and side radii too.
     case 'borderRadius': return name === 'rounded' || name.startsWith('rounded-');
     case 'borderTopLeftRadius': return name.startsWith('rounded-tl');
@@ -176,6 +184,14 @@ function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAUL
   switch (property) {
     case 'display':
       return DISPLAY_CLASSES[clean] ?? '';
+    case 'transitionProperty':
+      return TRANSITIONS[clean] ?? `transition-[${arbitraryValue}]`;
+    case 'transitionTimingFunction':
+      return EASINGS[clean] ?? `ease-[${arbitraryValue}]`;
+    case 'transitionDuration': {
+      const ms = /^\d+ms$/.test(clean) ? Number(clean.slice(0, -2)) : /^\d*\.?\d+s$/.test(clean) ? Number(clean.slice(0, -1)) * 1000 : NaN;
+      return Number.isInteger(ms) && (DURATIONS.has(ms) || theme.version === 4) ? `duration-${ms}` : `duration-[${arbitraryValue}]`;
+    }
     case 'flexDirection':
       return clean === 'column' ? 'flex-col' : 'flex-row';
     case 'justifyContent':
@@ -338,6 +354,8 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
 
   // Hide and show toggle `hidden` beside the element's own display class, so showing restores it.
   const toggle = property === 'display' && (valStr === 'none' || valStr === '');
+  // Any other empty value removes the property's classes, as an emptied inline style does.
+  const unset = valStr === '' && !toggle;
   const bare = (c: string) => splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
   const replaces = (c: string) => inScope(c)
     && (toggle ? bare(c) === 'hidden' : matchesProperty(c, property, theme));
@@ -346,8 +364,8 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   // Tailwind v4 orders display classes alphabetically, so `inline-block` would beat a plain `hidden`.
   const outranked = theme.version === 4 && classes.some(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) > 'hidden');
   const newClass = toggle ? (valStr === 'none' ? (outranked ? 'hidden!' : 'hidden') : '')
-    : getNewClass(property, finalValue, theme, existingTokens);
-  if (!newClass && !toggle) return null;
+    : unset ? '' : getNewClass(property, finalValue, theme, existingTokens);
+  if (!newClass && !toggle && !unset) return null;
 
   const related = overlappingProperties(property);
   const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
@@ -436,7 +454,8 @@ function mutateClassExpression(expression: t.Expression, property: string, value
   const target = holders.at(0)
     ?? always.find(piece => piece.canAdd && !piece.shared)
     ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
-  if (!target && !prepend) {
+  // A removal (empty value) adds nothing, so it needs no class string to add to.
+  if (!target && !prepend && plan.added) {
     const lockedBy = always.find(piece => piece.lockedBy)?.lockedBy;
     throw new Error(t.isIdentifier(expression, { name: 'className' })
       ? 'UNSUPPORTED_OPERATION: The classes are passed in through `className`. Edit them where the component is used.'
@@ -447,11 +466,11 @@ function mutateClassExpression(expression: t.Expression, property: string, value
           : `UNSUPPORTED_OPERATION: The classes come from \`${generate(expression).code}\`, which Glide cannot edit.`);
   }
   // A prepended class comes before every other class, so one that sets part of the property would override it.
-  const later = !target && always.flatMap(piece => piece.tokens)
+  const later = !!plan.added && !target && always.flatMap(piece => piece.tokens)
     .find(token => !token.partial && plan.overlaps(token.name) && !plan.replaces(token.name));
   if (later) throw new Error(`UNSUPPORTED_OPERATION: The ${label} is also set by \`${later.name}\`, which would override the new class.`);
-  for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
-  if (!target) prepend!(plan.added);
+  for (const piece of always) piece.rewrite(c => !plan.replaces(c), piece === target && plan.added ? plan.added : undefined);
+  if (!target && plan.added) prepend!(plan.added);
 }
 
 /**
@@ -481,14 +500,14 @@ function mutateVariant(pieces: ClassPiece[], property: string, value: any, break
   }
   const target = own.find(piece => piece.tokens.some(token => !token.partial && plan.replaces(token.name)))
     ?? own.find(piece => piece.canAdd);
-  if (!target) throw new Error(`UNSUPPORTED_OPERATION: The \`${variant.group}\` variant has no class string to add to.`);
-  for (const piece of own) piece.rewrite(c => !plan.replaces(c), piece === target ? plan.added : undefined);
+  if (!target && plan.added) throw new Error(`UNSUPPORTED_OPERATION: The \`${variant.group}\` variant has no class string to add to.`);
+  for (const piece of own) piece.rewrite(c => !plan.replaces(c), piece === target && plan.added ? plan.added : undefined);
 }
 
 /** With `scope`, className may be a cn/clsx/template/cva expression; without it, only a string. */
 function mutateClass(node: t.JSXElement, property: string, value: any, breakpoint?: string, pseudoState?: string,
   theme: TailwindTheme = DEFAULT_THEME, scope?: BindingScope, variant?: VariantOption): string {
-  const showing = property === 'display' && String(value).trim() === '';
+  const showing = String(value).trim() === '';
   if (property !== 'className' && !showing && !getNewClass(property, value, theme)) {
     throw new Error(`UNSUPPORTED_OPERATION: No Tailwind authoring rule for ${property}.`);
   }
