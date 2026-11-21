@@ -52,7 +52,9 @@ made; an edit to the base padding must not remove `md:p-8`. Keep arbitrary value
 source. If you turn `class="p-4"` into a computed value, the user can no longer edit that element
 on the canvas. Use a dynamic class only where the behavior needs it. The same goes for attributes:
 the editor adds and edits `href`, `target`, `id`, `type`, `alt`, `src`, `popover` and `aria-*` on
-HTML elements only while they are plain string literals.
+HTML elements only while they are plain string literals. Interactions made in the editor are plain
+links (`<a href="/page">`, `href="https://…"` with `target="_blank"`, or `href="#id"` to scroll), and
+the Interactions panel reads them back from that markup, so keep them as literal links.
 
 **Leave the pasteboard alone.** A block like
 `{false && <div data-gl-workspace-id="..." data-gl-workspace-x="..." ...>}` is an element the user

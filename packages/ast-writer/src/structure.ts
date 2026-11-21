@@ -1,5 +1,6 @@
 import * as t from '@babel/types';
 import traverseModule from '@babel/traverse';
+import { setAttribute } from './props.js';
 
 export interface StructuralChange {
   type: string;
@@ -18,6 +19,8 @@ export interface StructuralChange {
   detached?: boolean;
   workspaceId?: string;
   tagName?: string;
+  /** Attributes a retag sets (or removes with null) before checking the new tag, in one transaction. */
+  attributes?: Record<string, string | true | null>;
   /** False when the user clicked instead of dragging, so the size is only a default. */
   drawn?: boolean;
 }
@@ -158,6 +161,8 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     const from = tagOf(target), to = change.tagName || '';
     if (!from || !/^[a-z]/.test(from)) throw new Error('UNSUPPORTED_OPERATION: Only HTML elements can change their tag; a component decides what it renders.');
     if (!RETAG_TARGETS.has(to)) throw new Error(`UNSUPPORTED_OPERATION: <${to}> is not a tag the editor can switch to.`);
+    // An interaction (B1) changes the tag and its attributes together, so the attributes go first.
+    for (const [name, value] of Object.entries(change.attributes || {})) setAttribute(ast, target, name, value);
     if (from === to) return;
     // HTML validity checks that the source alone can decide.
     const ancestors: string[] = [];
