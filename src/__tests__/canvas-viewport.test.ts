@@ -76,6 +76,7 @@ function canvasHarness() {
     let expandedNodeIds = new Set();
     const snapObjectEnabled = true, snapPixelEnabled = true;
     function renderLayersTree() {}
+    function pageRendered() {}
     ${functions}
     function receive(data) {
       ${messageBranch('glide:document-height')}

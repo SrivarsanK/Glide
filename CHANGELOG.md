@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] — planned as 2.0.0
+## [2.0.0] — 2026-11-21
 
 ### Removed (breaking)
 
@@ -84,6 +84,10 @@ Found with real React, Vue, Svelte, Astro and HTML test apps:
 - The error for an unsupported file type is now "Glide cannot save edits to this file type yet."
 - The skills shipped to AI agents (`skills/`) are rewritten to match the code. They no longer describe the LWW queue or `glide-positions.json`.
 - Unit tests now run only from `src/__tests__`, so nested git worktrees are not picked up.
+- **Undo steps back one typed word**, not one keystroke.
+- With the **Auto** style format, color edits write Tailwind classes, unless the element already sets that color inline.
+- Undo or redo with nothing left says "Nothing to undo/redo" instead of an `INVALID_HISTORY` error (error code `NOTHING_TO_UNDO`/`NOTHING_TO_REDO`).
+- The build is about 6 times faster (62s to 11s): packages compile in parallel and typings are bundled with `rollup-plugin-dts`. `npm run typecheck` now also compiles the published typings. The page bridge is a real source file (`bridge.ts`) instead of a template string.
 
 ### Fixed
 - The editor socket was refused when the dev server ran over HTTPS (`server.https`).
@@ -95,6 +99,14 @@ Found with real React, Vue, Svelte, Astro and HTML test apps:
 - Proxy bridge injection expanded `$&` and `$'` patterns in the injected script.
 - A class put in front of the list could be overridden by a base class; Glide now refuses that edit.
 - Workspace (pasteboard) mutations did not send the file digest.
+- Quick edits on several elements kept only the last one; quick edits before the page re-rendered a save went to old positions.
+- Shift-click multi-select collapsed back to one element, so Group usually did nothing.
+- A typed trailing space stuck to the text of every later edit.
+- In Vue and Svelte, every edit failed after the file was saved outside Glide, or after undo/redo, until the page was reloaded.
+- Svelte lost the selection when a save remounted the component.
+- On Windows, a save could fail with `EPERM` while another process had the file open; the replace is now retried briefly.
+- Regular expressions in the editor and bridge lost their backslashes: the color popup opened at black, rotation showed 0, gradients were not read back, a port-only URL was not expanded, and layer names lost the letter "s".
+- The authored-props hint was squeezed between the property name and its input.
 - An unclosed `.modal-input` CSS rule stopped later editor styles from applying.
 
 ### Removed

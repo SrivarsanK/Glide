@@ -9,6 +9,8 @@ interface TransportOptions {
   id(): string;
   error(message: string): void;
   rejected?(transactionId: string): void;
+  /** Files whose digest the server no longer matches: they changed outside this editor. */
+  stale?(files: string[]): void;
   mapping: Mapping;
 }
 
@@ -73,6 +75,8 @@ export function createMutationTransport(options: TransportOptions) {
     const completed = active;
     active = null;
     if (!message.success) {
+      const files = [...new Set<string>((completed.message.edits || []).map((edit: any) => edit.file))];
+      if (String(message.error || '').startsWith('STALE_DIGEST') && files.length) options.stale?.(files);
       if (queue.length) options.error('Queued live changes were cancelled after a source conflict. Select the element again.');
       cancelQueue();
       return;

@@ -1,5 +1,5 @@
 import { parse } from '@vue/compiler-sfc';
-import { mergeInlineStyle } from '@srivarsank/core';
+import { formattingWhitespace, mergeInlineStyle } from '@srivarsank/core';
 
 // compiler-sfc 3.5 template AST locations refer to the complete authored SFC.
 function target(code: string, id: string): any {
@@ -51,8 +51,9 @@ export function updateVueSFCText(code: string, id: string, text: string): string
   const literals = node.children.filter((child: any) => child.type === 2 && child.content.trim());
   if (literals.length !== 1) throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment.');
   const child = literals[0], raw = child.loc.source;
-  return replace(code, child.loc.start.offset, child.loc.end.offset,
-    (raw.match(/^\s*/)?.[0] || '') + escape(text) + (raw.match(/\s*$/)?.[0] || ''));
+  const index = node.children.indexOf(child);
+  const [lead, trail] = formattingWhitespace(raw, { before: index > 0, after: index < node.children.length - 1 });
+  return replace(code, child.loc.start.offset, child.loc.end.offset, lead + escape(text) + trail);
 }
 
 /** The static class of the node at `id`, or null when no such node exists. */

@@ -1,5 +1,8 @@
 import { build } from 'esbuild';
-import { execSync } from 'child_process';
+import { rollup } from 'rollup';
+import { dts } from 'rollup-plugin-dts';
+import { spawn } from 'child_process';
+import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -54,18 +57,28 @@ const __dirname = __dirnameFunc(__filename);
 // ── Pre-build all internal packages (dependency order) ───────────────────────
 // esbuild bundles @srivarsank/* from packages/*/dist/
 // Those dist/ dirs must exist before esbuild runs, so compile all packages with tsc first.
+// A level only imports packages from earlier levels (checked against the source imports,
+// which list more than the package.json files do), so each level compiles in parallel.
 
-const internalPackages = [
-  'core',
-  'ast-writer',
-  'adapters/vue',
-  'adapters/svelte',
-  'adapters/astro',
-  'overlay',
-  'server',
-  'babel-plugin',
-  'vite-plugin',
+const buildLevels = [
+  ['core', 'babel-plugin'],
+  ['ast-writer', 'adapters/vue', 'adapters/svelte', 'adapters/astro', 'overlay'],
+  ['server'],
+  ['vite-plugin'],
 ];
+const internalPackages = buildLevels.flat();
+
+const require = createRequire(import.meta.url);
+const tscBin = require.resolve('typescript/bin/tsc');
+
+// Runs a Node CLI directly: npx adds about a second to every call on Windows.
+function runNode(bin, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], { cwd, stdio: 'inherit', windowsHide: true });
+    child.on('error', reject);
+    child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${path.basename(bin)} ${args.join(' ')} exited with ${code}`)));
+  });
+}
 
 // ── Resolve @srivarsank/* from this checkout ─────────────────────────────────
 // Through node_modules, a git worktree (which has none of its own) would reach the
@@ -105,16 +118,18 @@ function workspaceTsconfig(projectDir) {
 }
 
 async function runBuild() {
-  for (const pkg of internalPackages) {
-    const pkgDir = path.join(projectRoot, 'packages', pkg);
-    if (!fs.existsSync(path.join(pkgDir, 'tsconfig.json'))) {
-      console.log(`Skipping ${pkg} (no tsconfig.json)`);
-      continue;
-    }
-    console.log(`Building packages/${pkg} with tsc...`);
-    // tsc does not remove output for deleted source files.
-    fs.rmSync(path.join(pkgDir, 'dist'), { recursive: true, force: true });
-    execSync(`npx tsc -p "${workspaceTsconfig(pkgDir)}"`, { cwd: pkgDir, stdio: 'inherit' });
+  for (const level of buildLevels) {
+    await Promise.all(level.map(pkg => {
+      const pkgDir = path.join(projectRoot, 'packages', pkg);
+      if (!fs.existsSync(path.join(pkgDir, 'tsconfig.json'))) {
+        console.log(`Skipping ${pkg} (no tsconfig.json)`);
+        return;
+      }
+      console.log(`Building packages/${pkg} with tsc...`);
+      // tsc does not remove output for deleted source files.
+      fs.rmSync(path.join(pkgDir, 'dist'), { recursive: true, force: true });
+      return runNode(tscBin, ['-p', workspaceTsconfig(pkgDir)], pkgDir);
+    }));
   }
 
   console.log('Bundling ESM Javascript files with esbuild...');
@@ -189,12 +204,22 @@ async function runBuild() {
     plugins: [workspaceGuardPlugin],
   });
 
-  console.log('Bundling typings with dts-bundle-generator...');
-  
-  execSync(`npx dts-bundle-generator -o dist/index.d.ts src/index.ts --project "${workspaceTsconfig(projectRoot)}"`, { stdio: 'inherit' });
-  execSync(`npx dts-bundle-generator -o dist/cli.d.ts packages/cli/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/cli'))}"`, { stdio: 'inherit' });
-  execSync(`npx dts-bundle-generator -o dist/vite-plugin.d.ts packages/vite-plugin/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/vite-plugin'))}"`, { stdio: 'inherit' });
-  execSync(`npx dts-bundle-generator -o dist/babel-plugin.d.ts packages/babel-plugin/src/index.ts --project "${workspaceTsconfig(path.join(projectRoot, 'packages/babel-plugin'))}"`, { stdio: 'inherit' });
+  // dts-bundle-generator spent ~15s walking @babel/types, which no public type uses. npm run typecheck
+  // compiles these bundles, as dts-bundle-generator's own output check did.
+  console.log('Bundling typings with rollup-plugin-dts...');
+  // Glide's own packages are inlined; libraries and Node built-ins stay imports.
+  const external = id => !id.startsWith('.') && !path.isAbsolute(id) && !workspacePackages.has(id);
+  await Promise.all([
+    ['dist/index.d.ts', 'src/index.ts', projectRoot],
+    ['dist/cli.d.ts', 'packages/cli/src/index.ts', path.join(projectRoot, 'packages/cli')],
+    ['dist/vite-plugin.d.ts', 'packages/vite-plugin/src/index.ts', path.join(projectRoot, 'packages/vite-plugin')],
+    ['dist/babel-plugin.d.ts', 'packages/babel-plugin/src/index.ts', path.join(projectRoot, 'packages/babel-plugin')],
+  ].map(async ([out, entry, project]) => {
+    const bundle = await rollup({ input: path.join(projectRoot, entry), external,
+      plugins: [dts({ tsconfig: workspaceTsconfig(project), respectExternal: true })] });
+    await bundle.write({ file: path.join(projectRoot, out), format: 'es' });
+    await bundle.close();
+  }));
 
   // 5. Package skills and synchronize to .agents/skills/
   console.log('Packaging AI agent skills...');

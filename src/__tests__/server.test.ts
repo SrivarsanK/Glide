@@ -106,10 +106,21 @@ test('only one concurrent writer can commit from the same base revision', async 
   expect(results.find(item => !item.success).error).toContain('STALE_DIGEST');
 });
 
+test('undo steps back one typed word at a time, not one keystroke', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  for (const value of ['T', 'Ty', 'Typed', 'Typed ', 'Typed h', 'Typed heading']) {
+    expect((await request(client, f.edit({ type: 'text', value }))).success).toBe(true);
+  }
+  expect((await request(client, { type: 'undo', transactionId: 'undo-word' })).success).toBe(true);
+  expect(f.read()).toContain('<button>Typed </button>');
+  expect((await request(client, { type: 'undo', transactionId: 'undo-first-word' })).success).toBe(true);
+  expect(f.read()).toContain('<button>A</button>');
+});
+
 test('history errors acknowledge their transaction so the browser can resume editing', async () => {
   const f = await startTestProject(), client = await f.connect();
   const result = await request(client, { type: 'undo', transactionId: 'empty-history' });
-  expect(result).toMatchObject({ transactionId: 'empty-history', success: false, error: expect.stringContaining('INVALID_HISTORY') });
+  expect(result).toMatchObject({ transactionId: 'empty-history', success: false, error: 'NOTHING_TO_UNDO: Nothing to undo.' });
   expect((await request(client, f.edit({ type: 'text', value: 'After error' }))).success).toBe(true);
 });
 

@@ -3,6 +3,7 @@ import packageInfo from '../../../package.json' with { type: 'json' };
 const VERSION = packageInfo.version;
 
 export { promptOrInstallSkills, installSkills, detectAIEnvironments, getSkillsSourceDir } from './installer.js';
+export type { AIEnvironmentInfo, InstallOptions, InstallResult } from './installer.js';
 
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {

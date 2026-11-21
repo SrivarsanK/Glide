@@ -11,6 +11,8 @@ export { inspectJSXProps } from './props.js';
 export { forwardsClassName, activeVariants } from './edit-scope.js';
 export type { ActiveVariant } from './edit-scope.js';
 export type { JSXMutation } from './writer.js';
+export type { StructuralChange } from './structure.js';
+export type { VariantOption } from './class-expression.js';
 export { parseJSXElements } from './reorder.js';
 export type { JSXElementRecord } from './reorder.js';
 

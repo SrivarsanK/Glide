@@ -3,7 +3,7 @@
  * exactly at line:column; its attributes are scanned with quotes and `{}`
  * expressions respected. Anything dynamic or ambiguous is refused, not guessed.
  */
-import { mergeInlineStyle } from '@srivarsank/core';
+import { formattingWhitespace, mergeInlineStyle } from '@srivarsank/core';
 
 interface Attribute { name: string; start: number; end: number; value: string | null; dynamic: boolean }
 interface Tag { name: string; start: number; end: number; selfClosing: boolean; attributes: Attribute[]; spread: boolean }
@@ -147,5 +147,6 @@ export function setAstroTextAt(code: string, line: number, column: number, text:
     throw new Error('UNSUPPORTED_OPERATION: Select an element that holds only literal text.');
   }
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/{/g, '&#123;').replace(/}/g, '&#125;');
-  return checked(code, code.slice(0, tag.end) + (raw.match(/^\s*/)?.[0] || '') + escaped + (raw.match(/\s*$/)?.[0] || '') + code.slice(close));
+  const [lead, trail] = formattingWhitespace(raw);
+  return checked(code, code.slice(0, tag.end) + lead + escaped + trail + code.slice(close));
 }

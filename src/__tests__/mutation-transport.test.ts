@@ -35,6 +35,15 @@ test('does not commit queued changes after a rejected revision', () => {
   expect(f.errors[0]).toContain('cancelled');
   expect(f.rejected).toEqual(['tx-2']);
 });
+test('names the files of a stale-digest rejection so the editor can reload them', () => {
+  const stale: string[][] = [];
+  const transport = createMutationTransport({ send: () => {}, digest: () => 'before', currentFile: () => 'App.tsx', id: () => 'tx-1',
+    error: () => {}, stale: files => stale.push(files), mapping: createSourceMapping() });
+  transport.connected();
+  transport.send(JSON.stringify({ type: 'edit', file: 'src/App.vue', line: 1, column: 5, change: { type: 'text', value: 'New' } }));
+  transport.accept({ type: 'status', transactionId: 'tx-1', success: false, error: 'STALE_DIGEST: File changed before operation tx-1:0.' });
+  expect(stale).toEqual([['src/App.vue']]);
+});
 test('normalizes structural controls and preserves paste destination', () => {
   const f = fixture();
   f.transport.send(JSON.stringify({ type: 'reparent', file: 'App.tsx', sourceId: 'App.tsx:2:4', newParentId: 'App.tsx:1:1' }));

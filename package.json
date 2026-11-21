@@ -101,9 +101,10 @@
     "@types/node": "^20.11.28",
     "@types/react": "^19.2.17",
     "@types/ws": "^8.5.10",
-    "dts-bundle-generator": "^9.5.1",
     "esbuild": "^0.25.0",
     "playwright": "1.62.1",
+    "rollup": "^4.68.7",
+    "rollup-plugin-dts": "^6.5.1",
     "typescript": "^5.4.2",
     "vitest": "^3.0.0"
   },

@@ -3,7 +3,7 @@
  * of their opening tag in the parsed template, never by a text search.
  */
 import { parse } from 'svelte/compiler';
-import { mergeInlineStyle } from '@srivarsank/core';
+import { formattingWhitespace, mergeInlineStyle } from '@srivarsank/core';
 
 function elements(code: string): any[] {
   let root: any;
@@ -98,6 +98,7 @@ export function setSvelteTextAt(code: string, line: number, column: number, text
   const literals = node.fragment.nodes.filter((child: any) => child.type === 'Text' && child.data.trim());
   if (literals.length !== 1) throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment.');
   const raw = code.slice(literals[0].start, literals[0].end);
-  return replace(code, literals[0].start, literals[0].end,
-    (raw.match(/^\s*/)?.[0] || '') + escape(text) + (raw.match(/\s*$/)?.[0] || ''));
+  const nodes = node.fragment.nodes, index = nodes.indexOf(literals[0]);
+  const [lead, trail] = formattingWhitespace(raw, { before: index > 0, after: index < nodes.length - 1 });
+  return replace(code, literals[0].start, literals[0].end, lead + escape(text) + trail);
 }

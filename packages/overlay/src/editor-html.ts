@@ -2408,6 +2408,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   updateStagingBarUI();
                 }
               },
+              // The files changed outside the editor: reload their digests so the next edit can save.
+              stale: files => {
+                files.forEach(file => socket.send(JSON.stringify({ type: 'get-tree', file })));
+                showToast('info', 'The file changed outside Glide. Glide reloaded it; make the edit again.');
+              },
               mapping: sourceMapping
             });
             socket.send = data => {
@@ -2453,7 +2458,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   return;
                 }
                 const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
-                if (message.file && message.digest) fileDigests.set(message.file.replaceAll('\\\\', '/'), message.digest);
+                if (message.file && message.digest) setFileDigest(message.file, message.digest);
                 if (message.type === 'tree' && message.file) {
                   sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
                   if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
@@ -2573,10 +2578,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       if (currentFile && socket && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({ type: 'get-tree', file: currentFile }));
                       }
-                    } else {
+                    } else if (message.error && /^NOTHING_TO_(UNDO|REDO):/.test(message.error)) {
+                      showToast('info', message.error.replace(/^[A-Z_]+: /, ''));
+                    } else if (!(message.action === 'batch-edit' && message.error && message.error.startsWith('STALE_DIGEST'))) {
+                      // An edit's stale digest is explained by the transport, which reloads the file.
                       showToast('error', message.error || 'Server error');
                     }
                   }
+                  // Page messages held behind this confirmation run now, in the order the page sent them.
+                  releasePageMessages();
                 } else if (message.type === 'target-port') {
                   if (message.success) {
                     proxyTargetPort = message.port;
@@ -3030,6 +3040,39 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               ? first.toLowerCase() === second.toLowerCase() : first === second;
           }
 
+          // Remaps of saves the page has not re-rendered yet: until it does, its stamps hold the coordinates before them.
+          let pendingStampRemaps = [];
+          function trackStaleStamps(remaps) {
+            const fileOf = id => (parseSource(id) || {}).file;
+            const at = (file, point) => file + ':' + point.line + ':' + point.column;
+            const saved = new Set(remaps.map(item => fileOf(item.oldSourceId)));
+            const carried = new Set();
+            const composed = pendingStampRemaps.flatMap(item => {
+              const file = fileOf(item.oldSourceId);
+              if (!saved.has(file)) return [item];
+              // The page still shows the older coordinates: carry them through this save too.
+              const id = at(file, item.newCoordinates);
+              carried.add(id);
+              const next = remaps.find(remap => remap.oldSourceId === id);
+              return next ? [{ ...item, newHash: next.newHash, newCoordinates: next.newCoordinates }] : [];
+            });
+            // Only a stamp that moved needs translating. An unmoved one is right as it is, and the page never
+            // re-renders it, so keeping it would attach a hash that a later outside edit can make stale.
+            const moved = item => { const old = parseSource(item.oldSourceId); return !!old && at(old.file, old) !== at(old.file, item.newCoordinates); };
+            pendingStampRemaps = composed.concat(remaps.filter(item => !carried.has(item.oldSourceId))).filter(moved);
+          }
+          /** The page re-rendered, so its stamps are current again. */
+          function pageRendered() {
+            pendingStampRemaps = [];
+          }
+
+          /** Stores a file's digest under this spelling and every alias of it: stamps may use any of them. */
+          function setFileDigest(file, digest) {
+            const key = normalizePathSlash(file);
+            fileDigests.set(key, digest);
+            sourceFileAliases.forEach((target, alias) => { if (sameSourceFile(alias, key)) fileDigests.set(alias, digest); });
+          }
+
           function parseSource(source) {
             return sourceMapping.parse(source, currentFile);
           }
@@ -3037,7 +3080,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function applyTransactionMappings(message) {
             if (!message.success) return;
             (message.changedFiles || []).forEach(file => {
-              fileDigests.set(normalizePathSlash(file.path), file.newDigest);
+              setFileDigest(file.path, file.newDigest);
             });
             const remaps = message.selectionRemaps || [];
             const deleted = new Set(message.deletedSourceIds || []);
@@ -3054,10 +3097,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (glideClipboard && isDeleted(glideClipboard.source)) glideClipboard = null;
             if (!remaps.length) return;
+            trackStaleStamps(remaps);
             const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
             if (selectedElement) selectedElement = { ...selectedElement, source: remap(selectedElement.source) };
             if (glideClipboard && glideClipboard.source) glideClipboard.source = remap(glideClipboard.source);
+            // Edits still waiting to be sent were aimed at the coordinates before this save.
+            _styleTimers.forEach(entry => { entry.target = remap(entry.target); });
+            _pendingEdits.forEach(item => { item.source = remap(item.source); });
             // Digest aliases use the path spelling carried by the source stamp.
             remaps.forEach(item => {
               const target = parseSource(item.oldSourceId);
@@ -4728,11 +4775,78 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             get isEmpty() { return this._index.size === 0; }
           };
 
-          window.addEventListener('message', (event) => {
+          /** Applies a selection the page reports; a refresh re-reports an element already selected and is not a click. */
+          function acceptSelection(data) {
+            const isShift = data.isShift;
+            // A page that has not re-rendered a save yet reports the coordinates from before it.
+            const source = pendingStampRemaps.length ? sourceMapping.remap(data.source, pendingStampRemaps, currentFile) : data.source;
+            const rect = data.rect;
+
+            if (source) {
+              const parsed = parseSource(source);
+              if (parsed && parsed.file && !parsed.cstSelector) {
+                currentFile = parsed.file;
+              }
+            }
+
+            const refreshed = data.refresh ? selectedSources.findIndex(item => isSourceMatch(item, source)) : -1;
+            if (refreshed !== -1) {
+              // The element moved or re-rendered: keep a shift-click multi-selection.
+              selectedRects[refreshed] = rect;
+            } else if (!isShift) {
+              selectedSources = [source];
+              selectedRects = [rect];
+            } else {
+              if (!isSourceSelected(source, selectedSources)) {
+                selectedSources.push(source);
+                selectedRects.push(rect);
+              }
+            }
+
+            selectedElement = { source: source, owners: data.owners || [] };
+            selectedRect = rect;
+            selectedComputedStyles = data.computedStyles;
+            populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
+
+            // Highlight selected items in layers tree
+            document.querySelectorAll('.layer-item').forEach(item => {
+              if (isSourceSelected(item.dataset.source, selectedSources)) {
+                item.classList.add('active');
+              } else {
+                item.classList.remove('active');
+              }
+            });
+          }
+
+          // A save can reach the page before its confirmation reaches the editor. When the page reports a
+          // re-render while a save is in flight, its messages wait for that confirmation and then run in order,
+          // so a stamp it already moved is not remapped a second time.
+          const heldPageMessages = [];
+          let holdingPage = false;
+          function holdPageMessage(event) {
+            const data = event.data || {};
+            if (!holdingPage && data.type === 'glide:dom-tree' && data.rendered && sourceTransport && sourceTransport.pending() > 0) {
+              holdingPage = true;
+              setTimeout(releasePageMessages, 2000); // a lost confirmation must not freeze the selection
+            }
+            if (!holdingPage || !['glide:dom-tree', 'glide:overlay', 'glide:element-selected', 'glide:element-deselected',
+              'glide:clear-selection'].includes(data.type)) return false;
+            heldPageMessages.push(event);
+            return true;
+          }
+          function releasePageMessages() {
+            if (!holdingPage) return;
+            holdingPage = false;
+            heldPageMessages.splice(0).forEach(event => onPageMessage(event));
+          }
+
+          window.addEventListener('message', onPageMessage);
+          function onPageMessage(event) {
             const frame = document.getElementById('app-iframe');
             if (!(${trustedWindowMessage.toString()})(event, frame?.contentWindow, frame?.src, window.location.href)) return;
             const data = event.data;
             if (!data || !data.type) return;
+            if (holdPageMessage(event)) return;
 
             if (data.type === 'glide:query-result') {
               const waiter = frameQueryWaiters.get(data.id);
@@ -4850,6 +4964,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // ── DOM tree from proxy bridge (CST mode, no AST needed) ──
             if (data.type === 'glide:dom-tree') {
+              if (data.rendered) pageRendered();
               const loadingEl = document.getElementById('canvas-loading');
               if (loadingEl) loadingEl.style.display = 'none';
 
@@ -4896,40 +5011,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   }
                 });
               } else {
-                const isShift = data.isShift;
-                const source = data.source;
-                const rect = data.rect;
-
-                if (source) {
-                  const parsed = parseSource(source);
-                  if (parsed && parsed.file && !parsed.cstSelector) {
-                    currentFile = parsed.file;
-                  }
-                }
-
-                if (!isShift) {
-                  selectedSources = [source];
-                  selectedRects = [rect];
-                } else {
-                  if (!isSourceSelected(source, selectedSources)) {
-                    selectedSources.push(source);
-                    selectedRects.push(rect);
-                  }
-                }
-
-                selectedElement = { source: source, owners: data.owners || [] };
-                selectedRect = rect;
-                selectedComputedStyles = data.computedStyles;
-                populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
-
-                // Highlight selected items in layers tree
-                document.querySelectorAll('.layer-item').forEach(item => {
-                  if (isSourceSelected(item.dataset.source, selectedSources)) {
-                    item.classList.add('active');
-                  } else {
-                    item.classList.remove('active');
-                  }
-                });
+                acceptSelection(data);
               }
               drawOverlay();
             }
@@ -5109,7 +5191,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (data.type === 'glide:element-selected-by-id') {
               selectedElement = { source: data.source };
             }
-          });
+          }
 
           let lastRequestedTreeFile = null;
 
@@ -5770,7 +5852,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // plugin config. Direct localhost URLs are rewritten to the proxy
             // path; relative proxy paths are used as-is.
             // If user enters pure numeric port e.g. "4321", expand to http://localhost:4321
-            if (/^\d+$/.test(url)) {
+            if (/^\\d+$/.test(url)) {
               url = 'http://localhost:' + url;
             }
 
@@ -5964,9 +6046,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
 
             // Rotation
-            const transform = styles.transform || '';
-            const rotMatch = transform.match(/rotate\(([\d.-]+)deg\)/);
-            setVal('prop-rotation', rotMatch ? parseFloat(rotMatch[1]) : 0);
+            setVal('prop-rotation', rotationFromTransform(styles.transform || ''));
 
             // Flex section
             const isFlexContainer = styles.display === 'flex' || styles.display === 'inline-flex';
@@ -6023,13 +6103,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               } else {
                 gradType = 'linear';
                 setActiveBtn(['grad-linear', 'grad-radial'], 'grad-linear');
-                const angleMatch = bgImg.match(/(\d+)deg/);
+                const angleMatch = bgImg.match(/(\\d+)deg/);
                 const angleEl = document.getElementById('prop-grad-angle');
                 if (angleMatch && angleEl) {
                   angleEl.value = angleMatch[1];
                 }
               }
-              const colors = bgImg.match(/(#[0-9a-fA-F]{3,8}|rgba?\(.*?\))/g);
+              const colors = bgImg.match(/(#[0-9a-fA-F]{3,8}|rgba?\\(.*?\\))/g);
               if (colors && colors.length >= 2) {
                 const startHex = rgbToHex(colors[0]);
                 const endHex = rgbToHex(colors[1]);
@@ -6450,6 +6530,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // blocks Chrome's event loop and crashes the browser.
           let _cpTarget = null;
 
+          /** Degrees of a transform; getComputedStyle reports a rotation as matrix(cos, sin, …). */
+          function rotationFromTransform(transform) {
+            const rotate = transform.match(/rotate\\((-?[\\d.]+)deg\\)/);
+            if (rotate) return parseFloat(rotate[1]);
+            const matrix = transform.match(/matrix\\(([^,]+),\\s*([^,]+)/);
+            return matrix ? Math.round(Math.atan2(parseFloat(matrix[2]), parseFloat(matrix[1])) * 180 / Math.PI) : 0;
+          }
+
           function cssColorToHex(color) {
             if (!color || color === 'transparent' || color === 'initial') return '#000000';
             color = color.trim();
@@ -6457,7 +6545,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (color.length === 4) return '#'+color[1]+color[1]+color[2]+color[2]+color[3]+color[3];
               return color.substring(0, 7);
             }
-            const m = color.match(/\d+(\.\d+)?/g);
+            const m = color.match(/\\d+(\\.\\d+)?/g);
             if (m && m.length >= 3) {
               return '#' + [m[0],m[1],m[2]].map(n => Math.round(parseFloat(n)).toString(16).padStart(2,'0')).join('');
             }
@@ -6920,29 +7008,41 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
           }
 
-          let _styleTimer = null;
+          // Pending style saves by target and scope: a quick edit on another element must not cancel this one.
+          const _styleTimers = new Map();
           function sendStylePropsChange(source, styles) {
-            const scoped = scopedEdit(source, mutationScope.capture({ type: 'style', value: styles }));
+            let captured = mutationScope.capture({ type: 'style', value: styles });
+            // Auto writes Tailwind classes. A color the element already sets inline stays inline, or the class would lose to it.
+            const inline = (selectedComputedStyles && selectedComputedStyles.inlineStyle) || '';
+            const inlineColor = { color: /(^|;)\\s*color\\s*:/i, backgroundColor: /(^|;)\\s*background(-color)?\\s*:/i,
+              borderColor: /(^|;)\\s*border(-color)?\\s*:/i };
+            if (!captured.authoringRepresentation && Object.keys(styles).every(key => inlineColor[key] && !inlineColor[key].test(inline))) {
+              captured = { ...captured, type: 'multi-class' };
+            }
+            const scoped = scopedEdit(source, captured);
             if (!scoped) return;
-            const change = scoped.change;
+            let change = scoped.change;
             if (stagingModeActive) { stageEdit(scoped.source, change); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
             applyOptimisticStyle(source, styles);
 
-            if (_styleTimer) clearTimeout(_styleTimer);
-            const capturedSource = scoped.source;
-            const capturedStyles = styles;
-            _styleTimer = setTimeout(() => {
-              _styleTimer = null;
+            const { value, ...scope } = change;
+            const key = scoped.source + ' ' + JSON.stringify(scope);
+            const pending = _styleTimers.get(key);
+            // Same element and scope: merge, so a quick second property keeps the first.
+            if (pending) { clearTimeout(pending.timer); change = { ...change, value: { ...pending.change.value, ...value } }; }
+            // A save that lands while this waits moves entry.target (applyTransactionMappings).
+            const entry = { target: pending ? pending.target : scoped.source, change };
+            entry.timer = setTimeout(() => {
+              _styleTimers.delete(key);
               if (!socket || socket.readyState !== WebSocket.OPEN) return;
-              const parsed = parseSource(capturedSource);
+              const parsed = parseSource(entry.target);
               if (!parsed) return;
-              const targetFile = parsed.file || currentFile;
               socket.send(JSON.stringify({
                 type: 'edit',
-                file: targetFile,
+                file: parsed.file || currentFile,
                 line: parsed.line,
                 column: parsed.column,
                 hash: parsed.hash,
@@ -6951,6 +7051,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 change
               }));
             }, 150);
+            _styleTimers.set(key, entry);
           }
 
           function sendMultiClassChange(source, styles) {
