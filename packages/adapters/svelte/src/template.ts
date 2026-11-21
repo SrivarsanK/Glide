@@ -73,6 +73,55 @@ function setAttribute(code: string, line: number, column: number, name: string, 
   return replace(code, offset, offset, ' ' + text);
 }
 
+/** The element at line:column with what a retag checks: its ancestors (nearest first), children and descendants. */
+export function readSvelteTagAt(code: string, line: number, column: number) {
+  const node = target(code, line, column);
+  if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
+  const all = elements(code);
+  const inside = all.filter(item => item.start > node.start && item.end <= node.end);
+  return { name: node.name as string,
+    ancestors: all.filter(item => item.start < node.start && item.end >= node.end).reverse().map(item => item.name as string),
+    childTags: inside.filter(item => !inside.some(other => other.start < item.start && other.end >= item.end)).map(item => item.name as string),
+    descendants: inside.map(item => ({ tag: item.name as string,
+      focusable: item.attributes.some((attribute: any) => attribute.type === 'Attribute' && attribute.name.toLowerCase() === 'tabindex') })) };
+}
+
+/** Rename the element at line:column, opening and closing tag together. */
+export function renameSvelteTagAt(code: string, line: number, column: number, to: string): string {
+  const node = target(code, line, column);
+  if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
+  const selfClosing = code.slice(node.end - 2, node.end) === '/>', closing = `</${node.name}>`;
+  if (!selfClosing && !code.slice(node.start, node.end).endsWith(closing)) throw new Error(`UNSUPPORTED_OPERATION: <${node.name}> has no closing tag Glide can find; change it in source.`);
+  let next = code;
+  if (!selfClosing) next = next.slice(0, node.end - closing.length + 2) + to + next.slice(node.end - 1);
+  return replace(code, 0, code.length, next.slice(0, node.start + 1) + to + next.slice(node.start + 1 + node.name.length));
+}
+
+/** A static attribute's value (true when it has none) or null when it is absent; throws when it is dynamic. */
+export function readSvelteAttributeAt(code: string, line: number, column: number, name: string): string | true | null {
+  const node = target(code, line, column);
+  if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
+  const current = staticAttribute(node, name);
+  return current ? (current.attribute.value === true ? true : current.value) : null;
+}
+
+/** Add, change (text, or true for a bare attribute) or remove (null) a static attribute. */
+export function setSvelteAttributeAt(code: string, line: number, column: number, name: string, value: string | true | null): string {
+  if (typeof value === 'string') return setAttribute(code, line, column, name, () => value);
+  const node = target(code, line, column);
+  if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
+  const current = staticAttribute(node, name);
+  if (value === true) {
+    if (current) return replace(code, current.attribute.start, current.attribute.end, name);
+    const offset = node.start + 1 + node.name.length;
+    return replace(code, offset, offset, ' ' + name);
+  }
+  if (!current) return code;
+  let start = current.attribute.start;
+  while (start > 0 && /\s/.test(code[start - 1])) start--;
+  return replace(code, start, current.attribute.end, '');
+}
+
 /** Every template element in document order, with the one-based position of its opening tag. */
 export function listSvelteElements(code: string): { line: number; column: number }[] {
   return elements(code).map(node => position(code, node.start));

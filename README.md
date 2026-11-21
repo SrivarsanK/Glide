@@ -183,7 +183,7 @@ Edits you make in your code editor go around the same loop, from your files thro
 
 ### What Glide can save
 
-| File type | Class, inline style, text, drag and resize | Structural edits (insert, delete, move, group) |
+| File type | Class, inline style, text, attributes (links, popovers), drag and resize | Structural edits (insert, delete, move, group, change tag) |
 |---|:---:|:---:|
 | JSX / TSX | Yes | Yes |
 | Vue, Svelte, Astro | Yes | No |

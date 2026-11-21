@@ -73,7 +73,7 @@ nothing is written. This is the safety working. Tell the user to select the elem
 
 ## What Glide can save
 
-| File type | Class, inline style, text, drag and resize | Insert, delete, move, group |
+| File type | Class, inline style, text, attributes, change tag, drag and resize | Insert, delete, move, group |
 |:---|:---|:---|
 | JSX / TSX | Yes | Yes |
 | Vue, Svelte, Astro | Yes | No |
