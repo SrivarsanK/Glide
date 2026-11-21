@@ -20,6 +20,13 @@ You do not drive the canvas. You edit source files, and Glide watches the projec
 canvas. So your job in a Glide project is to (1) find the right element fast, (2) edit it in a way
 that Glide and the user can keep working with, and (3) explain Glide's behavior when the user asks.
 
+## Use Glide's tools when you have them
+
+If your tool list has Glide's MCP tools (`get_selection`, `get_source`, `update_styles`, …), use them: `get_selection`
+tells you what the user is pointing at on the canvas, and the edit tools write through Glide, so the change keeps the
+project's style format and joins the user's undo history. Set them up with `npx @srivarsank/glide mcp install`
+(Claude Code) or run `npx -y @srivarsank/glide mcp` as a stdio server. For anything they don't cover, edit the files.
+
 ## Find the element
 
 Do not guess file paths. If `glide-components.json` is in the project root, it lists every

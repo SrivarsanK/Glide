@@ -36,8 +36,8 @@ at a time. Each item has its own spec file in this folder.
 | 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR #29 (stacked on #28) |
 | 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **in review**: PR #30 (stacked on #29) |
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR #31 (stacked on #30) |
-| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR from `feat/b5-routes` (stacked on B4) |
-| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | todo |
+| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR #32 (stacked on #31) |
+| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR from `feat/c1-mcp` (stacked on B5) |
 | 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | todo |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | todo |
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | todo |
@@ -182,3 +182,9 @@ flowchart LR
   SvelteKit and Astro; a `list-routes` server message; the Pages panel lists routes and navigates the preview;
   Go to page suggests them. Checked in the editor with a temporary Next.js layout. 484 tests pass. Not done:
   refreshing the list when route files are added, and a visited-URL list for apps without file routes.
+- 2026-11-21: Addressed CodeRabbit's review of A2 (#26: character references in links, duplicate rel, typed prop
+  values, fuller attribute controls) and merged it up the stack. C1 done on `feat/c1-mcp` without the MCP SDK:
+  a JSON-RPC endpoint at `/__glide/mcp` (bearer token from a 0600 run file, browsers refused), seven tools
+  (project info, selection, tree, source, update_styles, set_text, delete_element), `glide mcp` stdio bridge
+  (lists tools while Glide is stopped) and `glide mcp install` for Claude Code. Checked end to end: the CLI read
+  the editor's selection and changed the heading's color through Glide. 492 tests pass.

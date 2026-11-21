@@ -2515,6 +2515,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   return;
                 }
                 if (message.type === 'routes') { renderRoutes(message.routes || []); return; }
+                if (message.type === 'agent-query') {
+                  // An agent asks over MCP what the user is pointing at.
+                  const keys = ['display', 'flexDirection', 'gap', 'width', 'height', 'padding', 'margin', 'color', 'backgroundColor',
+                    'fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'borderRadius', 'opacity'];
+                  const styles = {};
+                  for (const key of keys) if (selectedComputedStyles && selectedComputedStyles[key] != null) styles[key] = selectedComputedStyles[key];
+                  const sources = selectedSources.length ? selectedSources : selectedElement ? [selectedElement.source] : [];
+                  socket.send(JSON.stringify({ type: 'agent-query-result', id: message.id, result: message.query === 'selection' ? {
+                    page: document.getElementById('app-url').value,
+                    selected: sources,
+                    primary: selectedElement ? { source: selectedElement.source,
+                      tag: (document.getElementById('selected-tag').textContent || '').replace(/[<>]/g, '') || null, styles } : null,
+                  } : null }));
+                  return;
+                }
                 const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
                 if (message.file && message.digest) setFileDigest(message.file, message.digest);
                 if (message.type === 'tree' && message.file) {
