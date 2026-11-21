@@ -3,10 +3,17 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img alt="npm version" src="https://img.shields.io/npm/v/@srivarsank/glide?style=flat-square&label=npm&labelColor=0b0e14&color=38bdf8"></a>
-  <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/SrivarsanK/Glide/ci.yml?branch=main&style=flat-square&label=ci&labelColor=0b0e14&color=8b95a7"></a>
-  <img alt="Node.js 20 or later" src="https://img.shields.io/badge/node-%E2%89%A5%2020-8b95a7?style=flat-square&labelColor=0b0e14">
-  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache%202.0-8b95a7?style=flat-square&labelColor=0b0e14"></a>
+  <a href="https://www.npmjs.com/package/@srivarsank/glide"><img alt="npm version" src="https://img.shields.io/npm/v/@srivarsank/glide?style=for-the-badge&label=npm&logo=npm&logoColor=eef1f5&labelColor=161b26&color=7dd3fc"></a>
+  <a href="https://github.com/SrivarsanK/Glide/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SrivarsanK/Glide?style=for-the-badge&label=stars&logo=github&logoColor=eef1f5&labelColor=161b26&color=273042"></a>
+  <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/SrivarsanK/Glide/ci.yml?branch=main&style=for-the-badge&label=ci&logo=githubactions&logoColor=eef1f5&labelColor=161b26&color=273042"></a>
+  <img alt="Node.js 20 or later" src="https://img.shields.io/badge/node-%E2%89%A5%2020-273042?style=for-the-badge&logo=nodedotjs&logoColor=eef1f5&labelColor=161b26">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache%202.0-273042?style=for-the-badge&labelColor=161b26"></a>
+  <br>
+  <a href="#quick-start"><img alt="Supports React" src="https://img.shields.io/badge/React-161b26?style=for-the-badge&logo=react&logoColor=eef1f5"></a>
+  <a href="#quick-start"><img alt="Supports Vue" src="https://img.shields.io/badge/Vue-161b26?style=for-the-badge&logo=vuedotjs&logoColor=eef1f5"></a>
+  <a href="#quick-start"><img alt="Supports Svelte" src="https://img.shields.io/badge/Svelte-161b26?style=for-the-badge&logo=svelte&logoColor=eef1f5"></a>
+  <a href="#quick-start"><img alt="Supports Astro" src="https://img.shields.io/badge/Astro-161b26?style=for-the-badge&logo=astro&logoColor=eef1f5"></a>
+  <a href="#quick-start"><img alt="Supports plain HTML" src="https://img.shields.io/badge/HTML-161b26?style=for-the-badge&logo=html5&logoColor=eef1f5"></a>
 </p>
 
 <p align="center">

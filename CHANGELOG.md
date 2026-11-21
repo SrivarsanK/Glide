@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.3] — 2026-11-21
+
+### Documentation
+- Redesigned the README badges and added badges for GitHub stars and the supported languages (React, Vue, Svelte, Astro and HTML). No code changes.
+
+### Fixed
+- Releases publish to GitHub Packages again. The repository `.npmrc` had sent that job to npmjs since v1.1.0.
+
+---
+
 ## [2.0.2] — 2026-11-21
 
 ### Documentation
