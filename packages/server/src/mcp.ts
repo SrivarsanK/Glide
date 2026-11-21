@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
-import { buildComponentTree, detectProjectMeta, listRoutes, loadTailwindTheme, MCP_TOOLS, MCP_INSTRUCTIONS, MCP_PROTOCOLS } from '@srivarsank/core';
+import { buildComponentTree, detectProjectMeta, listRoutes, loadTailwindTheme, MCP_TOOLS, MCP_INSTRUCTIONS, MCP_PROTOCOLS, MCP_GUIDE } from '@srivarsank/core';
 import type { ComponentTreeNode } from '@srivarsank/core';
 import { contentDigest, type MutationService } from './mutation-service.js';
 import type { ProjectPaths } from './project-paths.js';
@@ -111,12 +111,21 @@ async function callTool(name: string, args: any, ctx: McpContext): Promise<unkno
       const text = element ? code.slice(element.start!, element.end!) : code.split('\n').slice(ref.line - 1, ref.line + 19).join('\n');
       return { source: `${relative(full)}:${ref.line}:${ref.column}`, digest: contentDigest(code), code: text };
     }
-    case 'update_styles': case 'set_text': case 'delete_element': {
+    case 'get_guide': return MCP_GUIDE;
+    case 'update_styles': case 'set_text': case 'delete_element': case 'set_attribute': case 'retag':
+    case 'duplicate_element': case 'move_element': case 'extract_component': {
       const ref = parseReference(args.source);
       const { full, code } = read(ref.file);
       const theme = loadTailwindTheme(root);
+      const reference = (value: unknown) => { const at = parseReference(value); return `${relative(read(at.file).full)}:${at.line}:${at.column}`; };
       const change = name === 'set_text' ? { type: 'text', value: String(args.text ?? '') }
         : name === 'delete_element' ? { type: 'delete' }
+        : name === 'set_attribute' ? { type: 'attribute', property: args.name, value: args.value }
+        : name === 'retag' ? { type: 'retag', tagName: args.tag, attributes: args.attributes && typeof args.attributes === 'object' ? args.attributes : undefined }
+        : name === 'duplicate_element' ? { type: 'duplicate' }
+        : name === 'extract_component' ? { type: 'extract', name: args.name }
+        : name === 'move_element' ? { type: 'reparent', parentId: reference(args.parent), siblingId: args.sibling ? reference(args.sibling) : undefined,
+          position: args.position }
         : { type: 'multi-class', value: args.styles ?? {}, breakpoint: args.breakpoint || undefined, pseudoState: args.state || undefined,
           // The project's own format: Tailwind classes when it has a Tailwind theme, inline styles otherwise.
           authoringRepresentation: theme.version !== null ? 'tailwind' : 'inline' };

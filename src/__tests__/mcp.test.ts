@@ -90,3 +90,25 @@ test('without a running Glide, `glide mcp` still lists the tools', () => {
     .toMatchObject({ result: { isError: true } });
   expect(offlineMcpReply({ jsonrpc: '2.0', method: 'notifications/initialized' }, '2.0.4', '/p')).toBeNull();
 });
+
+test('agents can set attributes, retag into links, duplicate, move, extract and read the guide', async () => {
+  const { ctx, read } = project('const App = () => (\n  <main>\n    <section>\n      <div>Go</div>\n    </section>\n    <aside />\n  </main>\n);\n');
+  expect((await call(ctx, 'set_attribute', { source: 'App.tsx:4:7', name: 'title', value: 'Start' })).error).toBe(false);
+  expect(read()).toContain('<div title="Start">Go</div>');
+  expect((await call(ctx, 'set_attribute', { source: 'App.tsx:4:7', name: 'href', value: 'javascript:alert(1)' })).text).toMatch(/INVALID_PROP/);
+  const link = await call(ctx, 'retag', { source: 'App.tsx:4:7', tag: 'a', attributes: { href: '/pricing' } });
+  expect(link.error, link.text).toBe(false);
+  expect(read()).toContain('<a title="Start" href="/pricing">Go</a>');
+  expect((await call(ctx, 'duplicate_element', { source: 'App.tsx:4:7' })).error).toBe(false);
+  expect(read().match(/>Go<\/a>/g)).toHaveLength(2);
+  const tree = await call(ctx, 'get_tree', { file: 'App.tsx' });
+  const aside = tree.data.elements[0].children.find((node: any) => node.name === 'aside');
+  const moved = await call(ctx, 'move_element', { source: 'App.tsx:4:7', parent: aside.source });
+  expect(moved.error, moved.text).toBe(false);
+  expect(read()).toMatch(/<aside>\s*<a /);
+  const after = await call(ctx, 'get_tree', { file: 'App.tsx' });
+  const section = after.data.elements[0].children.find((node: any) => node.name === 'section');
+  expect((await call(ctx, 'extract_component', { source: section.source, name: 'Hero' })).error).toBe(false);
+  expect(read()).toContain('function Hero()');
+  expect((await call(ctx, 'get_guide')).text).toMatch(/literal/);
+});
