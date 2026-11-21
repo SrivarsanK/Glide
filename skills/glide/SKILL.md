@@ -50,7 +50,9 @@ made; an edit to the base padding must not remove `md:p-8`. Keep arbitrary value
 
 **Keep static things static.** Glide can only save an edit when it can point at one literal in the
 source. If you turn `class="p-4"` into a computed value, the user can no longer edit that element
-on the canvas. Use a dynamic class only where the behavior needs it.
+on the canvas. Use a dynamic class only where the behavior needs it. The same goes for attributes:
+the editor adds and edits `href`, `target`, `id`, `type`, `alt`, `src`, `popover` and `aria-*` on
+HTML elements only while they are plain string literals.
 
 **Leave the pasteboard alone.** A block like
 `{false && <div data-gl-workspace-id="..." data-gl-workspace-x="..." ...>}` is an element the user

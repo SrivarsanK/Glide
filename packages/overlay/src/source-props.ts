@@ -54,11 +54,48 @@ export function createSourceProps(options: {
         if (prop.kind === 'number' && (!input.value.trim() || !Number.isFinite(value))) return;
         options.edit(requestedSource, { type: 'prop', property: prop.name, value, scope: message.scope }, message.digest);
       });
-      label.append(input); container.append(label);
+      label.append(input);
+      if (message.scope === 'source-element' && !prop.reason && editable(prop.name)) {
+        const remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'icon-btn'; remove.textContent = '×';
+        remove.title = 'Remove ' + prop.name; remove.setAttribute('aria-label', 'Remove ' + prop.name);
+        remove.addEventListener('click', event => {
+          event.preventDefault();
+          if (options.selected() === requestedSource && requestedSource) options.edit(requestedSource, { type: 'attribute', property: prop.name, value: null }, message.digest);
+        });
+        label.append(remove);
+      }
+      container.append(label);
       // Below the row: inside it, the hint squeezes into a narrow column between the name and the input.
       if (reason) container.append(reason);
     }
     if (!message.props.length) { const note = document.createElement('p'); note.textContent = 'No literal props are authored here.'; container.append(note); }
+    if (message.scope === 'source-element' && !message.spread) container.append(addRow(message));
+  }
+  // Attributes the editor can add to an HTML element (the writer checks every name and value again).
+  const attributes = ['href', 'target', 'rel', 'id', 'type', 'title', 'alt', 'src', 'name', 'placeholder', 'role', 'disabled',
+    'popover', 'popoverTarget', 'popoverTargetAction', 'aria-label', 'aria-describedby', 'aria-hidden', 'aria-expanded', 'aria-current'];
+  const editable = (name: string) => attributes.includes(name) || /^aria-[a-z]+$/.test(name);
+  function addRow(message: any) {
+    const row = document.createElement('div'); row.className = 'props-row';
+    const name = document.createElement('input'); name.className = 'props-input'; name.setAttribute('aria-label', 'Attribute to add');
+    name.placeholder = 'attribute';
+    const suggestions = document.createElement('datalist'); suggestions.id = 'glide-attribute-names-' + requestId;
+    const present = message.props.map((prop: any) => prop.name);
+    for (const attribute of attributes.filter(item => !present.includes(item))) suggestions.append(new Option(attribute, attribute));
+    name.setAttribute('list', suggestions.id);
+    const value = document.createElement('input'); value.className = 'props-input'; value.setAttribute('aria-label', 'Attribute value');
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'icon-btn'; add.textContent = 'Add';
+    add.addEventListener('click', () => {
+      const key = name.value.trim();
+      if (options.selected() !== requestedSource || !requestedSource || !editable(key)) { name.focus(); return; }
+      // `disabled` is written without a value; React drops a valueless `popover`, so it gets "auto"; others may be empty (alt="").
+      const text = value.value.trim();
+      const next = text || (key === 'disabled' ? true : key === 'popover' ? 'auto' : '');
+      options.edit(requestedSource, { type: 'attribute', property: key, value: next }, message.digest);
+    });
+    row.append(name, suggestions, value, add);
+    return row;
   }
   return { request, accept };
 }
