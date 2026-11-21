@@ -124,7 +124,7 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'gap': return name.startsWith('gap-') && !name.startsWith('gap-y') && !name.startsWith('gap-x');
     case 'rowGap': return name.startsWith('gap-y-');
     case 'opacity': return name.startsWith('opacity-');
-    case 'display': return DISPLAY_NAMES.has(name) && name !== 'hidden';
+    case 'display': { const shown = name.replace(/^!|!$/g, ''); return DISPLAY_NAMES.has(shown) && shown !== 'hidden'; }
     case 'transitionProperty': return name === 'transition' || name.startsWith('transition-');
     case 'transitionDuration': return name.startsWith('duration-');
     case 'transitionTimingFunction': return name.startsWith('ease-');
@@ -361,21 +361,29 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
     && (toggle ? bare(c) === 'hidden' : matchesProperty(c, property, theme));
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
   const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
-  // Tailwind v4 orders display classes alphabetically, so `inline-block` would beat a plain `hidden`.
-  const outranked = theme.version === 4 && classes.some(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) > 'hidden');
-  const newClass = toggle ? (valStr === 'none' ? (outranked ? 'hidden!' : 'hidden') : '')
+  // The hiding class must beat the display class: an important one wins over a plain one, and
+  // Tailwind v4 orders same-property classes alphabetically, so `inline-block` beats a plain `hidden`.
+  const important = (c: string) => /^!|!$/.test(splitClassVariants(c).pop()!);
+  const hiding = (displays: string[]) => displays.some(c => important(c) || (theme.version === 4 && bare(c) > 'hidden'))
+    ? (theme.version === 4 ? 'hidden!' : '!hidden') : 'hidden';
+  const displays = classes.filter(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) !== 'hidden');
+  const newClass = toggle ? (valStr === 'none' ? hiding(displays) : '')
     : unset ? '' : getNewClass(property, finalValue, theme, existingTokens);
   if (!newClass && !toggle && !unset) return null;
+  // A display edit on a hidden element keeps it hidden: the hiding class is upgraded if the new display would win.
+  const hidden = classes.filter(c => inScope(c) && bare(c) === 'hidden');
+  const upgrade = property === 'display' && !toggle && !unset && hidden.length > 0 && hidden.every(c => !important(c)) && hiding([newClass]) !== 'hidden';
 
   const related = overlappingProperties(property);
   const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
     || (p === 'fontSize' ? 'text-' : []));
   const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(splitClassVariants(c).pop()!.replace(/^-/, ''));
   return {
-    added: newClass ? [...variants, newClass].join(':') : '',
-    replaces,
-    overlaps: c => inScope(c)
-      && (related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
+    added: newClass ? [...variants, newClass].join(':') + (upgrade ? ' ' + [...variants, hiding([newClass])].join(':') : '') : '',
+    replaces: c => replaces(c) || (upgrade && hidden.includes(c)),
+    // Showing cannot undo a `hidden` that a condition adds, so that case is refused.
+    overlaps: c => inScope(c) && ((toggle && valStr === '' && bare(c) === 'hidden')
+      || related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
     overlapsPartial: start => {
       const name = splitClassVariants(start).pop()!.replace(/^-/, '');
       return inScope(start) && (relatedPrefixes.some(p => name.startsWith(p)) || alsoSets(start));
