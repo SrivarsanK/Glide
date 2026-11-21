@@ -49,3 +49,21 @@ test('in Tailwind v4, hiding an inline-block element uses `hidden!`, because v4 
   expect(run(hidden, '')).toContain('className="inline-block p-2"');
   expect(run(app('className="flex p-2"'), 'none')).toContain('className="flex p-2 hidden"');
 });
+
+test('important display classes are matched, and hiding them uses an important hidden', () => {
+  const v4 = { ...defaultTailwindTheme(), version: 4 as const };
+  const v3 = { ...defaultTailwindTheme(), version: 3 as const };
+  const at = (source: string) => { const before = source.slice(0, source.indexOf('<section')).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const run = (source: string, value: string, theme: any) => transformJSXBatch(source, [{ ...at(source), change: display(value) } as any], { theme }).code;
+  expect(run(app('className="flex! p-2"'), 'block', v4)).toContain('className="p-2 block"');
+  expect(run(app('className="flex! p-2"'), 'none', v4)).toContain('className="flex! p-2 hidden!"');
+  expect(run(app('className="!flex p-2"'), 'none', v3)).toContain('className="!flex p-2 !hidden"');
+  // A later display edit keeps a hidden element hidden.
+  expect(run(app('className="flex p-2 hidden"'), 'inline-block', v4)).toContain('className="p-2 inline-block hidden!"');
+  expect(run(app('className="flex p-2 hidden"'), 'grid', v4)).toContain('className="p-2 hidden grid"');
+});
+
+test('showing is refused when a condition adds `hidden`, because the edit could not undo it', () => {
+  const source = 'import { clsx } from "clsx";\nconst App = ({ concealed }) => <main><section className={clsx("p-2", concealed && "hidden")}>A</section></main>;';
+  expect(() => edit(source, '<section', display(''))).toThrow(/UNSUPPORTED_OPERATION/);
+});
