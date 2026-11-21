@@ -85,3 +85,9 @@ test('an overlay button is written as a non-submitting button in one change', ()
     interactions.plan({ action: 'close-overlay', value: '' }, { ...info('span'), inPopover: 'menu' }));
   expect(closing.replace(/\s+/g, ' ')).toContain('<button type="button" popoverTarget="menu" popoverTargetAction="hide">Close</button>');
 });
+
+test('lists the classes an element changes to in each state', () => {
+  expect(interactions.states('px-4 bg-sky-400 hover:bg-sky-500 hover:shadow active:scale-95 md:hover:bg-red-500 focus-visible:ring'))
+    .toEqual({ hover: ['bg-sky-500', 'shadow'], active: ['scale-95'], 'focus-visible': ['ring'] });
+  expect(interactions.states('')).toEqual({ hover: [], active: [], 'focus-visible': [] });
+});
