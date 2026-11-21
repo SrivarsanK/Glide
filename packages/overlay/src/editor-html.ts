@@ -4157,11 +4157,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             let height = Math.abs(endY - drawStart.y);
 
             // Minimum dimensions threshold: if clicked without dragging, use default size
-            if (width < 10 && height < 10) {
+            const drawn = width >= 10 || height >= 10;
+            if (!drawn) {
               width = currentTool === 'text' ? 120 : 100;
               height = currentTool === 'text' ? 32 : 100;
             }
-            dispatchShapeInsert(currentTool, left, top, width, height);
+            dispatchShapeInsert(currentTool, left, top, width, height, drawn);
           }
 
           // Ask the app page a question. With the editor's origin the document is read directly;
@@ -4205,7 +4206,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             for (let tries = 0; tries < 30 && !fileDigests.has(normalizePathSlash(file)); tries++) await new Promise(resolve => setTimeout(resolve, 100));
           }
 
-          async function dispatchShapeInsert(tool, x, y, width, height) {
+          async function dispatchShapeInsert(tool, x, y, width, height, drawn = true) {
             // A new drawing may start while the page answers; keep the point where this one started.
             const origin = { x: drawStart.x, y: drawStart.y };
             const detached = !insideFrame(origin.x, origin.y);
@@ -4242,6 +4243,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   : { siblingId: resolved.siblingId, position: resolved.position }),
                 detached,
                 authoringRepresentation: mutationScope.capture({ type: 'style' }).authoringRepresentation,
+                drawn,
                 width: Math.round(width),
                 height: Math.round(height)
               }));
@@ -7965,7 +7967,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 icon.setAttribute('data-lucide', isHidden ? 'eye' : 'eye-off');
                 if (typeof lucide !== 'undefined') lucide.createIcons();
               }
-              sendStylePropsChange(selectedElement.source, { display: isHidden ? 'block' : 'none' });
+              // Showing removes the hiding, so the element keeps its own display (a flex frame stays flex).
+              sendStylePropsChange(selectedElement.source, { display: isHidden ? '' : 'none' });
             });
           }
 
