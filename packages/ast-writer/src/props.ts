@@ -101,8 +101,12 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
   if (existing.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   if (existing[0] && literal(existing[0].value) === undefined) throw new Error('UNSUPPORTED_OPERATION: This attribute is computed; edit it in source.');
   if (typeof value === 'string') {
+    // JSX decodes character references in attribute text, so `javascript&#58;` would run as `javascript:`.
+    if (URL_SCHEMES[name] && /&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(value)) {
+      throw new Error(`INVALID_PROP: Character references are not allowed in ${name}; type the character itself.`);
+    }
     // Browsers ignore whitespace and control characters inside a scheme, so `java\nscript:` is still script.
-    const scheme = value.replace(/[\u0000- ]/g, '').match(/^([a-z][a-z0-9+.-]*):/i)?.[1].toLowerCase();
+    const scheme = value.replace(/[\x00-\x20]/g, '').match(/^([a-z][a-z0-9+.-]*):/i)?.[1].toLowerCase();
     if (URL_SCHEMES[name] && scheme && !URL_SCHEMES[name].has(scheme)) throw new Error(`INVALID_PROP: ${scheme}: links are not allowed in ${name}.`);
     if (name === 'id') {
       if (!/^[A-Za-z][\w-]*$/.test(value)) throw new Error('INVALID_PROP: An id starts with a letter and uses letters, digits, - and _.');
@@ -122,6 +126,7 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
   write(name, value as string | true | null);
   // A new tab must not get a handle on this page.
   if (name === 'target' && value === '_blank') {
+    if (named('rel').length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate rel attributes are ambiguous.');
     const rel = named('rel')[0], tokens = new Set(String(rel ? literal(rel.value) ?? '' : '').split(/\s+/).filter(Boolean));
     if (rel && literal(rel.value) === undefined) throw new Error('UNSUPPORTED_OPERATION: rel is computed; add noopener in source.');
     write('rel', [...new Set([...tokens, 'noopener', 'noreferrer'])].join(' '));
@@ -132,7 +137,11 @@ export function mutateProp(ast: any, node: t.JSXElement, property: string | unde
   const info = describe(ast, node);
   if (scope !== info.scope) throw new Error('INVALID_SCOPE: Confirm the authored call site or source element scope.');
   // HTML attributes go through the same checks whichever control edits them.
-  if (info.scope === 'source-element' && property && isEditableAttribute(property)) return setAttribute(ast, node, property, value);
+  if (info.scope === 'source-element' && property && isEditableAttribute(property)) {
+    // Typed controls send booleans and numbers: `disabled={false}` means no attribute, other values become text.
+    const text = value === false ? (property === 'disabled' ? null : 'false') : typeof value === 'number' ? String(value) : value;
+    return setAttribute(ast, node, property, text);
+  }
   const prop = info.props.find(item => item.name === property);
   if (!prop || prop.reason) throw new Error('UNSUPPORTED_OPERATION: ' + (prop?.reason || 'Only existing literal props are editable.'));
   if (prop.kind === 'enum' ? !prop.choices?.includes(value as Scalar) : typeof value !== prop.kind) throw new Error('INVALID_PROP: The value does not match the authored type.');
