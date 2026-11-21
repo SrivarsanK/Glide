@@ -1916,6 +1916,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   </div>
                 </div>
                 <small id="interaction-states" style="display:block;color:var(--text-secondary);"></small>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">Animate</span>
+                  <select id="interaction-duration" class="props-select" style="flex:1;" aria-label="Animation duration" title="How long changes between states take">
+                    <option value="">No animation</option><option value="150ms">150 ms</option><option value="200ms">200 ms</option><option value="300ms">300 ms</option><option value="500ms">500 ms</option>
+                  </select>
+                  <select id="interaction-easing" class="props-select" style="flex:1;" aria-label="Easing">
+                    <option value="ease-out">Ease out</option><option value="ease-in-out">Ease in and out</option><option value="ease-in">Ease in</option><option value="linear">Linear</option>
+                    <option value="cubic-bezier(0.34,1.56,0.64,1)">Gentle</option><option value="cubic-bezier(0.2,0,0,1)">Quick</option>
+                  </select>
+                </div>
               </div>
 
               <!-- Layout (Flex) — shown only when display=flex -->
@@ -7328,6 +7338,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               document.getElementById('interaction-newtab').checked = !!current.newTab;
               syncInteractionFields();
               renderStates();
+              const motion = interactions.animation(info.className || '', info.style || '');
+              const pick = (id, value) => {
+                const select = document.getElementById(id);
+                // A value written elsewhere still shows, as its own option.
+                if (value && ![...select.options].some(option => option.value === value)) select.append(new Option(value, value));
+                select.value = value;
+              };
+              pick('interaction-duration', motion.duration);
+              pick('interaction-easing', motion.easing);
+              document.getElementById('interaction-easing').disabled = !motion.duration;
               section.style.display = 'block';
             });
           }
@@ -7356,6 +7376,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             renderStates();
           }));
           document.getElementById('edit-pseudo-state').addEventListener('change', renderStates);
+          /** The transition belongs to the element's normal look, whatever state is being edited. */
+          function sendAnimation() {
+            const duration = document.getElementById('interaction-duration').value;
+            const easing = document.getElementById('interaction-easing');
+            easing.disabled = !duration;
+            sendEdit({ type: 'multi-class', breakpoint: '', pseudoState: '', value: duration
+              ? { transitionProperty: 'all', transitionDuration: duration, transitionTimingFunction: easing.value }
+              : { transitionProperty: '', transitionDuration: '', transitionTimingFunction: '' } });
+          }
+          document.getElementById('interaction-duration').addEventListener('change', sendAnimation);
+          document.getElementById('interaction-easing').addEventListener('change', sendAnimation);
           document.getElementById('interaction-action').addEventListener('change', syncInteractionFields);
           document.getElementById('interaction-show').addEventListener('click', () => {
             const id = document.getElementById('interaction-overlay').value;

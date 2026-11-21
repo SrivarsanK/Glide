@@ -64,5 +64,16 @@ export function createInteractions() {
     return found;
   }
 
-  return { read, problem, plan, states };
+  /** The element's own animation (base scope), from its classes or inline style; '' duration means none. */
+  function animation(className: string, style: string) {
+    const ease: Record<string, string> = { linear: 'linear', in: 'ease-in', out: 'ease-out', 'in-out': 'ease-in-out' };
+    const own = ' ' + className + ' ';
+    const duration = own.match(/ duration-(\d+) /)?.[1] ? own.match(/ duration-(\d+) /)![1] + 'ms'
+      : own.match(/ duration-\[([^\]]+)\] /)?.[1] ?? style.match(/transition-duration:\s*([^;]+)/)?.[1].trim() ?? '';
+    const easing = own.match(/ ease-(linear|in-out|in|out) /) ? ease[own.match(/ ease-(linear|in-out|in|out) /)![1]]
+      : own.match(/ ease-\[([^\]]+)\] /)?.[1] ?? style.match(/transition-timing-function:\s*([^;]+)/)?.[1].trim() ?? 'ease-out';
+    return { duration, easing };
+  }
+
+  return { read, problem, plan, states, animation };
 }
