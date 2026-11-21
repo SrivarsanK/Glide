@@ -32,8 +32,8 @@ at a time. Each item has its own spec file in this folder.
 | 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR #25 (stacked on #24) |
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **in review**: PR #26 (stacked on #25) |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **in review**: PR #27 (stacked on #26) |
-| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR from `feat/b1-links` (stacked on A3) |
-| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | todo |
+| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR #28 (stacked on #27) |
+| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR from `feat/b2-overlays` (stacked on B1) |
 | 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | todo |
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | todo |
 | 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | todo |
@@ -161,3 +161,9 @@ flowchart LR
   attributes, so it is a single exact edit. Scroll-to offers the page's unique ids; picking a target on the
   canvas is deferred (give the target an id with A2 first). Checked in the editor: a div became
   `<a href="#features">` and the panel read it back. 470 tests pass.
+- 2026-11-21: B2 done on `feat/b2-overlays`: Open overlay and Close overlay in the Interactions panel, each one
+  `retag` to `<button type="button">` with `popoverTarget` (and `popoverTargetAction="hide"` to close), plus a
+  Show button that opens an overlay on the canvas so it can be edited. Overlays are elements with a unique id and
+  the `popover` attribute (A2 can add both). Checked in the editor with React 19: the written button renders
+  `popovertarget`, and in Preview the trigger opened the overlay and Close hid it. 472 tests pass. Not done:
+  placement and backdrop options; React 18 rendering of `popoverTarget` not checked.

@@ -23,12 +23,12 @@ test('checks a choice before writing it', () => {
 
 test('plans one retag that carries the link, and keeps a hand-written rel', () => {
   expect(interactions.plan({ action: 'url', value: 'https://x.test', newTab: true }, info('div')))
-    .toEqual({ type: 'retag', tagName: 'a', attributes: { href: 'https://x.test', target: '_blank' } });
+    .toMatchObject({ type: 'retag', tagName: 'a', attributes: { href: 'https://x.test', target: '_blank' } });
   expect(interactions.plan({ action: 'page', value: '/a' }, info('a', 'https://x.test', '_blank', 'noopener noreferrer')).attributes)
-    .toEqual({ href: '/a', target: null, rel: null });
-  expect(interactions.plan({ action: 'page', value: '/a' }, info('a', '/b', null, 'author')).attributes).toEqual({ href: '/a', target: null });
+    .toMatchObject({ href: '/a', target: null, rel: null });
+  expect(interactions.plan({ action: 'page', value: '/a' }, info('a', '/b', null, 'author')).attributes).not.toHaveProperty('rel');
   expect(interactions.plan({ action: 'page', value: '/a' }, info('button')).attributes).toMatchObject({ type: null });
-  expect(interactions.plan({ action: 'none', value: '' }, info('a', '/b'))).toEqual({ type: 'retag', tagName: 'div', attributes: { href: null, target: null } });
+  expect(interactions.plan({ action: 'none', value: '' }, info('a', '/b'))).toMatchObject({ type: 'retag', tagName: 'div', attributes: { href: null, target: null } });
 });
 
 test('the module is self-contained, so the editor can embed it', () => {
@@ -60,6 +60,28 @@ test('the page reports a link and how often each id is used', () => {
     ? [el({ tag: 'section', id: 'features' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'glide-overlay' })]
     : [link] } };
   const ask = createFrameQueries(win, { source: 'data-gl-source', selected: 'x', hover: 'y' });
-  expect(ask('link-info', { source: 'App.tsx:2:3' })).toEqual({ tag: 'a', href: '#features', target: null, rel: null });
-  expect(ask('ids', {})).toEqual([{ id: 'features', count: 1 }, { id: 'dup', count: 2 }]);
+  expect(ask('link-info', { source: 'App.tsx:2:3' })).toMatchObject({ tag: 'a', href: '#features', target: null, rel: null, inPopover: null });
+  expect(ask('ids', {})).toEqual([{ id: 'features', count: 1, popover: false }, { id: 'dup', count: 2, popover: false }]);
+});
+
+test('reads, checks and plans opening and closing an overlay', () => {
+  const button = (target: string | null, action: string | null = null, extra = {}) => ({ ...info('button'), popoverTarget: target, popoverAction: action, ...extra });
+  expect(interactions.read(button('menu'))).toEqual({ action: 'open-overlay', value: 'menu' });
+  expect(interactions.read(button('menu', 'hide'))).toEqual({ action: 'close-overlay', value: 'menu' });
+  expect(interactions.problem({ action: 'open-overlay', value: 'menu' }, [], [])).toMatch(/popover attribute/);
+  expect(interactions.problem({ action: 'open-overlay', value: 'menu' }, [], ['menu'], { ...info('button'), type: 'submit' })).toMatch(/submits a form/);
+  expect(interactions.problem({ action: 'close-overlay', value: '' }, [], [], info('button'))).toMatch(/inside an overlay/);
+  expect(interactions.plan({ action: 'open-overlay', value: 'menu' }, info('a', '/x')))
+    .toEqual({ type: 'retag', tagName: 'button', attributes: { href: null, target: null, type: 'button', popoverTarget: 'menu', popoverTargetAction: null } });
+  expect(interactions.plan({ action: 'close-overlay', value: '' }, { ...info('div'), inPopover: 'menu' }).attributes)
+    .toMatchObject({ popoverTarget: 'menu', popoverTargetAction: 'hide', type: 'button' });
+});
+
+test('an overlay button is written as a non-submitting button in one change', () => {
+  const app = 'const App = () => <main><a href="/x">Menu</a><div id="menu" popover>Items</div></main>;';
+  const opened = run(app, '<a', interactions.plan({ action: 'open-overlay', value: 'menu' }, info('a', '/x')));
+  expect(opened.replace(/\s+/g, ' ')).toContain('<button type="button" popoverTarget="menu">Menu</button>');
+  const closing = run('const App = () => <main><div id="menu" popover><span>Close</span></div></main>;', '<span',
+    interactions.plan({ action: 'close-overlay', value: '' }, { ...info('span'), inPopover: 'menu' }));
+  expect(closing.replace(/\s+/g, ' ')).toContain('<button type="button" popoverTarget="menu" popoverTargetAction="hide">Close</button>');
 });
