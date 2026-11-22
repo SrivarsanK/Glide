@@ -293,12 +293,22 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     try { node = parseExpression(String(markup ?? ''), { plugins: ['jsx', 'typescript'] }); } catch { /* reported below */ }
     if (!t.isJSXElement(node)) throw new Error('INVALID_OPERATION: markup is one JSX element, like <section className="p-8"><h2>Pricing</h2></section>.');
     const ids = new Set<string>();
-    t.traverseFast(ast, item => { if (t.isJSXAttribute(item) && t.isJSXIdentifier(item.name, { name: 'id' }) && t.isStringLiteral(item.value)) ids.add(item.value.value); });
+    // Ids written as id="x" or id={"x"}; anything computed is left alone, not evaluated.
+    t.traverseFast(ast, item => {
+      if (!t.isJSXAttribute(item) || !t.isJSXIdentifier(item.name, { name: 'id' })) return;
+      const value = t.isJSXExpressionContainer(item.value) ? item.value.expression : item.value;
+      if (t.isStringLiteral(value)) ids.add(value.value);
+    });
     const staticStyle = (value: t.Node | null | undefined) => t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
       && value.expression.properties.every(item => t.isObjectProperty(item) && !item.computed && (t.isIdentifier(item.key) || t.isStringLiteral(item.key))
         && (t.isStringLiteral(item.value) || t.isNumericLiteral(item.value)));
     t.traverseFast(node, item => {
       if (t.isJSXSpreadAttribute(item) || t.isJSXSpreadChild(item)) throw new Error('UNSUPPORTED_OPERATION: Markup is static; spreads stay in source.');
+      // React throws on children of an empty element.
+      if (t.isJSXElement(item) && t.isJSXIdentifier(item.openingElement.name) && ['img', 'br', 'hr'].includes(item.openingElement.name.name)
+        && item.children.length) {
+        throw new Error(`INVALID_OPERATION: <${item.openingElement.name.name}> cannot have children; write it as <${item.openingElement.name.name} />.`);
+      }
       if ((t.isJSXElement(item) || t.isJSXFragment(item)) && item.children.some(child => t.isJSXExpressionContainer(child)
         && !t.isJSXEmptyExpression(child.expression) && !t.isStringLiteral(child.expression))) {
         throw new Error('UNSUPPORTED_OPERATION: Markup is static; write expressions and logic in source.');
@@ -307,6 +317,10 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
         if (!t.isJSXIdentifier(item.name) || !INSERT_TAGS.has(item.name.name)) {
           throw new Error(`UNSUPPORTED_OPERATION: <${t.isJSXIdentifier(item.name) ? item.name.name : 'this element'}> is not an element Glide inserts. Use HTML such as section, div, h2, p, a or img; add components in source.`);
         }
+        // JSX keeps a repeated attribute, and TypeScript and React reject it.
+        const names = item.attributes.flatMap(a => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) ? [a.name.name.toLowerCase()] : []);
+        const repeated = names.find((key, i) => names.indexOf(key) !== i);
+        if (repeated) throw new Error(`INVALID_OPERATION: <${item.name.name}> sets ${repeated} twice.`);
         // A new tab must not get a handle on this page.
         const named = (key: string) => item.attributes.find((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name: key }));
         const tab = named('target'), rel = named('rel');
@@ -364,6 +378,10 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
   }
   if (change.type === 'insert-markup') {
     openParent(target);
+    // A sibling elsewhere would quietly put the markup last instead of where it was asked for.
+    if (change.siblingId && !target.children.includes(resolve(change.siblingId))) {
+      throw new Error('INVALID_TARGET: The sibling must be a direct child of the element the markup goes into.');
+    }
     addChild(agentMarkup(change.markup), change.siblingId, change.position);
     return;
   }

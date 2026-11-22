@@ -29,4 +29,10 @@ test('refuses markup the canvas could not edit, or that is unsafe', () => {
   refused('<div id="top" />', /already used/);
   refused('<p>A</p><p>B</p>', /one JSX element/);
   refused('plain text', /one JSX element/);
+  // Review fixes: repeated attributes, children on empty elements, ids written in braces, a sibling elsewhere.
+  refused('<div className="a" className="b" />', /sets classname twice/);
+  refused('<img src="https://x.test/a.png" alt="A">Caption</img>', /cannot have children/);
+  expect(() => insert('<p id="hero" />', {}, page.replace('<main id="top">', '<main id={"hero"}>'))).toThrow(/already used/);
+  const nested = 'const App = () => (\n  <main>\n    <header><b>Hi</b></header>\n  </main>\n);\n';
+  expect(() => insert('<p>A</p>', { siblingId: 'line:3:col:12', position: 'before' }, nested)).toThrow(/direct child/);
 });
