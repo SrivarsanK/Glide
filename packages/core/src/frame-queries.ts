@@ -107,7 +107,8 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
-        const counts: Record<string, number> = {};
+        // No prototype, so ids like "constructor" count from zero.
+        const counts: Record<string, number> = Object.create(null);
         Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => { counts[el.id] = (counts[el.id] || 0) + 1; });
         return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id] }));
       }

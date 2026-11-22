@@ -29,6 +29,8 @@ test('plans one retag that carries the link, and keeps a hand-written rel', () =
   expect(interactions.plan({ action: 'page', value: '/a' }, info('a', '/b', null, 'author')).attributes).toEqual({ href: '/a', target: null });
   expect(interactions.plan({ action: 'page', value: '/a' }, info('button')).attributes).toMatchObject({ type: null });
   expect(interactions.plan({ action: 'none', value: '' }, info('a', '/b'))).toEqual({ type: 'retag', tagName: 'div', attributes: { href: null, target: null } });
+  // A hand-written rel stays, so the element stays an <a> (no href, so not a link).
+  expect(interactions.plan({ action: 'none', value: '' }, info('a', '/b', null, 'author'))).toMatchObject({ tagName: 'a', attributes: { href: null, target: null } });
 });
 
 test('the module is self-contained, so the editor can embed it', () => {
@@ -57,9 +59,9 @@ test('the page reports a link and how often each id is used', () => {
   const el = (attrs: Record<string, string>) => ({ localName: attrs.tag, getAttribute: (name: string) => attrs[name] ?? null, hasAttribute: (name: string) => name in attrs, id: attrs.id });
   const link = el({ tag: 'a', 'data-gl-source': 'App.tsx:2:3', href: '#features' });
   const win = { document: { querySelectorAll: (selector: string) => selector === '[id]'
-    ? [el({ tag: 'section', id: 'features' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'glide-overlay' })]
+    ? [el({ tag: 'section', id: 'features' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'dup' }), el({ tag: 'div', id: 'glide-overlay' }), el({ tag: 'div', id: 'constructor' })]
     : [link] } };
   const ask = createFrameQueries(win, { source: 'data-gl-source', selected: 'x', hover: 'y' });
   expect(ask('link-info', { source: 'App.tsx:2:3' })).toEqual({ tag: 'a', href: '#features', target: null, rel: null });
-  expect(ask('ids', {})).toEqual([{ id: 'features', count: 1 }, { id: 'dup', count: 2 }]);
+  expect(ask('ids', {})).toEqual([{ id: 'features', count: 1 }, { id: 'dup', count: 2 }, { id: 'constructor', count: 1 }]);
 });

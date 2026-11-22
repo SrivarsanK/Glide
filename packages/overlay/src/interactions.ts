@@ -27,7 +27,9 @@ export function createInteractions() {
   function plan(choice: Choice, info: Info) {
     // Only the rel this panel writes for a new tab is removed; a rel written by hand stays.
     const ownRel = info.rel === 'noopener noreferrer';
-    if (choice.action === 'none') return { type: 'retag', tagName: info.tag === 'a' ? 'div' : info.tag, attributes: { href: null, target: null, ...(ownRel ? { rel: null } : {}) } };
+    // A hand-written rel keeps the <a>; without href it is no longer a link, which read() already treats as none.
+    const keepAnchor = info.tag === 'a' && !!info.rel && !ownRel;
+    if (choice.action === 'none') return { type: 'retag', tagName: info.tag === 'a' && !keepAnchor ? 'div' : info.tag, attributes: { href: null, target: null, ...(ownRel ? { rel: null } : {}) } };
     const newTab = choice.action === 'url' && !!choice.newTab;
     const href = choice.action === 'scroll' ? '#' + choice.value.trim() : choice.value.trim();
     // A button's `type` means nothing on a link, and the retag refuses to leave it behind.

@@ -7275,6 +7275,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const interactions = (${createInteractions.toString()})();
           let interactionInfo = null;
           let interactionIds = [];
+          // The form keeps unsaved edits while the same element is refreshed (scroll, resize).
+          let interactionSource = null, interactionDirty = false;
+          const INTERACTION_FIELDS = ['interaction-action', 'interaction-value', 'interaction-scroll', 'interaction-newtab'];
+          for (const kind of ['input', 'change']) {
+            document.getElementById('section-interactions').addEventListener(kind, event => { if (INTERACTION_FIELDS.includes(event.target.id)) interactionDirty = true; });
+          }
           function syncInteractionFields() {
             const action = document.getElementById('interaction-action').value;
             document.getElementById('interaction-value-row').style.display = action === 'none' ? 'none' : '';
@@ -7288,7 +7294,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function refreshInteractions() {
             const section = document.getElementById('section-interactions');
             const source = selectedElement && parseSource(selectedElement.source) ? selectedElement.source : null;
-            if (!source) { section.style.display = 'none'; return; }
+            if (!source) { section.style.display = 'none'; interactionInfo = interactionSource = null; return; }
+            if (source === interactionSource && interactionDirty) return;
+            // Until the new element answers, Apply has nothing to plan from.
+            if (source !== interactionSource) { interactionInfo = null; section.style.display = 'none'; }
+            interactionSource = source; interactionDirty = false;
             Promise.all([frameAsk('link-info', { source }), frameAsk('ids')]).then(([info, ids]) => {
               if (!selectedElement || selectedElement.source !== source) return;
               if (!info || !RETAG_TAGS.includes(info.tag)) { section.style.display = 'none'; return; }
@@ -7316,6 +7326,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const note = document.getElementById('interaction-problem');
             if (problem) { note.textContent = problem; note.style.display = 'block'; return; }
             // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
+            interactionDirty = false;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
               expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
               change: interactions.plan(choice, interactionInfo) }));
