@@ -169,6 +169,18 @@ test.each(['before', 'after', 'last'])('an insert %s a child gets its own line, 
   else expect(inserted).toBeGreaterThan(lines.indexOf('      <span>B</span>'));
 });
 
+test('an insert beside a child inside a fragment goes beside the fragment, not last', async () => {
+  const code = 'const App = () => (\n  <section>\n    <>\n      <span>A</span>\n      <span>B</span>\n    </>\n    <span>C</span>\n  </section>\n);\n';
+  const f = fixture(code);
+  const at = (tag: string) => { const before = code.slice(0, code.indexOf(tag)).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const b = at('<span>B');
+  const result = await f.service.execute('fragment', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code), ...at('<section'),
+    change: { type: 'insert', elementType: 'frame', width: 40, height: 40, siblingId: `App.tsx:${b.line}:${b.column}`, position: 'before' } }]);
+  expect(result.success, result.error).toBe(true);
+  const out = f.read();
+  expect(out.indexOf('<div'), out).toBeLessThan(out.indexOf('<>'));
+});
+
 test('a pasteboard draft gets its own line and leaves the closing tag on its own line', async () => {
   const code = 'const App = () => (\n  <main>\n    <section>\n      <span>A</span>\n    </section>\n  </main>\n);\n';
   const f = fixture(code);
