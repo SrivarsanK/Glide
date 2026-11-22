@@ -24,8 +24,8 @@ that Glide and the user can keep working with, and (3) explain Glide's behavior 
 
 If your tool list has Glide's MCP tools (`get_selection`, `get_source`, `update_styles`, …), use them: `get_selection`
 tells you what the user is pointing at on the canvas, and the edit tools write through Glide, so the change keeps the
-project's style format and joins the user's undo history. Set them up with `npx @srivarsank/glide mcp install`
-(Claude Code) or run `npx -y @srivarsank/glide mcp` as a stdio server. For anything they don't cover, edit the files.
+project's style format and joins the user's undo history. Set them up with `npx @srivarsank/glide mcp install --agent claude` (also `cursor`, `vscode`, `all`)
+or run `npx -y @srivarsank/glide mcp` as a stdio server. Call `get_guide` once for the conventions. For anything they don't cover, edit the files.
 
 ## Find the element
 

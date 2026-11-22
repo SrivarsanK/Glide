@@ -2,6 +2,9 @@
 const source = { type: 'string', description: 'An element reference: file:line:column (from get_selection, get_tree or data-gl-source).' };
 const expectedDigest = { type: 'string', description: 'The file digest from get_source. When the file changed since, the edit is refused (STALE_DIGEST).' };
 
+// What the attribute writer accepts: text, true for a bare attribute, or null to remove it (never false).
+const attributeValue = { anyOf: [{ type: 'string' }, { const: true }, { type: 'null' }] };
+
 export const MCP_TOOLS = [
   { name: 'get_project_info', description: 'Framework, Tailwind version, entry file and routes of the project Glide is editing. Call this first.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
@@ -22,7 +25,35 @@ export const MCP_TOOLS = [
     annotations: { destructiveHint: false } },
   { name: 'delete_element', description: 'Delete one element and its children from the source.',
     inputSchema: { type: 'object', properties: { source, expectedDigest }, required: ['source'] }, annotations: { destructiveHint: true } },
+  { name: 'set_attribute', description: 'Add, change or remove an attribute on an HTML element: href, target, rel, id, type, title, alt, src, name, placeholder, disabled, popover, popoverTarget, popoverTargetAction, role or aria-*. A value of null removes it; true writes it without a value.',
+    inputSchema: { type: 'object', properties: { source, name: { type: 'string' }, value: attributeValue, expectedDigest }, required: ['source', 'name', 'value'] },
+    annotations: { destructiveHint: false } },
+  { name: 'retag', description: 'Change what an HTML element is (div, section, header, nav, a, button, h1-h6, p, li, ...), optionally setting attributes in the same edit: a link is retag to "a" with {href}; an overlay trigger is retag to "button" with {popoverTarget}. Refuses invalid HTML.',
+    inputSchema: { type: 'object', properties: { source, tag: { type: 'string' }, attributes: { type: 'object', additionalProperties: attributeValue }, expectedDigest }, required: ['source', 'tag'] },
+    annotations: { destructiveHint: false } },
+  { name: 'duplicate_element', description: 'Duplicate one element right after itself.',
+    inputSchema: { type: 'object', properties: { source, expectedDigest }, required: ['source'] }, annotations: { destructiveHint: false } },
+  { name: 'move_element', description: 'Move one element into a parent in the same file, before or after a sibling there (or last).',
+    inputSchema: { type: 'object', properties: { source, parent: source, sibling: source, position: { type: 'string', enum: ['before', 'after'] }, expectedDigest },
+      required: ['source', 'parent'] }, annotations: { destructiveHint: false } },
+  { name: 'extract_component', description: 'Move one element into a new component function above the current one, in the same file, and use it in its place. The markup may not use variables of the component around it.',
+    inputSchema: { type: 'object', properties: { source, name: { type: 'string', description: 'PascalCase, like PricingCard.' }, expectedDigest }, required: ['source', 'name'] },
+    annotations: { destructiveHint: false } },
+  { name: 'get_guide', description: 'How to work in a Glide project: conventions that keep the canvas able to edit what you write. Read it once per session.',
+    inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
 ];
+
+/** Conventions for agents, served by get_guide. */
+export const MCP_GUIDE = [
+  'Glide edits the running app; the source file is the only record. What the canvas can edit, it reads back from plain literals.',
+  '- Keep className, style, href, id and text as literal values. A computed class or style makes that element read-only on the canvas.',
+  '- Tailwind projects: change one property class at a time and keep variants such as md: and hover:, which are separate decisions. Prefer theme tokens over arbitrary values.',
+  '- Lay out with flex and gap rather than absolute positions; frames drawn on the canvas start as flex columns.',
+  '- Interactions are plain HTML: links are <a href="/page">, new tabs add target="_blank" rel="noopener noreferrer", scroll targets are href="#id", overlays are <button type="button" popoverTarget="id"> with an element that has id and popover.',
+  '- States are hover:, active: and focus-visible: classes; animations are transition, duration-* and ease-* classes on the normal look.',
+  '- Elements in {false && …} with data-gl-workspace-* attributes are drafts on the pasteboard; leave them.',
+  '- After STALE_DIGEST, the user changed the file: read it again with get_source before the next edit.',
+].join('\n');
 
 export const MCP_INSTRUCTIONS = 'Glide is a visual editor whose canvas is the running app and whose only record is the source code. '
   + 'Use get_selection to see what the user is pointing at, get_source before editing, and the edit tools for style, text and '

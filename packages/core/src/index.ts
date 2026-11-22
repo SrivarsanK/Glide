@@ -9,7 +9,7 @@ export { loadTailwindTheme } from './tailwind-theme.js';
 export { computeNodeHash, stampHTMLTemplate, formattingWhitespace } from './utils.js';
 export { detectProjectMeta } from './detect.js';
 export { listRoutes, type RouteEntry } from './routes.js';
-export { MCP_TOOLS, MCP_INSTRUCTIONS, MCP_PROTOCOLS, offlineMcpReply } from './mcp-tools.js';
+export { MCP_TOOLS, MCP_INSTRUCTIONS, MCP_PROTOCOLS, MCP_GUIDE, offlineMcpReply } from './mcp-tools.js';
 export { buildComponentTree, getNestingPath } from './tree.js';
 export { DEFAULT_CONFIG, resolveConfig } from './config.js';
 export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from './config.js';

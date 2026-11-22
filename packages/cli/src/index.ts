@@ -13,7 +13,7 @@ Usage: glide [target-port]            Start the editor for the dev server on tha
                                       With no port, Glide looks for the dev server.
        glide install-skills [options] Copy the Glide skills for AI coding agents into this project.
        glide mcp                      Run Glide's MCP server over stdio, for coding agents.
-       glide mcp install              Add Glide to this project's .mcp.json for Claude Code.
+       glide mcp install [--agent a]  Add Glide to this project's agent config (claude, cursor, vscode, all).
 
 Options:
   -h, --help        Show this help and exit

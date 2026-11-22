@@ -42,13 +42,13 @@ at a time. Each item has its own spec file in this folder.
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR #31 (stacked on #30) |
 | 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR #32 (stacked on #31) |
 | 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR #33 (stacked on #32) |
-| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR from `feat/c2-extract` (stacked on C1) |
-| 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | todo |
+| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR #34 (stacked on #33) |
+| 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | **deferred**: see the spec for why |
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | todo |
-| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | todo |
+| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review** (part 1): PR from `feat/c5-mcp-tools` (stacked on #34) |
 
 Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
-(committed, not on GitHub), `in review` (PR open), `done` (merged).
+(committed, not on GitHub), `in review` (PR open), `done` (merged), `deferred` (skipped for now; its spec says why).
 Sizes: **S** is one focused change (a few files, roughly 100 lines with tests). **M** is several
 files plus a piece of editor UI. **L** is a new subsystem; its spec splits it into steps.
 
@@ -197,3 +197,6 @@ flowchart LR
   undo). Refuses markup that uses the surrounding component's variables, list items with a key, and taken or
   badly formed names. A Component section in the inspector runs it. Checked in the editor. 495 tests pass.
   Not done: a file of its own (needs multi-file undo that can delete a created file) and props (v2).
+- 2026-11-21: C3 deferred (multi-page sites only, needs injected JavaScript for "none" and a CSS writer undo can't
+  track; agents can add the rule). C5 part 1 on `feat/c5-mcp-tools`: set_attribute, retag, duplicate_element,
+  move_element, extract_component and get_guide, plus `glide mcp install --agent cursor|vscode|all`. 496 tests pass.
