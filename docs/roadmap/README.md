@@ -204,4 +204,4 @@ flowchart LR
   animation reading order, and route rules per router. Summaries are on each PR. 521 tests pass.
 - 2026-11-22: Addressed CodeRabbit's reviews of #33 (run-file privacy in Vite, editor refresh after agent edits,
   endpoint hardening) and #34 (extract refuses `this` and outer writes). C5 part 2 on `feat/c5-mcp-build`:
-  `insert_markup` and an agent badge, checked live in test-site with undo. 526 tests pass.
+  `insert_markup` and an agent badge, checked live in test-site with undo. Reviews of #35–#37 addressed; 527 tests pass.
