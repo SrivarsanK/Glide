@@ -89,3 +89,21 @@ test('an element with a dynamic class still takes attribute edits', () => {
 test('Vue components keep their props in source', () => {
   expect(() => set('App.vue', files['App.vue'], '<RouterLink', 'title', 'x')).toThrow(/Components take props/);
 });
+
+test('review fixes: raw text, escaping, name case, see-through wrappers, references and unquoted ids', () => {
+  // A closing tag written inside a textarea is text, not the section's end.
+  expect(retag('index.html', '<section><textarea></section></textarea></section>\n', '<section', 'div'))
+    .toBe('<div><textarea></section></textarea></div>\n');
+  // The value is the text the attribute holds.
+  expect(set('Page.astro', '<a href="/x">Go</a>\n', '<a', 'title', 'Use <b> & co')).toContain('title="Use &lt;b&gt; &amp; co"');
+  // HTML attribute names ignore case.
+  for (const file of ['Page.astro', 'App.svelte']) expect(set(file, '<a HREF="/x">Go</a>\n', '<a', 'href', null)).toBe('<a>Go</a>\n');
+  expect(set('App.vue', '<template>\n  <a HREF="/x">Go</a>\n</template>\n', '<a', 'href', null)).toContain('<a>Go</a>');
+  // Vue renders a <template v-for>'s children in its place, so the list items still need their list.
+  expect(() => retag('App.vue', '<template>\n  <ul><template v-for="i in items"><li>{{ i }}</li></template></ul>\n</template>\n', '<ul', 'div'))
+    .toThrow(/list items need a list/);
+  // HTML decodes &#58 without its semicolon.
+  expect(() => set('index.html', '<a>Go</a>\n', '<a', 'href', 'javascript&#58alert(1)')).toThrow(/Character references/);
+  expect(set('index.html', '<a>Go</a>\n', '<a', 'href', '/search?a=1&b=2')).toContain('href="/search?a=1&amp;b=2"');
+  expect(() => set('index.html', '<div id=hero></div>\n<a>Go</a>\n', '<a', 'id', 'hero')).toThrow(/already used/);
+});

@@ -52,7 +52,8 @@ function staticAttribute(node: any, name: string): { attribute: any; value: stri
   if (node.attributes.some((item: any) => item.type === 'SpreadAttribute')) {
     throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
   }
-  const matches = node.attributes.filter((item: any) => item.type === 'Attribute' && item.name === name);
+  // HTML attribute names ignore case, and the parser keeps them as written.
+  const matches = node.attributes.filter((item: any) => item.type === 'Attribute' && item.name.toLowerCase() === name.toLowerCase());
   if (matches.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   const attribute = matches[0];
   if (!attribute) return null;

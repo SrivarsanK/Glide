@@ -15,7 +15,9 @@ const invalid = (): never => { throw new Error('UNSUPPORTED_OPERATION: This tag 
 function mask(code: string): string {
   const blank = (match: string) => match.replace(/[^\n]/g, ' ');
   return code.replace(/^\s*---[\s\S]*?\n---/, blank).replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/<script[\s\S]*?<\/script>/gi, blank).replace(/<style[\s\S]*?<\/style>/gi, blank);
+    .replace(/<script[\s\S]*?<\/script>/gi, blank).replace(/<style[\s\S]*?<\/style>/gi, blank)
+    // Textarea and title hold text, so a `</section>` written inside one is not a tag.
+    .replace(/(<(textarea|title)\b[^>]*>)([\s\S]*?)(?=<\/\2\s*>)/gi, (_match, open: string, _name: string, body: string) => open + blank(body));
 }
 
 function tagStarts(code: string): number[] {
@@ -93,10 +95,12 @@ function target(code: string, line: number, column: number): Tag | null {
 
 function staticAttribute(tag: Tag, name: string): Attribute | null {
   if (tag.spread) throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
-  if (tag.attributes.some(item => item.name.startsWith(name + ':'))) {
+  // HTML attribute names ignore case: `HREF` and `popoverTarget` are `href` and `popovertarget`.
+  const lower = name.toLowerCase();
+  if (tag.attributes.some(item => item.name.toLowerCase().startsWith(lower + ':'))) {
     throw new Error(`UNSUPPORTED_OPERATION: Preserve the dynamic Astro ${name} directive in source.`);
   }
-  const matches = tag.attributes.filter(item => item.name === name);
+  const matches = tag.attributes.filter(item => item.name.toLowerCase() === lower);
   if (matches.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   if (matches[0]?.dynamic) throw new Error(`UNSUPPORTED_OPERATION: Preserve the dynamic Astro ${name} in source.`);
   return matches[0] ?? null;
@@ -107,11 +111,12 @@ function checked(before: string, after: string): string {
   return after;
 }
 
-function setAttribute(code: string, line: number, column: number, name: string, next: (current: string) => string): string {
+function setAttribute(code: string, line: number, column: number, name: string, next: (current: string) => string,
+  escape = (value: string) => value.replace(/"/g, '&quot;')): string {
   const tag = target(code, line, column);
   if (!tag) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
   const current = staticAttribute(tag, name);
-  const text = `${name}="${next(current?.value ?? '').replace(/"/g, '&quot;')}"`;
+  const text = `${name}="${escape(next(current?.value ?? ''))}"`;
   if (current) return checked(code, code.slice(0, current.start) + text + code.slice(current.end));
   const offset = tag.start + 1 + tag.name.length;
   return checked(code, code.slice(0, offset) + ' ' + text + code.slice(offset));
@@ -177,7 +182,9 @@ export function readAstroAttributeAt(code: string, line: number, column: number,
 
 /** Add, change (text, or true for a bare attribute) or remove (null) a static attribute. */
 export function setAstroAttributeAt(code: string, line: number, column: number, name: string, value: string | true | null): string {
-  if (typeof value === 'string') return setAttribute(code, line, column, name, () => value);
+  // The value is the text the attribute should hold, so markup characters are written as references.
+  if (typeof value === 'string') return setAttribute(code, line, column, name, () => value,
+    text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
   const tag = target(code, line, column);
   if (!tag) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
   const current = staticAttribute(tag, name);

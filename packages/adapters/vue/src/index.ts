@@ -33,7 +33,8 @@ function replace(code: string, start: number, end: number, text: string) {
 function staticAttribute(node: any, name: string): any {
   if (node.props.some((p: any) => p.type === 7 && p.name === 'bind'
     && (!p.arg || !p.arg.isStatic || p.arg.content.toLowerCase() === name.toLowerCase()))) throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Vue binding in source.');
-  const attrs = node.props.filter((p: any) => p.type === 6 && p.name === name);
+  // HTML attribute names ignore case, and the parser keeps them as written.
+  const attrs = node.props.filter((p: any) => p.type === 6 && p.name.toLowerCase() === name.toLowerCase());
   if (attrs.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   return attrs[0] ?? null;
 }
@@ -79,11 +80,15 @@ export function readVueTag(code: string, id: string) {
   const walk = (item: any) => { if (item.type === 1) all.push(item); for (const child of item.children || []) walk(child); };
   for (const child of parse(code).descriptor.template?.ast?.children || []) walk(child);
   const start = (item: any) => item.loc.start.offset, end = (item: any) => item.loc.end.offset;
-  const inside = all.filter(item => start(item) > start(node) && end(item) <= end(node));
+  // A <template> wrapper (v-for, v-if, slots; tagType 3) renders only its children, so it is see-through here.
+  const rendered = (item: any) => item.tagType !== 3;
+  const inside = all.filter(item => start(item) > start(node) && end(item) <= end(node) && rendered(item));
   const focusable = (item: any) => item.props.some((p: any) => (p.type === 6 && p.name === 'tabindex') || (p.type === 7 && p.arg?.content === 'tabindex'));
+  const children = (item: any): string[] => item.children.filter((child: any) => child.type === 1)
+    .flatMap((child: any) => rendered(child) ? [child.tag as string] : children(child));
   return { name: node.tag as string,
-    ancestors: all.filter(item => start(item) < start(node) && end(item) >= end(node)).reverse().map(item => item.tag as string),
-    childTags: node.children.filter((child: any) => child.type === 1).map((child: any) => child.tag as string),
+    ancestors: all.filter(item => start(item) < start(node) && end(item) >= end(node) && rendered(item)).reverse().map(item => item.tag as string),
+    childTags: children(node),
     descendants: inside.map(item => ({ tag: item.tag as string, focusable: focusable(item) })) };
 }
 /** Rename the element at `id`, opening and closing tag together. */
