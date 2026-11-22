@@ -1894,12 +1894,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   <span class="props-label" style="min-width:60px;">On click</span>
                   <select id="interaction-action" class="props-select" style="flex:1;" aria-label="On click">
                     <option value="none">Nothing</option><option value="page">Go to page</option><option value="url">Open URL</option><option value="scroll">Scroll to</option>
+                    <option value="open-overlay">Open overlay</option><option value="close-overlay">Close overlay</option>
                   </select>
                 </div>
                 <div class="props-row" id="interaction-value-row">
                   <input id="interaction-value" class="props-input" style="flex:1;" aria-label="Link target">
                   <select id="interaction-scroll" class="props-select" style="flex:1;display:none;" aria-label="Element to scroll to"></select>
+                  <select id="interaction-overlay" class="props-select" style="flex:1;display:none;" aria-label="Overlay to open"></select>
+                  <button class="icon-btn" id="interaction-show" style="display:none;" title="Open the overlay on the canvas so it can be edited">Show</button>
                 </div>
+                <small id="interaction-hint" style="display:none;color:var(--text-secondary);"></small>
                 <label class="props-row" id="interaction-newtab-row"><input type="checkbox" id="interaction-newtab"> <span>Open in a new tab</span></label>
                 <div class="props-row"><button class="icon-btn" id="interaction-apply" style="flex:1;">Apply</button></div>
                 <small id="interaction-problem" style="display:none;color:var(--danger);"></small>
@@ -7275,17 +7279,24 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const interactions = (${createInteractions.toString()})();
           let interactionInfo = null;
           let interactionIds = [];
+          let interactionOverlays = [];
           // The form keeps unsaved edits while the same element is refreshed (scroll, resize).
           let interactionSource = null, interactionDirty = false;
-          const INTERACTION_FIELDS = ['interaction-action', 'interaction-value', 'interaction-scroll', 'interaction-newtab'];
+          const INTERACTION_FIELDS = ['interaction-action', 'interaction-value', 'interaction-scroll', 'interaction-newtab', 'interaction-overlay'];
           for (const kind of ['input', 'change']) {
             document.getElementById('section-interactions').addEventListener(kind, event => { if (INTERACTION_FIELDS.includes(event.target.id)) interactionDirty = true; });
           }
           function syncInteractionFields() {
             const action = document.getElementById('interaction-action').value;
-            document.getElementById('interaction-value-row').style.display = action === 'none' ? 'none' : '';
-            document.getElementById('interaction-value').style.display = action === 'scroll' ? 'none' : '';
+            document.getElementById('interaction-value-row').style.display = action === 'none' || action === 'close-overlay' ? 'none' : '';
+            document.getElementById('interaction-value').style.display = action === 'page' || action === 'url' ? '' : 'none';
             document.getElementById('interaction-scroll').style.display = action === 'scroll' ? '' : 'none';
+            document.getElementById('interaction-overlay').style.display = action === 'open-overlay' ? '' : 'none';
+            document.getElementById('interaction-show').style.display = action === 'open-overlay' ? '' : 'none';
+            const hint = document.getElementById('interaction-hint');
+            hint.textContent = action === 'close-overlay' ? (interactionInfo && interactionInfo.inPopover ? 'Closes #' + interactionInfo.inPopover + '.' : 'Put this button inside an overlay that has an id.')
+              : action === 'open-overlay' && !interactionOverlays.length ? 'No overlays yet: give a frame an id and the popover attribute (Add attribute).' : '';
+            hint.style.display = hint.textContent ? 'block' : 'none';
             document.getElementById('interaction-newtab-row').style.display = action === 'url' ? '' : 'none';
             document.getElementById('interaction-value').placeholder = action === 'page' ? '/pricing' : 'https://example.com';
             document.getElementById('interaction-problem').style.display = 'none';
@@ -7304,25 +7315,35 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (!info || !RETAG_TAGS.includes(info.tag)) { section.style.display = 'none'; return; }
               interactionInfo = info;
               interactionIds = (ids || []).filter(item => item.count === 1).map(item => item.id);
+              interactionOverlays = (ids || []).filter(item => item.count === 1 && item.popover).map(item => item.id);
               const current = interactions.read(info);
+              const options = list => list.map(id => { const option = document.createElement('option'); option.value = id; option.textContent = '#' + id; return option; });
               const scroll = document.getElementById('interaction-scroll');
-              scroll.replaceChildren(...interactionIds.map(id => { const option = document.createElement('option'); option.value = id; option.textContent = '#' + id; return option; }));
+              scroll.replaceChildren(...options(interactionIds));
+              const overlay = document.getElementById('interaction-overlay');
+              overlay.replaceChildren(...options(interactionOverlays));
               document.getElementById('interaction-action').value = current.action;
               document.getElementById('interaction-value').value = current.action === 'page' || current.action === 'url' ? current.value : '';
               if (current.action === 'scroll') scroll.value = current.value;
+              if (current.action === 'open-overlay') overlay.value = current.value;
               document.getElementById('interaction-newtab').checked = !!current.newTab;
               syncInteractionFields();
               section.style.display = 'block';
             });
           }
           document.getElementById('interaction-action').addEventListener('change', syncInteractionFields);
+          document.getElementById('interaction-show').addEventListener('click', () => {
+            const id = document.getElementById('interaction-overlay').value;
+            if (id) frameAsk('show-popover', { id }).then(shown => { if (!shown) showToast('error', 'This browser could not open #' + id + ' as an overlay.'); });
+          });
           document.getElementById('interaction-apply').addEventListener('click', () => {
             const parsed = selectedElement && parseSource(selectedElement.source);
             if (!parsed || !interactionInfo || !socket || socket.readyState !== WebSocket.OPEN) return;
             const action = document.getElementById('interaction-action').value;
             const choice = { action, newTab: document.getElementById('interaction-newtab').checked,
-              value: action === 'scroll' ? document.getElementById('interaction-scroll').value : document.getElementById('interaction-value').value };
-            const problem = interactions.problem(choice, interactionIds);
+              value: action === 'scroll' ? document.getElementById('interaction-scroll').value
+                : action === 'open-overlay' ? document.getElementById('interaction-overlay').value : document.getElementById('interaction-value').value };
+            const problem = interactions.problem(choice, interactionIds, interactionOverlays, interactionInfo);
             const note = document.getElementById('interaction-problem');
             if (problem) { note.textContent = problem; note.style.display = 'block'; return; }
             // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
@@ -7972,7 +7993,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               undoHTML = '<span class="toast-undo" onclick="triggerUndo()">Undo</span>';
             }
 
-            toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;">' + text + '</span>' + undoHTML;
+            // Messages carry page ids, file names and server errors, so they are text, never markup.
+            toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;"></span>' + undoHTML;
+            toast.children[1].textContent = text;
             container.appendChild(toast);
 
             setTimeout(() => {

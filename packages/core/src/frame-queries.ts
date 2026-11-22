@@ -108,15 +108,33 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       case 'first-container': return firstContainer();
       case 'sources': return stampedElements().map(el => el.getAttribute(attributes.source));
       case 'link-info': {
-        const el = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source)[0];
-        return el ? { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel') } : null;
+        const all = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source), el = all[0];
+        if (!el) return null;
+        const overlayOf = (item: any) => {
+          const overlay = item.parentElement && item.parentElement.closest ? item.parentElement.closest('[popover]') : null;
+          return overlay ? overlay.id || null : null;
+        };
+        // One source can render in several places, and Close writes one target for all of them.
+        const around = all.map(overlayOf), shared = around.every(id => id === around[0]);
+        return { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel'),
+          type: el.getAttribute('type'), popoverTarget: el.getAttribute('popovertarget'), popoverAction: el.getAttribute('popovertargetaction'),
+          inPopover: shared ? around[0] : null, overlayMixed: !shared };
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
         // No prototype, so ids like "constructor" count from zero.
-        const counts: Record<string, number> = Object.create(null);
-        Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => { counts[el.id] = (counts[el.id] || 0) + 1; });
-        return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id] }));
+        const counts: Record<string, number> = Object.create(null), popovers: Record<string, boolean> = Object.create(null);
+        Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => {
+          counts[el.id] = (counts[el.id] || 0) + 1;
+          if (el.hasAttribute('popover')) popovers[el.id] = true;
+        });
+        return Object.keys(counts).filter(id => !/^_*glide/i.test(id)).map(id => ({ id, count: counts[id], popover: !!popovers[id] }));
+      }
+      case 'show-popover': {
+        // A closed overlay is not rendered, so the editor opens it to make it selectable.
+        const el = doc.getElementById(String(payload.id || ''));
+        if (!el || typeof el.showPopover !== 'function') return false;
+        try { el.showPopover(); return true; } catch (_) { return false; }
       }
       case 'export': return exportData(typeof payload.source === 'string' ? payload.source : undefined);
       case 'print': win.focus(); win.print(); return true;
