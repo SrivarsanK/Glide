@@ -33,6 +33,9 @@ export const MCP_TOOLS = [
   { name: 'move_element', description: 'Move one element into a parent in the same file, before or after a sibling there (or last).',
     inputSchema: { type: 'object', properties: { source, parent: source, sibling: source, position: { type: 'string', enum: ['before', 'after'] }, expectedDigest },
       required: ['source', 'parent'] }, annotations: { destructiveHint: false } },
+  { name: 'insert_markup', description: 'Add one JSX element, with its children, inside `source`: before or after a sibling there, or last. The markup is static, like what the canvas draws: HTML elements, className, a style object of literal values, and the attributes set_attribute allows. No components, expressions or handlers; add those in source afterwards. Write classes in the project\'s format (Tailwind when it has Tailwind).',
+    inputSchema: { type: 'object', properties: { source, markup: { type: 'string', description: 'One JSX element, like <section className="p-8"><h2>Pricing</h2></section>.' },
+      sibling: source, position: { type: 'string', enum: ['before', 'after'] }, expectedDigest }, required: ['source', 'markup'] }, annotations: { destructiveHint: false } },
   { name: 'extract_component', description: 'Move one element into a new component function above the current one, in the same file, and use it in its place. The markup may not use variables of the component around it.',
     inputSchema: { type: 'object', properties: { source, name: { type: 'string', description: 'PascalCase, like PricingCard.' }, expectedDigest }, required: ['source', 'name'] },
     annotations: { destructiveHint: false } },
@@ -48,6 +51,7 @@ export const MCP_GUIDE = [
   '- Lay out with flex and gap rather than absolute positions; frames drawn on the canvas start as flex columns.',
   '- Interactions are plain HTML: links are <a href="/page">, new tabs add target="_blank" rel="noopener noreferrer", scroll targets are href="#id", overlays are <button type="button" popoverTarget="id"> with an element that has id and popover.',
   '- States are hover:, active: and focus-visible: classes; animations are transition, duration-* and ease-* classes on the normal look.',
+  '- Build sections with insert_markup (static markup), then wire logic, components and handlers in the files.',
   '- Elements in {false && …} with data-gl-workspace-* attributes are drafts on the pasteboard; leave them.',
   '- After STALE_DIGEST, the user changed the file: read it again with get_source before the next edit.',
 ].join('\n');

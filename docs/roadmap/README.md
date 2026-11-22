@@ -41,7 +41,7 @@ at a time. Each item has its own spec file in this folder.
 | 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR #34 (stacked on #33) |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | **deferred**: see the spec for why |
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | **in review** (part 1: attributes, retag): PR #36 (stacked on #35) |
-| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review** (part 1): PR #35 (stacked on #34) |
+| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review**: part 1 PR #35 (stacked on #34), part 2 PR from `feat/c5-mcp-build` (stacked on #36) |
 
 Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
 (committed, not on GitHub), `in review` (PR open), `done` (merged), `deferred` (skipped for now; its spec says why).
@@ -202,3 +202,6 @@ flowchart LR
 - 2026-11-22: Addressed CodeRabbit's reviews of #27–#32 on their own branches and merged them up the stack: stricter
   retag checks, interaction form state, safe toast text, Close overlay checks, case-insensitive JSX attributes,
   animation reading order, and route rules per router. Summaries are on each PR. 521 tests pass.
+- 2026-11-22: Addressed CodeRabbit's reviews of #33 (run-file privacy in Vite, editor refresh after agent edits,
+  endpoint hardening) and #34 (extract refuses `this` and outer writes). C5 part 2 on `feat/c5-mcp-build`:
+  `insert_markup` and an agent badge, checked live in test-site with undo. 526 tests pass.
