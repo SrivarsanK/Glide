@@ -45,7 +45,8 @@ A closed popover is hidden, so it can't be selected or edited.
 - [x] An "Open overlay" action in the Interactions panel: pick the overlay frame, or make one from the selection
 - [x] A "Close overlay" action for buttons inside it
 - [ ] Position and backdrop options
-- [x] The `show-popover` query and the Layers action
+- [x] The `show-popover` query, with a Show button in the Interactions panel
+- [ ] "Show overlay" in the Layers panel
 
 ## Tests
 

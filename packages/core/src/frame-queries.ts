@@ -102,16 +102,22 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       case 'first-container': return firstContainer();
       case 'sources': return stampedElements().map(el => el.getAttribute(attributes.source));
       case 'link-info': {
-        const el = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source)[0];
+        const all = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source), el = all[0];
         if (!el) return null;
-        const overlay = el.parentElement && el.parentElement.closest ? el.parentElement.closest('[popover]') : null;
+        const overlayOf = (item: any) => {
+          const overlay = item.parentElement && item.parentElement.closest ? item.parentElement.closest('[popover]') : null;
+          return overlay ? overlay.id || null : null;
+        };
+        // One source can render in several places, and Close writes one target for all of them.
+        const around = all.map(overlayOf), shared = around.every(id => id === around[0]);
         return { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel'),
           type: el.getAttribute('type'), popoverTarget: el.getAttribute('popovertarget'), popoverAction: el.getAttribute('popovertargetaction'),
-          inPopover: overlay ? overlay.id || null : null, className: el.getAttribute('class') || '' };
+          inPopover: shared ? around[0] : null, overlayMixed: !shared, className: el.getAttribute('class') || '' };
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
-        const counts: Record<string, number> = {}, popovers: Record<string, boolean> = {};
+        // No prototype, so ids like "constructor" count from zero.
+        const counts: Record<string, number> = Object.create(null), popovers: Record<string, boolean> = Object.create(null);
         Array.prototype.forEach.call(doc.querySelectorAll('[id]'), (el: any) => {
           counts[el.id] = (counts[el.id] || 0) + 1;
           if (el.hasAttribute('popover')) popovers[el.id] = true;

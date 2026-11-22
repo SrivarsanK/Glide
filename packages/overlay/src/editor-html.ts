@@ -7085,6 +7085,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const inline = (selectedComputedStyles && selectedComputedStyles.inlineStyle) || '';
             const inlineColor = { color: /(^|;)\\s*color\\s*:/i, backgroundColor: /(^|;)\\s*background(-color)?\\s*:/i,
               borderColor: /(^|;)\\s*border(-color)?\\s*:/i };
+            // A state class loses to the element's own inline value, so the edit could never show.
+            if (captured.pseudoState && captured.authoringRepresentation !== 'inline' && Object.keys(styles).some(key => inlineColor[key] && inlineColor[key].test(inline))) {
+              showToast('info', 'This element sets that color inline, which wins over ' + captured.pseudoState + ' styles. Remove the inline color first, or edit the normal look.');
+              return;
+            }
             if (!captured.authoringRepresentation && Object.keys(styles).every(key => inlineColor[key] && !inlineColor[key].test(inline))) {
               captured = { ...captured, type: 'multi-class' };
             }
@@ -7289,6 +7294,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let interactionInfo = null;
           let interactionIds = [];
           let interactionOverlays = [];
+          // The form keeps unsaved edits while the same element is refreshed (scroll, resize).
+          let interactionSource = null, interactionDirty = false;
+          const INTERACTION_FIELDS = ['interaction-action', 'interaction-value', 'interaction-scroll', 'interaction-newtab', 'interaction-overlay'];
+          for (const kind of ['input', 'change']) {
+            document.getElementById('section-interactions').addEventListener(kind, event => { if (INTERACTION_FIELDS.includes(event.target.id)) interactionDirty = true; });
+          }
           function syncInteractionFields() {
             const action = document.getElementById('interaction-action').value;
             document.getElementById('interaction-value-row').style.display = action === 'none' || action === 'close-overlay' ? 'none' : '';
@@ -7308,7 +7319,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function refreshInteractions() {
             const section = document.getElementById('section-interactions');
             const source = selectedElement && parseSource(selectedElement.source) ? selectedElement.source : null;
-            if (!source) { section.style.display = 'none'; return; }
+            if (!source) { section.style.display = 'none'; interactionInfo = interactionSource = null; return; }
+            if (source === interactionSource && interactionDirty) return;
+            // Until the new element answers, Apply has nothing to plan from.
+            if (source !== interactionSource) { interactionInfo = null; section.style.display = 'none'; }
+            interactionSource = source; interactionDirty = false;
             Promise.all([frameAsk('link-info', { source }), frameAsk('ids')]).then(([info, ids]) => {
               if (!selectedElement || selectedElement.source !== source) return;
               if (!info || !RETAG_TAGS.includes(info.tag)) { section.style.display = 'none'; return; }
@@ -7356,6 +7371,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             renderStates();
           }));
           document.getElementById('edit-pseudo-state').addEventListener('change', renderStates);
+          document.getElementById('edit-representation').addEventListener('change', renderStates);
           document.getElementById('interaction-action').addEventListener('change', syncInteractionFields);
           document.getElementById('interaction-show').addEventListener('click', () => {
             const id = document.getElementById('interaction-overlay').value;
@@ -7372,6 +7388,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const note = document.getElementById('interaction-problem');
             if (problem) { note.textContent = problem; note.style.display = 'block'; return; }
             // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
+            interactionDirty = false;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
               expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
               change: interactions.plan(choice, interactionInfo) }));
@@ -8017,7 +8034,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               undoHTML = '<span class="toast-undo" onclick="triggerUndo()">Undo</span>';
             }
 
-            toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;">' + text + '</span>' + undoHTML;
+            // Messages carry page ids, file names and server errors, so they are text, never markup.
+            toast.innerHTML = '<span>' + icon + '</span><span style="flex:1;"></span>' + undoHTML;
+            toast.children[1].textContent = text;
             container.appendChild(toast);
 
             setTimeout(() => {

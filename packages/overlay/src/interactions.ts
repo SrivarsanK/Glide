@@ -4,7 +4,7 @@
  */
 export function createInteractions() {
   type Info = { tag: string; href: string | null; target: string | null; rel: string | null;
-    type?: string | null; popoverTarget?: string | null; popoverAction?: string | null; inPopover?: string | null };
+    type?: string | null; popoverTarget?: string | null; popoverAction?: string | null; inPopover?: string | null; overlayMixed?: boolean };
   type Action = 'none' | 'page' | 'url' | 'scroll' | 'open-overlay' | 'close-overlay';
   type Choice = { action: Action; value: string; newTab?: boolean };
 
@@ -31,7 +31,12 @@ export function createInteractions() {
     if (choice.action === 'open-overlay' && !overlays.includes(value)) {
       return 'Choose an overlay. To make one, give a frame an id and the popover attribute (Add attribute).';
     }
+    if (choice.action === 'close-overlay' && info && info.overlayMixed) {
+      return 'This element renders in more than one overlay, so one Close target cannot fit them all. Give each overlay its own button in source.';
+    }
     if (choice.action === 'close-overlay' && !(info && info.inPopover)) return 'Close overlay works on a button inside an overlay that has an id.';
+    // A popover target is found by id, so a shared id could close a different element.
+    if (choice.action === 'close-overlay' && !overlays.includes(info!.inPopover!)) return 'The overlay around this button shares its id with another element. Give it a unique id first.';
     return '';
   }
 
@@ -41,7 +46,9 @@ export function createInteractions() {
     const ownRel = info.rel === 'noopener noreferrer';
     const noOverlay = { popoverTarget: null, popoverTargetAction: null };
     const noLink = { href: null, target: null, ...(ownRel ? { rel: null } : {}) };
-    if (choice.action === 'none') return { type: 'retag', tagName: info.tag === 'a' ? 'div' : info.tag, attributes: { ...noLink, ...noOverlay } };
+    // A hand-written rel keeps the <a>; without href it is no longer a link, which read() already treats as none.
+    const keepAnchor = info.tag === 'a' && !!info.rel && !ownRel;
+    if (choice.action === 'none') return { type: 'retag', tagName: info.tag === 'a' && !keepAnchor ? 'div' : info.tag, attributes: { ...noLink, ...noOverlay } };
     if (choice.action === 'open-overlay' || choice.action === 'close-overlay') {
       const target = choice.action === 'close-overlay' ? info.inPopover : choice.value.trim();
       return { type: 'retag', tagName: 'button', attributes: { ...noLink, type: 'button', popoverTarget: target,
