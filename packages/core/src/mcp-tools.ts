@@ -10,7 +10,7 @@ export const MCP_TOOLS = [
   { name: 'get_tree', description: 'The element tree of one source file, each element with its source reference.',
     inputSchema: { type: 'object', properties: { file: { type: 'string', description: 'Path of the source file, relative to the project root.' } }, required: ['file'] },
     annotations: { readOnlyHint: true } },
-  { name: 'get_source', description: 'The exact source of one element, and the file digest to pass to edit tools.',
+  { name: 'get_source', description: 'The exact source of one element, and the file digest to pass to edit tools. In Vue, Svelte, Astro and HTML files the code is an excerpt: up to 20 lines from the element, with `excerpt` giving the line range.',
     inputSchema: { type: 'object', properties: { source }, required: ['source'] }, annotations: { readOnlyHint: true } },
   { name: 'update_styles', description: 'Change CSS properties of one element through Glide, written as Tailwind classes or inline styles like the project uses. Keeps responsive and state variants. Properties use camelCase CSS names (backgroundColor, paddingTop); an empty value removes one.',
     inputSchema: { type: 'object', properties: { source, styles: { type: 'object', additionalProperties: { type: 'string' } },
