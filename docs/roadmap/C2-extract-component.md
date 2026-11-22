@@ -12,8 +12,9 @@ readable code.
 - **A structural change,** `{ type: 'extract', name }`, on the selected element. It:
   - creates `<folder>/<Name>.tsx` containing `export function <Name>() { return (…JSX…); }`. The
     folder is the most common directory of the component files already listed in
-    `glide-components.json` (it records each component's file, not a folder setting), or
-    `src/components` when there are none
+    `glide-components.json` (it records each component's file, not a folder setting), leaving out
+    route directories such as `pages/`, `src/pages/` and `app/` (a route module needs a default
+    export), or `src/components` when none remains
   - replaces the element with `<Name />`
   - adds a relative `import { Name } from '…'`
 - **v1 handles static markup only.** Refuse when the JSX uses names from the surrounding scope. Reuse
