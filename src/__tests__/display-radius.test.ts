@@ -63,6 +63,24 @@ test('important display classes are matched, and hiding them uses an important h
   expect(run(app('className="flex p-2 hidden"'), 'grid', v4)).toContain('className="p-2 hidden grid"');
 });
 
+test('hiding beats a responsive display class, and showing keeps an authored `hidden`', () => {
+  const v4 = { ...defaultTailwindTheme(), version: 4 as const };
+  const v3 = { ...defaultTailwindTheme(), version: 3 as const };
+  const at = (source: string) => { const before = source.slice(0, source.indexOf('<section')).split('\n'); return { line: before.length, column: before.at(-1)!.length + 1 }; };
+  const run = (source: string, value: string, theme: any) => transformJSXBatch(source, [{ ...at(source), change: display(value) } as any], { theme }).code;
+  // `md:flex` wins over a plain `hidden` from md up.
+  const hidden = run(app('className="md:flex p-2"'), 'none', v4);
+  expect(hidden).toContain('className="md:flex p-2 hidden!"');
+  expect(run(hidden, '', v4)).toContain('className="md:flex p-2"');
+  expect(run(app('className="md:flex p-2"'), 'none', v3)).toContain('className="md:flex p-2 !hidden"');
+  // The authored `hidden` hides below md; hiding at md and showing again must leave it.
+  const both = run(app('className="hidden md:flex"'), 'none', v4);
+  expect(both).toContain('className="hidden md:flex hidden!"');
+  expect(run(both, '', v4)).toContain('className="hidden md:flex"');
+  // A display edit still leaves the authored responsive pair alone.
+  expect(run(app('className="hidden md:flex"'), 'grid', v4)).toContain('className="hidden md:flex grid"');
+});
+
 test('showing is refused when a condition adds `hidden`, because the edit could not undo it', () => {
   const source = 'import { clsx } from "clsx";\nconst App = ({ concealed }) => <main><section className={clsx("p-2", concealed && "hidden")}>A</section></main>;';
   expect(() => edit(source, '<section', display(''))).toThrow(/UNSUPPORTED_OPERATION/);
