@@ -503,6 +503,8 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   var initialPosition = 'static';
   var currentDx = 0;
   var currentDy = 0;
+  // The editor's canvas zoom: page pixels times this are screen pixels.
+  var canvasZoom = 1;
   var rafId = null;
   var dragOriginalStyles = null;
   var dragBaseTransform = '';
@@ -1093,8 +1095,9 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   document.addEventListener('pointermove', function(e) {
     if (interactionMode) return;
     if (dragCandidate && !isDragging) {
-      var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (moveDist >= 3) {
+      // 4 screen pixels at any zoom, so a click that wobbles never moves the element.
+      var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY) * canvasZoom;
+      if (moveDist >= 4) {
         isDragging = true;
         dragEl = dragCandidate;
         dragOriginalStyles = captureInlineStyles(dragEl, ['transform', 'z-index', 'transition', 'transition-property']);
@@ -1583,6 +1586,10 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     }
     if (e.data.type === 'glide:set-grid-visible') {
       gridVisible = !!e.data.enabled;
+    }
+    if (e.data.type === 'glide:set-zoom') {
+      var zoom = Number(e.data.zoom);
+      if (zoom > 0 && isFinite(zoom)) canvasZoom = zoom;
     }
     if (e.data.type === 'glide:select-marquee') {
       var x = e.data.x;
