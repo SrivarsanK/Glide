@@ -18,7 +18,9 @@ at a time. Each item has its own spec file in this folder.
    PR still need the user's go-ahead. Otherwise take the first `todo` row whose dependencies are
    `done` or `in review`. When a dependency is only `in review`, branch from that dependency's
    branch (stacked PRs). With several in review, branch from the one stacked on the others (its
-   branch already holds their changes); if none holds all of them, wait until they merge.
+   branch already holds their changes); if none holds all of them, wait until they merge. After a
+   review fix on any branch, merge it up through every branch stacked on it before branching, so the
+   base has each dependency's latest commits; resolve a conflict on the branch where it appears.
 2. Read only that item's spec. Each spec is self-contained.
 3. Run `git status`. Create or check out the branch named in the spec.
 4. Follow the spec's steps in order. Write the failing test first where the spec says so.
