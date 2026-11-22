@@ -6049,7 +6049,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               tagPicker.dataset.current = tag;
             }
             refreshInteractions();
-            document.getElementById('section-extract').style.display = retaggable ? 'block' : 'none';
+            // Extraction writes a function component, so only JSX and TSX files offer it.
+            const jsxSource = !!(selectedElement && /\\.[jt]sx?$/i.test((parseSource(selectedElement.source) || {}).file || ''));
+            document.getElementById('section-extract').style.display = retaggable && jsxSource ? 'block' : 'none';
 
             const isComponent = tagName && /^[A-Z]/.test(tagName);
             const jumpBtn = document.getElementById('btn-jump-definition');
@@ -7496,6 +7498,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const name = document.getElementById('extract-name').value.trim();
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
             if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) { showToast('error', 'Name the component with a capital letter, like PricingCard.'); return; }
+            // Staged edits keep the positions they were made at; extraction would move them.
+            if (stagedEdits.size) { showToast('info', 'Apply or discard the staged changes first, then extract.'); return; }
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
               expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration, change: { type: 'extract', name } }));
           });
