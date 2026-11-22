@@ -39,8 +39,17 @@ test('inline format writes and removes the same transition as style properties',
 
 test('reads the animation back from classes or inline style', () => {
   const { animation } = createInteractions();
-  expect(animation('p-2 transition-all duration-200 ease-in-out hover:duration-700', '')).toEqual({ duration: '200ms', easing: 'ease-in-out' });
-  expect(animation('duration-[250ms] ease-[cubic-bezier(0.2,0,0,1)]', '')).toEqual({ duration: '250ms', easing: 'cubic-bezier(0.2,0,0,1)' });
-  expect(animation('', 'color: red; transition-duration: 300ms; transition-timing-function: linear;')).toEqual({ duration: '300ms', easing: 'linear' });
-  expect(animation('p-2', '')).toEqual({ duration: '', easing: 'ease-out' });
+  expect(animation('p-2 transition-all duration-200 ease-in-out hover:duration-700', '')).toMatchObject({ duration: '200ms', easing: 'ease-in-out', inline: false });
+  expect(animation('duration-[250ms] ease-[cubic-bezier(0.2,0,0,1)]', '')).toMatchObject({ duration: '250ms', easing: 'cubic-bezier(0.2,0,0,1)' });
+  expect(animation('', 'color: red; transition-duration: 300ms; transition-timing-function: linear;')).toMatchObject({ duration: '300ms', easing: 'linear', inline: true });
+  expect(animation('p-2', '')).toMatchObject({ duration: '', easing: 'ease-out' });
+  // Review fixes: inline wins over classes, and a bare transition utility brings its default duration.
+  expect(animation('duration-200 ease-in', 'transition-duration: 500ms; transition-timing-function: linear')).toMatchObject({ duration: '500ms', easing: 'linear' });
+  expect(animation('transition hover:opacity-50', '')).toMatchObject({ duration: '150ms' });
+});
+
+test('a property edit keeps transition-behavior classes, and unreadable classes are refused', () => {
+  expect(edit(app('className="transition-all transition-discrete duration-200"'), { transitionProperty: 'opacity' }))
+    .toContain('className="transition-discrete duration-200 transition-opacity"');
+  expect(() => edit('const App = ({ className }) => <main><section className={className}>A</section></main>;', none)).toThrow(/UNSUPPORTED_OPERATION/);
 });
