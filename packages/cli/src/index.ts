@@ -12,6 +12,8 @@ if (args.includes('--help') || args.includes('-h')) {
 Usage: glide [target-port]            Start the editor for the dev server on that port.
                                       With no port, Glide looks for the dev server.
        glide install-skills [options] Copy the Glide skills for AI coding agents into this project.
+       glide mcp                      Run Glide's MCP server over stdio, for coding agents.
+       glide mcp install              Add Glide to this project's .mcp.json for Claude Code.
 
 Options:
   -h, --help        Show this help and exit
@@ -23,6 +25,8 @@ Options:
 PORT sets the editor port. Project settings are read from glide.config.json.`);
 } else if (args.includes('--version') || args.includes('-v')) {
   console.log(VERSION);
+} else if (args[0] === 'mcp') {
+  await import('./mcp.js');
 } else {
   await import('./start.js');
 }

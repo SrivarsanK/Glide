@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server, request as httpRequest, type ClientRequest, type IncomingMessage, type ServerResponse } from 'http';
 import type { Duplex } from 'stream';
+import { Server as TlsServer } from 'node:tls';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
@@ -12,6 +13,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { HistoryStore } from './history-manager.js';
 import { MutationService, contentDigest, type MutationOperation } from './mutation-service.js';
+import { handleMcp } from './mcp.js';
 import { ProjectPaths } from './project-paths.js';
 import { trustedRequest, validateMessage } from './session-security.js';
 import { finalizeEditorChanges } from './editor-git.js';
@@ -931,6 +933,11 @@ export function typingStep(operations: MutationOperation[]): { squashKey?: strin
 export class GlideServer {
   private sessionToken = randomBytes(32).toString('hex');
   private authenticated = new WeakSet<WebSocket>();
+  /** Agents reach Glide over MCP with this token, written to a run file only the user can read. */
+  private mcpToken = randomBytes(32).toString('hex');
+  private editors = new Set<WebSocket>();
+  private agentQueries = new Map<number, (result: any) => void>();
+  private agentQuerySequence = 0;
   private wss: WebSocketServer | null = null;
   private server: Server | null = null;
   private port: number;
@@ -990,6 +997,7 @@ export class GlideServer {
    */
   public async attach(httpServer: Server): Promise<(req: IncomingMessage, res: ServerResponse, next: () => void) => void> {
     this.hosted = { httpServer };
+    if (httpServer.listening) this.writeMcpRunFile(); else httpServer.once('listening', () => this.writeMcpRunFile());
     await this.start();
     // The glide command writes the component registry itself; attached, nothing else would.
     this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
@@ -1005,6 +1013,107 @@ export class GlideServer {
    */
   private isolated(): boolean {
     return !!this.hosted && !this.config.remoteAccess;
+  }
+
+  private mcpRunFile(): string {
+    return path.join(this.projectPaths.root, 'node_modules', '.cache', 'glide', 'mcp.json');
+  }
+
+  /** Tells `glide mcp` where this server listens; readable only by the user, because it holds the token. */
+  private writeMcpRunFile(): void {
+    try {
+      const file = this.mcpRunFile();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      // The address the server listens on: a dev server bound to `localhost` may listen on IPv6 only.
+      const address = (this.hosted?.httpServer ?? this.server)?.address();
+      const ip = address && typeof address === 'object' && !['::', '0.0.0.0'].includes(address.address) ? address.address : '127.0.0.1';
+      const host = ip.includes(':') ? `[${ip}]` : ip;
+      // An attached HTTPS dev server (a TLS server) answers https only.
+      const scheme = this.hosted?.httpServer instanceof TlsServer ? 'https' : 'http';
+      fs.writeFileSync(file, JSON.stringify({ url: `${scheme}://${host}:${this.servedPort()}/__glide/mcp`, token: this.mcpToken, pid: process.pid }), { mode: 0o600 });
+    } catch (error) {
+      console.warn('[Glide] Could not write the MCP run file:', error);
+    }
+  }
+
+  /** The editor answers questions about the live page; the newest open editor is asked. */
+  private askEditor(query: string): Promise<any> {
+    const editor = [...this.editors].pop();
+    if (!editor) return Promise.reject(new Error('NO_EDITOR: Open the Glide editor so the agent can see the live page.'));
+    const id = ++this.agentQuerySequence;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.agentQueries.delete(id); reject(new Error('NO_EDITOR: The Glide editor did not answer.')); }, 5000);
+      this.agentQueries.set(id, result => { clearTimeout(timer); resolve(result); });
+      editor.send(JSON.stringify({ type: 'agent-query', id, query }));
+    });
+  }
+
+  private async handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const send = (status: number, body?: unknown) => {
+      res.writeHead(status, body === undefined ? {} : { 'Content-Type': 'application/json' });
+      res.end(body === undefined ? undefined : JSON.stringify(body));
+    };
+    // Agents are not browsers: any page that sends an Origin is refused, whatever its host.
+    if (req.headers.origin !== undefined) return send(403, { error: 'Browser requests are not accepted.' });
+    if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return send(405); }
+    const auth = Buffer.from(String(req.headers.authorization ?? ''));
+    const expected = Buffer.from(`Bearer ${this.mcpToken}`);
+    if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) return send(401, { error: 'Missing or wrong MCP token. Use `glide mcp`.' });
+    // Bytes first, decoded once: a character split across two chunks stays one character.
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size > 1024 * 1024) return send(413);
+      chunks.push(chunk as Buffer);
+    }
+    let body: unknown;
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); }
+    const reply = await handleMcp(body, { paths: this.projectPaths, mutations: this.mutations,
+      entryFile: () => findProjectEntryFile(this.projectPaths.root), askEditor: query => this.askEditor(query),
+      // The write is recorded as Glide's own, so the watcher stays quiet; tell open editors here instead.
+      committed: file => { this.announceDrift(file); this.broadcast({ type: 'HISTORY_UPDATE', ...this.history.getState() }); } });
+    if (reply === null) return send(202);
+    send(200, reply);
+  }
+
+  /** A source file changed: bump its generation and send open editors the new elements, tree and digest. */
+  private announceDrift(filePath: string): void {
+    const normPath = normalizePathKey(filePath);
+    this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
+    console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
+
+    // Bidirectional sync: parse JSX elements on drift and broadcast scene_update to overlay
+    try {
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        if (['.tsx', '.jsx', '.js', '.ts'].includes(ext)) {
+          const code = fs.readFileSync(filePath, 'utf-8');
+          const elements = parseJSXElements(code, filePath);
+          this.broadcast({
+            type: 'scene_update',
+            file: filePath,
+            elements,
+            generation: this.fileGenerations.get(normPath) || 0
+          });
+
+          // Proactively update component tree if valid
+          try {
+            const tree = buildComponentTree(code, filePath);
+            this.broadcast({
+              type: 'tree',
+              file: filePath,
+              tree,
+              workspaceObjects: listWorkspaceObjects(code, filePath),
+              digest: contentDigest(code),
+              generation: this.fileGenerations.get(normPath) || 0
+            });
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[Glide] Failed to parse JSX elements on external drift:', err);
+    }
   }
 
   private servedPort(): number {
@@ -1024,6 +1133,16 @@ export class GlideServer {
           if (this.hosted && next && !pathname.startsWith('/__glide/') && pathname !== '/__glide'
             && !pathname.startsWith('/__glide_assets__/')) {
             next();
+            return;
+          }
+          // The MCP route checks for itself: no Origin (so no browser) and the run file's token. The bridge
+          // uses the run file's loopback address, which a remoteAccess host list may not include.
+          if (pathname === '/__glide/mcp') {
+            this.handleMcpRequest(req, res).catch(error => {
+              // An aborted upload leaves nothing to answer; anything else gets a 500 instead of a crash.
+              if (!res.headersSent && !res.destroyed) { res.writeHead(500); res.end(); }
+              if (!req.destroyed) console.warn('[Glide] MCP request failed:', error);
+            });
             return;
           }
           const port = this.servedPort();
@@ -1111,40 +1230,7 @@ export class GlideServer {
             console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
             return;
           }
-          this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
-          console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
-
-          // Bidirectional sync: parse JSX elements on drift and broadcast scene_update to overlay
-          try {
-            if (fs.existsSync(filePath)) {
-              const ext = path.extname(filePath).toLowerCase();
-              if (['.tsx', '.jsx', '.js', '.ts'].includes(ext)) {
-                const code = fs.readFileSync(filePath, 'utf-8');
-                const elements = parseJSXElements(code, filePath);
-                this.broadcast({
-                  type: 'scene_update',
-                  file: filePath,
-                  elements,
-                  generation: this.fileGenerations.get(normPath) || 0
-                });
-
-                // Proactively update component tree if valid
-                try {
-                  const tree = buildComponentTree(code, filePath);
-                  this.broadcast({
-                    type: 'tree',
-                    file: filePath,
-                    tree,
-                    workspaceObjects: listWorkspaceObjects(code, filePath),
-                    digest: contentDigest(code),
-                    generation: this.fileGenerations.get(normPath) || 0
-                  });
-                } catch {}
-              }
-            }
-          } catch (err) {
-            console.warn('[Glide] Failed to parse JSX elements on external drift:', err);
-          }
+          this.announceDrift(filePath);
         });
         this.watcher.on('error', (err: any) => {
           console.error('[Glide Watcher] Watcher error:', err);
@@ -1204,6 +1290,8 @@ export class GlideServer {
                   return;
                 }
                 this.authenticated.add(ws);
+                this.editors.add(ws);
+                ws.on('close', () => this.editors.delete(ws));
                 clearTimeout(timer);
                 // The editor writes inline styles by default when the project cannot render a Tailwind class.
                 ws.send(JSON.stringify({ type: 'authenticated', success: true, tailwind: loadTailwindTheme(this.projectPaths.root).version !== null }));
@@ -1212,6 +1300,12 @@ export class GlideServer {
 
               if (['edit', 'batch-edit', 'insert', 'reorder', 'reparent', 'group', 'ungroup', 'arrange'].includes(message.type)) {
                 await this.handleSourceMutation(ws, message);
+                return;
+              }
+
+              if (message.type === 'agent-query-result') {
+                this.agentQueries.get(message.id)?.(message.result);
+                this.agentQueries.delete(message.id);
                 return;
               }
 
@@ -1579,6 +1673,7 @@ export class GlideServer {
         });
 
         this.server!.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
+          this.writeMcpRunFile();
           resolve();
         });
       } catch (err) {
@@ -1588,6 +1683,7 @@ export class GlideServer {
   }
 
   public async stop(): Promise<void> {
+    try { fs.rmSync(this.mcpRunFile(), { force: true }); } catch {}
     // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
     if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
     if (this.stopRegistry) {
