@@ -80,6 +80,8 @@ export function findJSXElementAt(
 }
 
 const DEFAULT_THEME = defaultTailwindTheme();
+/** Starting styles of inserted elements that have no per-property class rule. */
+const INSERT_CLASSES: Record<string, string> = { 'display:inline-block': 'inline-block', 'borderRadius:50%': 'rounded-[50%]' };
 const SPACING_PREFIXES: Record<string, string> = {
   marginLeft: 'ml-', marginRight: 'mr-', marginTop: 'mt-', marginBottom: 'mb-', margin: 'm-',
   paddingLeft: 'pl-', paddingRight: 'pr-', paddingTop: 'pt-', paddingBottom: 'pb-', padding: 'p-',
@@ -597,7 +599,14 @@ export function transformJSXBatch(source: string, operations: JSXMutation[], opt
         break;
       default:
         if (!structuralKinds.has(change.type)) throw new Error('UNSUPPORTED_OPERATION: This operation kind is not supported.');
-        mutateStructure(ast, targets[index], change, resolve);
+        mutateStructure(ast, targets[index], change, resolve, (node, styles) => {
+          // Auto follows the project: Tailwind when it has a Tailwind theme, inline styles otherwise.
+          const tailwind = change.authoringRepresentation === 'tailwind'
+            || (!change.authoringRepresentation && theme.version !== null);
+          if (!tailwind) return mutateStyle(node, styles);
+          const classes = Object.entries(styles).map(([property, value]) => INSERT_CLASSES[`${property}:${value}`] ?? getNewClass(property, value, theme));
+          mutateClass(node, 'className', classes.join(' '), undefined, undefined, theme);
+        });
     }
   });
   const code = printEdited(source, ast);

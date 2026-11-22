@@ -19,11 +19,46 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     let block = stamped;
     while (block && win.getComputedStyle(block).position === 'static' && win.getComputedStyle(block).transform === 'none') block = block.parentElement;
     const rect = block ? block.getBoundingClientRect() : { left: -win.scrollX, top: -win.scrollY };
+    const parentId = stamped.getAttribute(attributes.source) || '';
     return {
-      parentId: stamped.getAttribute(attributes.source) || '',
+      parentId,
       x: Math.round(x - rect.left - (block ? block.clientLeft : 0) + (block ? block.scrollLeft : 0)),
       y: Math.round(y - rect.top - (block ? block.clientTop : 0) + (block ? block.scrollTop : 0)),
+      ...siblingAt(stamped, parentId, x, y),
     };
+  }
+
+  /**
+   * The in-flow child a new element goes next to, in the container's reading order.
+   * Only children stamped from the container's own file can be its direct JSX children.
+   */
+  function siblingAt(container: any, parentId: string, x: number, y: number): { siblingId?: string; position?: 'before' | 'after' } {
+    const file = (id: string) => id.replace(/:\d+:\d+(?::[a-fA-F0-9]+)?$/, '');
+    const style = win.getComputedStyle(container);
+    const display = String(style.display || ''), direction = String(style.flexDirection || '');
+    const flex = display.indexOf('flex') >= 0, reverse = flex && direction.indexOf('reverse') >= 0;
+    const row = flex && direction.indexOf('row') === 0;
+    const wraps = display.indexOf('grid') >= 0 || (row && style.flexWrap && style.flexWrap !== 'nowrap');
+    // `wrap-reverse` stacks the lines bottom to top, whatever the row direction.
+    const upward = row && style.flexWrap === 'wrap-reverse';
+    const items = Array.prototype.slice.call(container.children || []).filter((child: any) => {
+      const id = child.getAttribute(attributes.source), position = win.getComputedStyle(child).position;
+      return id && file(id) === file(parentId) && position !== 'absolute' && position !== 'fixed';
+    }).map((child: any) => ({ id: child.getAttribute(attributes.source), r: child.getBoundingClientRect() }));
+    // Items of one wrapped line overlap vertically, but unequal heights align to either edge: the line spans them all.
+    const lineOf = (r: any) => items.reduce((line: any, item: any) => item.r.top < line.bottom && item.r.top + item.r.height > line.top
+      ? { top: Math.min(line.top, item.r.top), bottom: Math.max(line.bottom, item.r.top + item.r.height) } : line, { top: r.top, bottom: r.top + r.height });
+    for (const { id, r } of items) {
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      // A reversed row runs right to left, also within each wrapped line.
+      const later = reverse && row ? cx < x : cx > x;
+      // A grid item can span rows, so only a flex line (which no item spans) takes the union.
+      const line = wraps ? (flex ? lineOf(r) : { top: r.top, bottom: r.top + r.height }) : null;
+      const after = line ? (upward ? line.bottom < y || (line.top < y && later) : line.top > y || (line.bottom > y && later))
+        : row ? later : (reverse ? cy < y : cy > y);
+      if (after) return { siblingId: id, position: 'before' };
+    }
+    return items.length ? { siblingId: items[items.length - 1].id, position: 'after' } : {};
   }
 
   function stampedElements(): any[] {
