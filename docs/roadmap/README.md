@@ -13,7 +13,8 @@ at a time. Each item has its own spec file in this folder.
 
 **The routine, for Claude or by hand:**
 1. Read this file. Take the row marked `in progress`. Otherwise, if a row is `needs commit`,
-   `needs push` or `in review`, do the next step its note names. Committing, pushing and opening a
+   `needs push` or `in review`, do the next step its note names. An `in review` row whose only next
+   step is the merge has nothing to do now, so move on. Committing, pushing and opening a
    PR still need the user's go-ahead. Otherwise take the first `todo` row whose dependencies are
    `done` or `in review`. When a dependency is only `in review`, branch from that dependency's
    branch (stacked PRs).
