@@ -108,3 +108,9 @@ test('link-info names a containing overlay only when every rendered instance sha
   expect(ask([inside('a'), inside('a')])).toMatchObject({ inPopover: 'a', overlayMixed: false });
   expect(ask([inside('a'), inside('b')])).toMatchObject({ inPopover: null, overlayMixed: true });
 });
+
+test('lists the classes an element changes to in each state', () => {
+  expect(interactions.states('px-4 bg-sky-400 hover:bg-sky-500 hover:shadow active:scale-95 md:hover:bg-red-500 focus-visible:ring'))
+    .toEqual({ hover: ['bg-sky-500', 'shadow'], active: ['scale-95'], 'focus-visible': ['ring'] });
+  expect(interactions.states('')).toEqual({ hover: [], active: [], 'focus-visible': [] });
+});

@@ -1,6 +1,6 @@
 # B3: Hover, press and focus states
 
-Status: todo · Size: S · Depends on: B1 · Branch: `feat/b3-states`
+Status: **in review** · Size: S · Depends on: B1 · Branch: `feat/b3-states`
 
 ## Goal
 
@@ -18,11 +18,11 @@ So this item is mostly UI.
 
 ## Steps
 
-- [ ] In the Interactions panel, add "While hovering", "While pressed" and "When focused". Each one sets
+- [x] In the Interactions panel, add "While hovering", "While pressed" and "When focused". Each one sets
   the state select and shows which properties already differ in that state, read from the element's
   classes.
-- [ ] Offer to add a transition at the same time (B4) so state changes animate.
-- [ ] In inline-format projects, explain why states are unavailable instead of showing an error.
+- [ ] Offer to add a transition at the same time (moved to B4) so state changes animate.
+- [x] In inline-format projects, explain why states are unavailable instead of showing an error.
 
 ## Tests
 

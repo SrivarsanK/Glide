@@ -37,8 +37,8 @@ at a time. Each item has its own spec file in this folder.
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **in review**: PR #26 (stacked on #25) |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **in review**: PR #27 (stacked on #26) |
 | 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR #28 (stacked on #27) |
-| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR from `feat/b2-overlays` (stacked on B1) |
-| 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | todo |
+| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR #29 (stacked on #28) |
+| 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **in review**: PR from `feat/b3-states` (stacked on B2) |
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | todo |
 | 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | todo |
 | 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | todo |
@@ -171,3 +171,7 @@ flowchart LR
   the `popover` attribute (A2 can add both). Checked in the editor with React 19: the written button renders
   `popovertarget`, and in Preview the trigger opened the overlay and Close hid it. 472 tests pass. Not done:
   placement and backdrop options; React 18 rendering of `popoverTarget` not checked.
+- 2026-11-21: CodeRabbit's free plan rate-limited the stacked PR reviews; they are requested one at a time.
+  B3 done on `feat/b3-states`: Hover, Pressed and Focus buttons in the Interactions panel switch the header's
+  state picker, and a line lists the state classes the element has; inline-format projects get an explanation
+  instead. Checked in the editor (inline and Tailwind format). 473 tests pass. The transition offer moves to B4.

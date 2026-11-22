@@ -1907,6 +1907,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 <label class="props-row" id="interaction-newtab-row"><input type="checkbox" id="interaction-newtab"> <span>Open in a new tab</span></label>
                 <div class="props-row"><button class="icon-btn" id="interaction-apply" style="flex:1;">Apply</button></div>
                 <small id="interaction-problem" style="display:none;color:var(--danger);"></small>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">States</span>
+                  <div class="icon-btn-group" style="flex:1;">
+                    <button class="icon-btn" data-interaction-state="hover" title="Edit how it looks while hovered">Hover</button>
+                    <button class="icon-btn" data-interaction-state="active" title="Edit how it looks while pressed">Pressed</button>
+                    <button class="icon-btn" data-interaction-state="focus-visible" title="Edit how it looks when focused from the keyboard">Focus</button>
+                  </div>
+                </div>
+                <small id="interaction-states" style="display:block;color:var(--text-secondary);"></small>
               </div>
 
               <!-- Layout (Flex) — shown only when display=flex -->
@@ -7076,6 +7085,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const inline = (selectedComputedStyles && selectedComputedStyles.inlineStyle) || '';
             const inlineColor = { color: /(^|;)\\s*color\\s*:/i, backgroundColor: /(^|;)\\s*background(-color)?\\s*:/i,
               borderColor: /(^|;)\\s*border(-color)?\\s*:/i };
+            // A state class loses to the element's own inline value, so the edit could never show.
+            if (captured.pseudoState && captured.authoringRepresentation !== 'inline' && Object.keys(styles).some(key => inlineColor[key] && inlineColor[key].test(inline))) {
+              showToast('info', 'This element sets that color inline, which wins over ' + captured.pseudoState + ' styles. Remove the inline color first, or edit the normal look.');
+              return;
+            }
             if (!captured.authoringRepresentation && Object.keys(styles).every(key => inlineColor[key] && !inlineColor[key].test(inline))) {
               captured = { ...captured, type: 'multi-class' };
             }
@@ -7328,9 +7342,36 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (current.action === 'open-overlay') overlay.value = current.value;
               document.getElementById('interaction-newtab').checked = !!current.newTab;
               syncInteractionFields();
+              renderStates();
               section.style.display = 'block';
             });
           }
+          const STATE_NAMES = { hover: 'Hover', active: 'Pressed', 'focus-visible': 'Focus' };
+          const STATE_WHILE = { hover: 'hovered', active: 'pressed', 'focus-visible': 'focused' };
+          /** States reuse the header's state picker: choosing one makes style edits apply in that state. */
+          function renderStates() {
+            const picker = document.getElementById('edit-pseudo-state');
+            document.querySelectorAll('[data-interaction-state]').forEach(button => button.classList.toggle('active', picker.value === button.dataset.interactionState));
+            const note = document.getElementById('interaction-states');
+            if (document.getElementById('edit-representation').value === 'inline') {
+              note.textContent = 'States are written as Tailwind classes. Set the Style format to Tailwind to use them.';
+              return;
+            }
+            const found = interactions.states(interactionInfo ? interactionInfo.className : '');
+            const summary = Object.keys(STATE_NAMES).filter(key => found[key].length).map(key => STATE_NAMES[key] + ': ' + found[key].join(' ')).join(' · ');
+            note.textContent = (STATE_WHILE[picker.value] ? 'Style edits now apply while ' + STATE_WHILE[picker.value] + '. Choose it again to edit the normal look. ' : '')
+              + (summary || 'No state styles yet.');
+          }
+          document.querySelectorAll('[data-interaction-state]').forEach(button => button.addEventListener('click', () => {
+            if (document.getElementById('edit-representation').value !== 'inline') {
+              const picker = document.getElementById('edit-pseudo-state');
+              picker.value = picker.value === button.dataset.interactionState ? '' : button.dataset.interactionState;
+              picker.dispatchEvent(new Event('change'));
+            }
+            renderStates();
+          }));
+          document.getElementById('edit-pseudo-state').addEventListener('change', renderStates);
+          document.getElementById('edit-representation').addEventListener('change', renderStates);
           document.getElementById('interaction-action').addEventListener('change', syncInteractionFields);
           document.getElementById('interaction-show').addEventListener('click', () => {
             const id = document.getElementById('interaction-overlay').value;
