@@ -275,7 +275,9 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     const kids = target.children;
     // Without a sibling the child goes last, before the whitespace that indents the closing tag.
     const last = blank(kids[kids.length - 1]) ? kids.length - 1 : kids.length;
-    const index = siblingId ? kids.indexOf(resolve(siblingId) as any) : -1;
+    const sibling = siblingId ? resolve(siblingId) : undefined;
+    // A sibling inside a fragment or `{…}` renders as a child but is not one in source: its direct child is the boundary.
+    const index = sibling ? kids.findIndex(kid => { let found = false; t.traverseFast(kid, node => { if (node === sibling) found = true; }); return found; }) : -1;
     const at = index < 0 ? last : position === 'before' ? index : index + 1;
     const separator = kids.find((item, i) => blank(item) && item.value.includes('\n') && i + 1 < kids.length && !blank(kids[i + 1]));
     const loc = target.loc;

@@ -359,20 +359,27 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   const unset = valStr === '' && !toggle;
   const bare = (c: string) => splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
   const replaces = (c: string) => inScope(c)
-    && (toggle ? bare(c) === 'hidden' : matchesProperty(c, property, theme));
+    && (toggle ? bare(c) === 'hidden' && ownHide(c) : matchesProperty(c, property, theme));
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
   const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
   // The hiding class must beat the display class: an important one wins over a plain one, and
   // Tailwind v4 orders same-property classes alphabetically, so `inline-block` beats a plain `hidden`.
   const important = (c: string) => /^!|!$/.test(splitClassVariants(c).pop()!);
-  const hiding = (displays: string[]) => displays.some(c => important(c) || (theme.version === 4 && bare(c) > 'hidden'))
-    ? (theme.version === 4 ? 'hidden!' : '!hidden') : 'hidden';
+  const strongHidden = theme.version === 4 ? 'hidden!' : '!hidden';
+  const hiding = (displays: string[]) => displays.some(c => important(c) || (theme.version === 4 && bare(c) > 'hidden')) ? strongHidden : 'hidden';
   const displays = classes.filter(c => inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) !== 'hidden');
-  const newClass = toggle ? (valStr === 'none' ? hiding(displays) : '')
+  // A display class with more variants (`md:flex` when hiding at the base) wins where it applies, so only an important hide beats it.
+  const wider = classes.some(c => !inScope(c) && DISPLAY_NAMES.has(bare(c)) && bare(c) !== 'hidden'
+    && variants.every(variant => splitClassVariants(c).slice(0, -1).includes(variant)));
+  const newClass = toggle ? (valStr === 'none' ? (wider ? strongHidden : hiding(displays)) : '')
     : unset ? '' : getNewClass(property, finalValue, theme, existingTokens);
   if (!newClass && !toggle && !unset) return null;
   // A display edit on a hidden element keeps it hidden: the hiding class is upgraded if the new display would win.
   const hidden = classes.filter(c => inScope(c) && bare(c) === 'hidden');
+  // Hide stacks an important `hidden` on an authored plain one, and show takes the important one off first, so `hidden md:flex` survives.
+  function ownHide(c: string) {
+    return valStr === 'none' ? important(c) === important(newClass) : important(c) || !hidden.some(important);
+  }
   const upgrade = property === 'display' && !toggle && !unset && hidden.length > 0 && hidden.every(c => !important(c)) && hiding([newClass]) !== 'hidden';
 
   const related = overlappingProperties(property);
