@@ -87,6 +87,28 @@ const ATTRIBUTES = new Set(['href', 'target', 'rel', 'id', 'type', 'title', 'alt
 export const isEditableAttribute = (name: string) => ATTRIBUTES.has(name) || /^aria-[a-z]+$/.test(name);
 const URL_SCHEMES: Record<string, Set<string>> = { href: new Set(['http', 'https', 'mailto', 'tel']), src: new Set(['http', 'https']) };
 
+/** An editable attribute as HTML templates spell it (lowercase, `popovertarget`), or null when the editor may not set it. */
+export function templateAttributeName(name: string): string | null {
+  const lower = name.toLowerCase();
+  return [...ATTRIBUTES].some(item => item.toLowerCase() === lower) || /^aria-[a-z]+$/.test(lower) ? lower : null;
+}
+
+/** The checks every writer applies to an attribute value: its type, link schemes and id format. */
+export function checkAttributeValue(name: string, value: unknown): string | true | null {
+  if (value !== null && value !== true && typeof value !== 'string') throw new Error('INVALID_PROP: An attribute value is text, true, or null to remove it.');
+  if (typeof value !== 'string') return value;
+  // Character references are decoded in attribute text, so `javascript&#58;` would run as `javascript:`.
+  // HTML decodes a numeric reference even without its semicolon (`&#58alert`), so any `&#` counts.
+  if (URL_SCHEMES[name] && /&(#|[a-z][a-z0-9]*;)/i.test(value)) {
+    throw new Error(`INVALID_PROP: Character references are not allowed in ${name}; type the character itself.`);
+  }
+  // Browsers ignore whitespace and control characters inside a scheme, so `java\nscript:` is still script.
+  const scheme = value.replace(/[\x00-\x20]/g, '').match(/^([a-z][a-z0-9+.-]*):/i)?.[1].toLowerCase();
+  if (URL_SCHEMES[name] && scheme && !URL_SCHEMES[name].has(scheme)) throw new Error(`INVALID_PROP: ${scheme}: links are not allowed in ${name}.`);
+  if (name === 'id' && !/^[A-Za-z][\w-]*$/.test(value)) throw new Error('INVALID_PROP: An id starts with a letter and uses letters, digits, - and _.');
+  return value;
+}
+
 /** Add, change (`string` or `true`) or remove (`null`) an attribute on a plain HTML element. */
 export function setAttribute(ast: any, node: t.JSXElement, name: string | undefined, value: unknown) {
   const opening = node.openingElement;
@@ -95,28 +117,18 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
     throw new Error('UNSUPPORTED_OPERATION: Components take props they declare; set this on an HTML element, or add the prop in source.');
   }
   if (opening.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may supply or override this attribute; edit it in source.');
-  if (value !== null && value !== true && typeof value !== 'string') throw new Error('INVALID_PROP: An attribute value is text, true, or null to remove it.');
+  checkAttributeValue(name, value);
   // HTML attribute names ignore case, so a hand-written `popovertarget` is the same attribute as `popoverTarget`.
   const named = (key: string) => opening.attributes.filter((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name.toLowerCase() === key.toLowerCase());
   const existing = named(name);
   if (existing.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   if (existing[0] && literal(existing[0].value) === undefined) throw new Error('UNSUPPORTED_OPERATION: This attribute is computed; edit it in source.');
-  if (typeof value === 'string') {
-    // JSX decodes character references in attribute text, so `javascript&#58;` would run as `javascript:`.
-    if (URL_SCHEMES[name] && /&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(value)) {
-      throw new Error(`INVALID_PROP: Character references are not allowed in ${name}; type the character itself.`);
-    }
-    // Browsers ignore whitespace and control characters inside a scheme, so `java\nscript:` is still script.
-    const scheme = value.replace(/[\x00-\x20]/g, '').match(/^([a-z][a-z0-9+.-]*):/i)?.[1].toLowerCase();
-    if (URL_SCHEMES[name] && scheme && !URL_SCHEMES[name].has(scheme)) throw new Error(`INVALID_PROP: ${scheme}: links are not allowed in ${name}.`);
-    if (name === 'id') {
-      if (!/^[A-Za-z][\w-]*$/.test(value)) throw new Error('INVALID_PROP: An id starts with a letter and uses letters, digits, - and _.');
-      t.traverseFast(ast, item => {
-        if (t.isJSXAttribute(item) && !existing.includes(item) && t.isJSXIdentifier(item.name, { name: 'id' }) && literal(item.value) === value) {
-          throw new Error(`INVALID_PROP: The id "${value}" is already used in this file.`);
-        }
-      });
-    }
+  if (name === 'id' && typeof value === 'string') {
+    t.traverseFast(ast, item => {
+      if (t.isJSXAttribute(item) && !existing.includes(item) && t.isJSXIdentifier(item.name, { name: 'id' }) && literal(item.value) === value) {
+        throw new Error(`INVALID_PROP: The id "${value}" is already used in this file.`);
+      }
+    });
   }
   const write = (key: string, next: string | true | null) => {
     const current = named(key)[0];

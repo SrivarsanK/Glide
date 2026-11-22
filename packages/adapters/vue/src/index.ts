@@ -29,18 +29,76 @@ function replace(code: string, start: number, end: number, text: string) {
   if (parse(result).errors.length) throw new Error('INVALID_OUTPUT: The edit produced an invalid SFC.');
   return result;
 }
-function attribute(code: string, id: string, name: string, value: string | Record<string, string>) {
+/** The static attribute `name`, or null; throws when a binding may set it or it is duplicated. */
+function staticAttribute(node: any, name: string): any {
+  if (node.props.some((p: any) => p.type === 7 && p.name === 'bind'
+    && (!p.arg || !p.arg.isStatic || p.arg.content.toLowerCase() === name.toLowerCase()))) throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Vue binding in source.');
+  // HTML attribute names ignore case, and the parser keeps them as written.
+  const attrs = node.props.filter((p: any) => p.type === 6 && p.name.toLowerCase() === name.toLowerCase());
+  if (attrs.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
+  return attrs[0] ?? null;
+}
+function attribute(code: string, id: string, name: string, value: string | true | null | Record<string, string>) {
   const node = target(code, id);
   if (node === null) return code;
-  if (node.props.some((p: any) => p.type === 7 && p.name === 'bind'
-    && (!p.arg || !p.arg.isStatic || p.arg.content === name))) throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Vue binding in source.');
-  const attrs = node.props.filter((p: any) => p.type === 6 && p.name === name);
-  if (attrs.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
-  const attr = attrs[0];
-  const next = typeof value === 'string' ? value : mergeInlineStyle(attr?.value?.content || '', value);
-  if (attr) return replace(code, attr.loc.start.offset, attr.loc.end.offset, `${name}="${escape(next)}"`);
+  const attr = staticAttribute(node, name);
+  if (value === null) {
+    if (!attr) return code;
+    let start = attr.loc.start.offset;
+    while (start > 0 && /\s/.test(code[start - 1])) start--;
+    return replace(code, start, attr.loc.end.offset, '');
+  }
+  const text = value === true ? name : `${name}="${escape(typeof value === 'string' ? value : mergeInlineStyle(attr?.value?.content || '', value))}"`;
+  if (attr) return replace(code, attr.loc.start.offset, attr.loc.end.offset, text);
   const offset = node.props.length ? node.props[node.props.length - 1].loc.end.offset : node.loc.start.offset + node.tag.length + 1;
-  return replace(code, offset, offset, ` ${name}="${escape(next)}"`);
+  return replace(code, offset, offset, ` ${text}`);
+}
+/** A static attribute's value (true when it has none) or null when it is absent; throws when it is bound. */
+export function readVueAttribute(code: string, id: string, name: string): string | true | null {
+  const node = target(code, id);
+  if (node === null) throw new Error('NODE_NOT_FOUND: No template element exists here.');
+  const attr = staticAttribute(node, name);
+  return attr ? attr.value?.content ?? true : null;
+}
+/** Add, change (text, or true for a bare attribute) or remove (null) a static attribute on an HTML element. */
+export function updateVueSFCAttribute(code: string, id: string, name: string, value: string | true | null): string {
+  // tagType 0 is a plain element; components, slots and <template> decide what they render.
+  const node = target(code, id);
+  if (node && node.tagType !== 0) throw new Error('UNSUPPORTED_OPERATION: Components take props they declare; set this on an HTML element, or add the prop in source.');
+  return attribute(code, id, name, value);
+}
+function htmlElement(code: string, id: string): any {
+  const node = target(code, id);
+  if (node === null) throw new Error('NODE_NOT_FOUND: No template element exists here.');
+  if (node.tagType !== 0) throw new Error('UNSUPPORTED_OPERATION: Only HTML elements can change their tag; a component decides what it renders.');
+  return node;
+}
+/** The element at `id` with what a retag checks: its ancestors (nearest first), children and descendants. */
+export function readVueTag(code: string, id: string) {
+  const node = htmlElement(code, id);
+  const all: any[] = [];
+  const walk = (item: any) => { if (item.type === 1) all.push(item); for (const child of item.children || []) walk(child); };
+  for (const child of parse(code).descriptor.template?.ast?.children || []) walk(child);
+  const start = (item: any) => item.loc.start.offset, end = (item: any) => item.loc.end.offset;
+  // A <template> wrapper (v-for, v-if, slots; tagType 3) renders only its children, so it is see-through here.
+  const rendered = (item: any) => item.tagType !== 3;
+  const inside = all.filter(item => start(item) > start(node) && end(item) <= end(node) && rendered(item));
+  const focusable = (item: any) => item.props.some((p: any) => (p.type === 6 && p.name === 'tabindex') || (p.type === 7 && p.arg?.content === 'tabindex'));
+  const children = (item: any): string[] => item.children.filter((child: any) => child.type === 1)
+    .flatMap((child: any) => rendered(child) ? [child.tag as string] : children(child));
+  return { name: node.tag as string,
+    ancestors: all.filter(item => start(item) < start(node) && end(item) >= end(node) && rendered(item)).reverse().map(item => item.tag as string),
+    childTags: children(node),
+    descendants: inside.map(item => ({ tag: item.tag as string, focusable: focusable(item) })) };
+}
+/** Rename the element at `id`, opening and closing tag together. */
+export function renameVueTag(code: string, id: string, to: string): string {
+  const node = htmlElement(code, id);
+  const start = node.loc.start.offset, end = node.loc.end.offset, closing = `</${node.tag}>`;
+  if (!node.isSelfClosing && !node.loc.source.endsWith(closing)) throw new Error(`UNSUPPORTED_OPERATION: <${node.tag}> has no closing tag Glide can find; change it in source.`);
+  let next = code;
+  if (!node.isSelfClosing) next = next.slice(0, end - closing.length + 2) + to + next.slice(end - 1);
+  return replace(code, 0, code.length, next.slice(0, start + 1) + to + next.slice(start + 1 + node.tag.length));
 }
 export function updateVueSFCClass(code: string, id: string, classes: string): string { return attribute(code, id, 'class', classes); }
 export function updateVueSFCStyle(code: string, id: string, styles: Record<string, string>): string { return attribute(code, id, 'style', styles); }

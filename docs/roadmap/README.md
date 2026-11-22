@@ -44,8 +44,8 @@ at a time. Each item has its own spec file in this folder.
 | 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR #33 (stacked on #32) |
 | 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR #34 (stacked on #33) |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | **deferred**: see the spec for why |
-| 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | todo |
-| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review** (part 1): PR from `feat/c5-mcp-tools` (stacked on #34) |
+| 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | **in review** (part 1: attributes, retag): PR #36 (stacked on #35) |
+| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review** (part 1): PR #35 (stacked on #34) |
 
 Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
 (committed, not on GitHub), `in review` (PR open), `done` (merged), `deferred` (skipped for now; its spec says why).
@@ -200,3 +200,9 @@ flowchart LR
 - 2026-11-21: C3 deferred (multi-page sites only, needs injected JavaScript for "none" and a CSS writer undo can't
   track; agents can add the rule). C5 part 1 on `feat/c5-mcp-tools`: set_attribute, retag, duplicate_element,
   move_element, extract_component and get_guide, plus `glide mcp install --agent cursor|vscode|all`. 496 tests pass.
+- 2026-11-22: C4 part 1 on `feat/c4-attributes`: attribute edits and retag in Vue, Svelte, Astro and HTML through
+  shared rules (`checkAttributeValue`, `checkRetag`), so the Interactions panel and the MCP tools work there. Checked
+  in the Vue test app, including undo. 518 tests pass. Insert, delete and move in templates are deferred.
+- 2026-11-22: Addressed CodeRabbit's reviews of #27–#32 on their own branches and merged them up the stack: stricter
+  retag checks, interaction form state, safe toast text, Close overlay checks, case-insensitive JSX attributes,
+  animation reading order, and route rules per router. Summaries are on each PR. 521 tests pass.
