@@ -2,6 +2,9 @@
 const source = { type: 'string', description: 'An element reference: file:line:column (from get_selection, get_tree or data-gl-source).' };
 const expectedDigest = { type: 'string', description: 'The file digest from get_source. When the file changed since, the edit is refused (STALE_DIGEST).' };
 
+// What the attribute writer accepts: text, true for a bare attribute, or null to remove it (never false).
+const attributeValue = { anyOf: [{ type: 'string' }, { const: true }, { type: 'null' }] };
+
 export const MCP_TOOLS = [
   { name: 'get_project_info', description: 'Framework, Tailwind version, entry file and routes of the project Glide is editing. Call this first.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
@@ -23,10 +26,10 @@ export const MCP_TOOLS = [
   { name: 'delete_element', description: 'Delete one element and its children from the source.',
     inputSchema: { type: 'object', properties: { source, expectedDigest }, required: ['source'] }, annotations: { destructiveHint: true } },
   { name: 'set_attribute', description: 'Add, change or remove an attribute on an HTML element: href, target, rel, id, type, title, alt, src, name, placeholder, disabled, popover, popoverTarget, popoverTargetAction, role or aria-*. A value of null removes it; true writes it without a value.',
-    inputSchema: { type: 'object', properties: { source, name: { type: 'string' }, value: { type: ['string', 'boolean', 'null'] }, expectedDigest }, required: ['source', 'name', 'value'] },
+    inputSchema: { type: 'object', properties: { source, name: { type: 'string' }, value: attributeValue, expectedDigest }, required: ['source', 'name', 'value'] },
     annotations: { destructiveHint: false } },
   { name: 'retag', description: 'Change what an HTML element is (div, section, header, nav, a, button, h1-h6, p, li, ...), optionally setting attributes in the same edit: a link is retag to "a" with {href}; an overlay trigger is retag to "button" with {popoverTarget}. Refuses invalid HTML.',
-    inputSchema: { type: 'object', properties: { source, tag: { type: 'string' }, attributes: { type: 'object' }, expectedDigest }, required: ['source', 'tag'] },
+    inputSchema: { type: 'object', properties: { source, tag: { type: 'string' }, attributes: { type: 'object', additionalProperties: attributeValue }, expectedDigest }, required: ['source', 'tag'] },
     annotations: { destructiveHint: false } },
   { name: 'duplicate_element', description: 'Duplicate one element right after itself.',
     inputSchema: { type: 'object', properties: { source, expectedDigest }, required: ['source'] }, annotations: { destructiveHint: false } },
