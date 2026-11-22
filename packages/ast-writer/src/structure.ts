@@ -31,8 +31,10 @@ export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert'
 
 export const RETAG_TARGETS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'a', 'button',
   'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'figure', 'figcaption']);
+// Flow content a paragraph cannot hold (it takes phrasing content only).
 const BLOCK_TAGS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'p',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'figcaption', 'form', 'table']);
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'figcaption', 'form', 'table', 'pre', 'blockquote', 'dl', 'dt', 'dd',
+  'hr', 'address', 'fieldset', 'details', 'dialog', 'menu', 'hgroup', 'search']);
 const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'label']);
 
 /** What a retag needs to know about an element, read from JSX or from a template. Ancestors are nearest first. */
@@ -53,6 +55,7 @@ export function checkRetag(from: string, to: string, { ancestors, childTags, des
     throw new Error(`UNSUPPORTED_OPERATION: A <${to}> cannot contain links, buttons or form fields.`);
   }
   if (to === 'li' && !['ul', 'ol'].includes(ancestors[0] ?? '')) throw new Error('UNSUPPORTED_OPERATION: A list item must sit directly in a <ul> or <ol>.');
+  if (from === 'li' && ['ul', 'ol'].includes(ancestors[0] ?? '')) throw new Error('UNSUPPORTED_OPERATION: A list holds list items; change the list first.');
   if ((from === 'ul' || from === 'ol') && to !== 'ul' && to !== 'ol' && childTags.includes('li')) {
     throw new Error('UNSUPPORTED_OPERATION: Its list items need a list; change them first.');
   }
@@ -226,6 +229,7 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     const from = tagOf(target), to = change.tagName || '';
     if (!from || !/^[a-z]/.test(from)) throw new Error('UNSUPPORTED_OPERATION: Only HTML elements can change their tag; a component decides what it renders.');
     if (!RETAG_TARGETS.has(to)) throw new Error(`UNSUPPORTED_OPERATION: <${to}> is not a tag the editor can switch to.`);
+    if (target.openingElement.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may set attributes the new tag depends on; change the tag in source.');
     // An interaction (B1) changes the tag and its attributes together, so the attributes go first.
     for (const [name, value] of Object.entries(change.attributes || {})) setAttribute(ast, target, name, value);
     if (from === to) return;
@@ -233,7 +237,9 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     traverse(ast, { JSXElement(p: any) { if (p.node === target) p.findParent((q: any) => { const tag = tagOf(q.node); if (tag) ancestors.push(tag); return false; }); } });
     const descendants: t.JSXElement[] = [];
     t.traverseFast(target, item => { if (item !== target && t.isJSXElement(item)) descendants.push(item); });
-    checkRetag(from, to, { ancestors, childTags: target.children.flatMap(child => tagOf(child) ?? []),
+    // Fragments are transparent: their children render as this element's children.
+    const rendered = (node: t.JSXElement | t.JSXFragment): string[] => node.children.flatMap(child => t.isJSXFragment(child) ? rendered(child) : tagOf(child) ?? []);
+    checkRetag(from, to, { ancestors, childTags: rendered(target),
       descendants: descendants.map(item => ({ tag: tagOf(item), focusable: !!attributeOf(item, 'tabIndex') })),
       attribute: name => {
         const found = attributeOf(target, name);
