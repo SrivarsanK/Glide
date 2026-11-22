@@ -7321,7 +7321,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               item.addEventListener('click', () => {
                 const bar = document.getElementById('app-url');
                 let next;
-                try { next = new URL(route.path, bar.value.trim() || window.location.origin).href; } catch (_) { return; }
+                // The same forms loadApp accepts: a bare port is localhost, and a relative address is on this page's origin.
+                const typed = bar.value.trim(), base = /^\\d+$/.test(typed) ? 'http://localhost:' + typed : typed || window.location.origin;
+                try { next = new URL(route.path, new URL(base, window.location.href)).href; } catch (_) { showToast('error', 'Glide could not open ' + route.path + ' from the address ' + typed + '.'); return; }
                 bar.value = next;
                 loadApp(next);
               });
