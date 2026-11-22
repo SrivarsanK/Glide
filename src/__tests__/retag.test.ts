@@ -30,6 +30,12 @@ test('refuses changes that would make invalid HTML or drop attributes', () => {
   expect(() => retag(app('<p><span>A</span></p>'), '<span', 'div')).toThrow(/inside a paragraph/);
   expect(() => retag(app('<Card />'), '<Card', 'section')).toThrow(/component/);
   expect(() => retag(app('<div>A</div>'), '<div', 'script')).toThrow(/not a tag/);
+  // Review fixes: paragraph content, fragment-wrapped items, list children, spreads.
+  expect(() => retag(app('<div><pre>A</pre></div>'), '<div', 'p')).toThrow(/cannot contain block/);
+  expect(retag(app('<div><b>A</b></div>'), '<div', 'p')).toContain('<p><b>A</b></p>');
+  expect(() => retag(app('<ul><><li>A</li></></ul>'), '<ul', 'div')).toThrow(/list items need a list/);
+  expect(() => retag(app('<ul><li>A</li></ul>'), '<li', 'div')).toThrow(/A list holds list items/);
+  expect(() => retag(app('<div {...props}>Go</div>'), '<div', 'button')).toThrow(/spread/);
 });
 
 test('list items can move between list kinds', () => {

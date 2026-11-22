@@ -125,7 +125,8 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'rowGap': return name.startsWith('gap-y-');
     case 'opacity': return name.startsWith('opacity-');
     case 'display': { const shown = name.replace(/^!|!$/g, ''); return DISPLAY_NAMES.has(shown) && shown !== 'hidden'; }
-    case 'transitionProperty': return name === 'transition' || name.startsWith('transition-');
+    // transition-discrete and transition-normal set transition-behavior, not the property.
+    case 'transitionProperty': return name === 'transition' || (name.startsWith('transition-') && name !== 'transition-discrete' && name !== 'transition-normal');
     case 'transitionDuration': return name.startsWith('duration-');
     case 'transitionTimingFunction': return name.startsWith('ease-');
     // The overall radius replaces corner and side radii too.
@@ -462,8 +463,8 @@ function mutateClassExpression(expression: t.Expression, property: string, value
   const target = holders.at(0)
     ?? always.find(piece => piece.canAdd && !piece.shared)
     ?? (prepend ? undefined : always.find(piece => piece.canAdd && !piece.lockedBy));
-  // A removal (empty value) adds nothing, so it needs no class string to add to.
-  if (!target && !prepend && plan.added) {
+  // A removal (empty value) adds nothing, so it needs no class string to add to, but only when the classes could be read.
+  if (!target && !prepend && (plan.added || !pieces.length)) {
     const lockedBy = always.find(piece => piece.lockedBy)?.lockedBy;
     throw new Error(t.isIdentifier(expression, { name: 'className' })
       ? 'UNSUPPORTED_OPERATION: The classes are passed in through `className`. Edit them where the component is used.'
