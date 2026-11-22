@@ -1,14 +1,7 @@
-# Glide: Visual website editor - STOP MAKING MOCKUPS! Go directly edit the source code.
-
 <p align="center">
   <img src=".github/assets/docs/hero.svg" alt="Glide. Design visually. Ship real source code. Works with React, Vue, Svelte, Astro and HTML." width="100%">
 </p>
 
-<p align="center">
-  <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
-  <br>
-  <sub>The headline is selected. The <code>className</code> in the properties panel is read from <code>Hero.tsx</code>.</sub>
-</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@srivarsank/glide"><img alt="npm version" src="https://img.shields.io/npm/v/@srivarsank/glide?style=for-the-badge&label=npm&logo=npm&logoColor=eef1f5&labelColor=161b26&color=7dd3fc"></a>
@@ -38,6 +31,7 @@
   <a href="CONTRIBUTING.md"><b>Contributing</b></a>
 </p>
 
+# Glide: Visual website editor - STOP MAKING MOCKUPS ANYMORE!
 <br>
 
 Glide is a visual editor for the app you already run. Open it on your dev server, select an element on the live page, and change it the way you would in a design tool. Glide writes each change into the JSX, Vue, Svelte, Astro or HTML that renders the element, so every edit ends up as an ordinary diff that you review and commit.
