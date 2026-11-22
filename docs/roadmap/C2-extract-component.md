@@ -1,6 +1,6 @@
 # C2: Extract component
 
-Status: todo · Size: L · Depends on: A2 · Branch: `feat/c2-extract`
+Status: **in review** (v1: same file) · Size: L · Depends on: A2 · Branch: `feat/c2-extract`
 
 ## Goal
 
@@ -26,6 +26,14 @@ readable code.
   `resolveFile()` and `ProjectPaths.sourceFile()` may require the file to exist. If not, add creation
   with the same temp-file-and-rename write.
 - **The component registry updates itself** (`maintainRegistryFile`).
+
+## As built (2026-11-21)
+
+- v1 extracts into the same file, above the component that used the markup: one file, one transaction,
+  and the existing undo. Creating a file needs undo that can delete it again (history stores file contents
+  only), so a file of its own is the next step.
+- Refusals: markup using the surrounding component's bindings, a `key` (list item), a name that is not
+  PascalCase or is already bound in the file.
 
 ## Steps
 

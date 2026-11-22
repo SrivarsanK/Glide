@@ -41,8 +41,8 @@ at a time. Each item has its own spec file in this folder.
 | 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **in review**: PR #30 (stacked on #29) |
 | 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR #31 (stacked on #30) |
 | 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR #32 (stacked on #31) |
-| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR from `feat/c1-mcp` (stacked on B5) |
-| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | todo |
+| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR #33 (stacked on #32) |
+| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR from `feat/c2-extract` (stacked on C1) |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | todo |
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | todo |
 | 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | todo |
@@ -192,3 +192,8 @@ flowchart LR
   (project info, selection, tree, source, update_styles, set_text, delete_element), `glide mcp` stdio bridge
   (lists tools while Glide is stopped) and `glide mcp install` for Claude Code. Checked end to end: the CLI read
   the editor's selection and changed the heading's color through Glide. 492 tests pass.
+- 2026-11-21: C2 v1 done on `feat/c2-extract`: an `extract` structural change moves static markup into
+  `function Name()` above the component, in the same file, and uses `<Name />` in its place (one transaction, normal
+  undo). Refuses markup that uses the surrounding component's variables, list items with a key, and taken or
+  badly formed names. A Component section in the inspector runs it. Checked in the editor. 495 tests pass.
+  Not done: a file of its own (needs multi-file undo that can delete a created file) and props (v2).

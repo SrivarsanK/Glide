@@ -23,9 +23,11 @@ export interface StructuralChange {
   attributes?: Record<string, string | true | null>;
   /** False when the user clicked instead of dragging, so the size is only a default. */
   drawn?: boolean;
+  /** The component name an `extract` change creates. */
+  name?: string;
 }
 
-export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag']);
+export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag', 'extract']);
 
 const RETAG_TARGETS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'a', 'button',
   'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'figure', 'figcaption']);
@@ -35,6 +37,8 @@ const BLOCK_TAGS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main',
   'hr', 'address', 'fieldset', 'details', 'dialog', 'menu', 'hgroup', 'search']);
 const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'label']);
 const tagOf = (node: t.Node): string | null => t.isJSXElement(node) && t.isJSXIdentifier(node.openingElement.name) ? node.openingElement.name.name : null;
+/** Whether a binding is declared inside the extracted markup itself (such as a callback parameter). */
+const isInside = (inner: any, outer: any) => !!inner?.findParent((q: any) => q === outer);
 const attributeOf = (node: t.JSXElement, name: string) => node.openingElement.attributes.find((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name }));
 
 const traverse = (traverseModule as any).default || traverseModule;
@@ -158,6 +162,48 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
       }
     });
     return t.cloneNode(node, true);
+  }
+  if (change.type === 'extract') {
+    // shortcut: the component goes into the same file (one file, one transaction, normal undo); a file of its own needs multi-file undo first.
+    const name = change.name || '';
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error('INVALID_OPERATION: A component name starts with a capital letter and uses only letters and digits, like PricingCard.');
+    if (attributeOf(target, 'key')) throw new Error('UNSUPPORTED_OPERATION: This element is a list item (it has a key). Extract the content inside it instead.');
+    let found = false;
+    traverse(ast, { JSXElement(p: any) {
+      if (p.node !== target) return;
+      found = true;
+      if (p.scope.getProgramParent().hasBinding(name) || p.scope.hasBinding(name)) throw new Error(`INVALID_OPERATION: ${name} is already used in this file.`);
+      // The markup moves to module level, so it may only use names defined there or globally.
+      p.traverse({ 'Identifier|JSXIdentifier'(inner: any) {
+        const id = inner.node.name;
+        const reference = inner.isJSXIdentifier() ? inner.parentPath.isJSXOpeningElement() || inner.parentPath.isJSXClosingElement() || inner.parentPath.isJSXMemberExpression() : inner.isReferencedIdentifier();
+        if (!reference || (inner.isJSXIdentifier() && /^[a-z]/.test(id) && !inner.parentPath.isJSXMemberExpression())) return;
+        const binding = inner.scope.getBinding(id);
+        if (binding && binding.scope.block !== p.scope.getProgramParent().block && !isInside(binding.path, p)) {
+          throw new Error(`UNSUPPORTED_OPERATION: The markup uses \`${id}\` from the component around it. Pass it as a prop in source, then extract.`);
+        }
+      }, ThisExpression(inner: any) {
+        // An arrow function shares the `this` around it; any other function has its own.
+        let owner = inner.getFunctionParent();
+        while (owner && owner.isArrowFunctionExpression()) owner = owner.getFunctionParent();
+        if (!owner || !isInside(owner, p)) throw new Error('UNSUPPORTED_OPERATION: The markup uses `this` from the component around it. Pass the values as props in source, then extract.');
+      } });
+      // Writes count too (`ref={node => { input = node; }}`): reads alone miss assignment targets.
+      for (let scope = p.scope; scope && scope !== p.scope.getProgramParent(); scope = scope.parent) {
+        for (const [id, binding] of Object.entries(scope.bindings) as [string, any][]) {
+          if (binding.constantViolations.some((write: any) => isInside(write, p))) {
+            throw new Error(`UNSUPPORTED_OPERATION: The markup changes \`${id}\` from the component around it. Move that logic into the markup's own component in source.`);
+          }
+        }
+      }
+      const statement = p.findParent((q: any) => q.parentPath?.isProgram());
+      if (!statement) throw new Error('UNSUPPORTED_OPERATION: This markup is not inside a module-level component.');
+      statement.insertBefore(t.functionDeclaration(t.identifier(name), [], t.blockStatement([t.returnStatement(target)])));
+      p.replaceWith(t.jsxElement(t.jsxOpeningElement(t.jsxIdentifier(name), [], true), null, [], true));
+      p.stop();
+    } });
+    if (!found) throw new Error('INVALID_TARGET: The element was not found.');
+    return;
   }
   if (change.type === 'retag') {
     const from = tagOf(target), to = change.tagName || '';

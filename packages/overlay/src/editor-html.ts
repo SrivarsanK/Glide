@@ -1931,6 +1931,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 </div>
               </div>
 
+              <!-- Component — extract the selected markup into a named component -->
+              <div class="props-section" id="section-extract" style="display:none;">
+                <div class="props-section-title">Component</div>
+                <div class="props-row">
+                  <input id="extract-name" class="props-input" style="flex:1;" placeholder="PricingCard" aria-label="Component name">
+                  <button class="icon-btn" id="btn-extract" title="Move this markup into a component in the same file and use it here">Extract</button>
+                </div>
+              </div>
+
               <!-- Layout (Flex) — shown only when display=flex -->
               <div class="props-section" id="section-flex" style="display:none;">
                 <div class="props-section-title">Layout (Flex)</div>
@@ -6040,6 +6049,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               tagPicker.dataset.current = tag;
             }
             refreshInteractions();
+            // Extraction writes a function component, so only JSX and TSX files offer it.
+            const jsxSource = !!(selectedElement && /\\.[jt]sx?$/i.test((parseSource(selectedElement.source) || {}).file || ''));
+            document.getElementById('section-extract').style.display = retaggable && jsxSource ? 'block' : 'none';
 
             const isComponent = tagName && /^[A-Z]/.test(tagName);
             const jumpBtn = document.getElementById('btn-jump-definition');
@@ -7479,6 +7491,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
               expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
               change: interactions.plan(choice, interactionInfo) }));
+          });
+
+          document.getElementById('btn-extract').addEventListener('click', () => {
+            const parsed = selectedElement && parseSource(selectedElement.source);
+            const name = document.getElementById('extract-name').value.trim();
+            if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
+            if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) { showToast('error', 'Name the component with a capital letter, like PricingCard.'); return; }
+            // Staged edits keep the positions they were made at; extraction would move them.
+            if (stagedEdits.size) { showToast('info', 'Apply or discard the staged changes first, then extract.'); return; }
+            socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
+              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration, change: { type: 'extract', name } }));
           });
 
           function triggerUngroup() {
