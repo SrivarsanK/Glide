@@ -42,3 +42,15 @@ test('names bound inside the markup itself are fine', () => {
   const list = page.replace("<p>{'$12'}</p>", '<ul>{[1, 2].map(n => <li key={n}>{n}</li>)}</ul>');
   expect(extract(list, '<section', 'Features')).toContain('function Features()');
 });
+
+test('refuses `this` and writes that belong to the component around the markup', () => {
+  const classPage = 'class App extends React.Component {\n  render() {\n    return <main><section>{this.props.title}</section></main>;\n  }\n}\n';
+  expect(() => extract(classPage, '<section', 'Hero')).toThrow(/`this`/);
+  const refPage = 'function App() {\n  let input;\n  return <main><section><input ref={node => { input = node; }} /></section></main>;\n}\n';
+  expect(() => extract(refPage, '<section', 'Hero')).toThrow(/changes `input`/);
+  const destructured = 'function App() {\n  let a;\n  return <main><section onClick={() => { [a] = [1]; }}>A</section></main>;\n}\n';
+  expect(() => extract(destructured, '<section', 'Hero')).toThrow(/changes `a`/);
+  // A function inside the markup owns its own `this` and its own variables.
+  const own = 'function App() {\n  return <main><section onClick={function () { let n = 0; n = 1; this.blur(); }}>A</section></main>;\n}\n';
+  expect(extract(own, '<section', 'Hero')).toContain('function Hero()');
+});

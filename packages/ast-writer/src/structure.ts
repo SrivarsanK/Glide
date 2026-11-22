@@ -215,7 +215,20 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
         if (binding && binding.scope.block !== p.scope.getProgramParent().block && !isInside(binding.path, p)) {
           throw new Error(`UNSUPPORTED_OPERATION: The markup uses \`${id}\` from the component around it. Pass it as a prop in source, then extract.`);
         }
+      }, ThisExpression(inner: any) {
+        // An arrow function shares the `this` around it; any other function has its own.
+        let owner = inner.getFunctionParent();
+        while (owner && owner.isArrowFunctionExpression()) owner = owner.getFunctionParent();
+        if (!owner || !isInside(owner, p)) throw new Error('UNSUPPORTED_OPERATION: The markup uses `this` from the component around it. Pass the values as props in source, then extract.');
       } });
+      // Writes count too (`ref={node => { input = node; }}`): reads alone miss assignment targets.
+      for (let scope = p.scope; scope && scope !== p.scope.getProgramParent(); scope = scope.parent) {
+        for (const [id, binding] of Object.entries(scope.bindings) as [string, any][]) {
+          if (binding.constantViolations.some((write: any) => isInside(write, p))) {
+            throw new Error(`UNSUPPORTED_OPERATION: The markup changes \`${id}\` from the component around it. Move that logic into the markup's own component in source.`);
+          }
+        }
+      }
       const statement = p.findParent((q: any) => q.parentPath?.isProgram());
       if (!statement) throw new Error('UNSUPPORTED_OPERATION: This markup is not inside a module-level component.');
       statement.insertBefore(t.functionDeclaration(t.identifier(name), [], t.blockStatement([t.returnStatement(target)])));
