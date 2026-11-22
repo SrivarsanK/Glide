@@ -71,5 +71,21 @@ export function createInteractions() {
     return found;
   }
 
-  return { read, problem, plan, states };
+  /** The element's own animation (base scope), from its classes or inline style; '' duration means none. */
+  function animation(className: string, style: string) {
+    const ease: Record<string, string> = { linear: 'linear', in: 'ease-in', out: 'ease-out', 'in-out': 'ease-in-out' };
+    const own = ' ' + className + ' ';
+    // Inline declarations win over classes, so they are what the element actually uses.
+    const inline = (name: string) => style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)'))?.[1].trim();
+    const classDuration = own.match(/ duration-(\d+) /) ? own.match(/ duration-(\d+) /)![1] + 'ms' : own.match(/ duration-\[([^\]]+)\] /)?.[1];
+    // A transition utility on its own brings Tailwind's default duration.
+    const utility = / transition(-(all|colors|opacity|shadow|transform))? /.test(own);
+    const duration = inline('transition-duration') ?? classDuration ?? (utility ? '150ms' : '');
+    const easing = inline('transition-timing-function')
+      ?? (own.match(/ ease-(linear|in-out|in|out) /) ? ease[own.match(/ ease-(linear|in-out|in|out) /)![1]] : own.match(/ ease-\[([^\]]+)\] /)?.[1])
+      ?? 'ease-out';
+    return { duration, easing, inline: inline('transition-duration') !== undefined || inline('transition-timing-function') !== undefined };
+  }
+
+  return { read, problem, plan, states, animation };
 }

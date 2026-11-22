@@ -118,7 +118,7 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
         const around = all.map(overlayOf), shared = around.every(id => id === around[0]);
         return { tag: el.localName, href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel'),
           type: el.getAttribute('type'), popoverTarget: el.getAttribute('popovertarget'), popoverAction: el.getAttribute('popovertargetaction'),
-          inPopover: shared ? around[0] : null, overlayMixed: !shared, className: el.getAttribute('class') || '' };
+          inPopover: shared ? around[0] : null, overlayMixed: !shared, className: el.getAttribute('class') || '', style: el.getAttribute('style') || '' };
       }
       case 'ids': {
         // How many elements use each id: a fragment link goes to the first, so only unique ids are targets.
