@@ -62,7 +62,8 @@ function writeAttribute(writer: TemplateWriter, code: string, line: number, colu
   const value = checkAttributeValue(name, raw);
   if (name === 'id' && typeof value === 'string') {
     // shortcut: a text match, so an id inside a script string also counts; refusing errs on the safe side.
-    const uses = code.match(new RegExp(`(?<![\\w-])id\\s*=\\s*["']${value}["']`, 'g'))?.length ?? 0;
+    // Quoted or unquoted (`id=hero`, which HTML allows).
+    const uses = code.match(new RegExp(`(?<![\\w-])id\\s*=\\s*(["']?)${value}\\1(?![\\w-])`, 'gi'))?.length ?? 0;
     if (uses > (writer.readAttribute(code, line, column, 'id') === value ? 1 : 0)) throw new Error(`INVALID_PROP: The id "${value}" is already used in this file.`);
   }
   code = writer.setAttribute(code, line, column, name, value);

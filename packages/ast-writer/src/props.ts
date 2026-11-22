@@ -98,7 +98,8 @@ export function checkAttributeValue(name: string, value: unknown): string | true
   if (value !== null && value !== true && typeof value !== 'string') throw new Error('INVALID_PROP: An attribute value is text, true, or null to remove it.');
   if (typeof value !== 'string') return value;
   // Character references are decoded in attribute text, so `javascript&#58;` would run as `javascript:`.
-  if (URL_SCHEMES[name] && /&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(value)) {
+  // HTML decodes a numeric reference even without its semicolon (`&#58alert`), so any `&#` counts.
+  if (URL_SCHEMES[name] && /&(#|[a-z][a-z0-9]*;)/i.test(value)) {
     throw new Error(`INVALID_PROP: Character references are not allowed in ${name}; type the character itself.`);
   }
   // Browsers ignore whitespace and control characters inside a scheme, so `java\nscript:` is still script.
