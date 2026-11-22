@@ -17,6 +17,8 @@ export interface StructuralChange {
   y?: number;
   detached?: boolean;
   workspaceId?: string;
+  /** False when the user clicked instead of dragging, so the size is only a default. */
+  drawn?: boolean;
 }
 
 export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position']);
@@ -163,7 +165,12 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     // Give the new child its own line, indented like its siblings, when the children are on separate lines.
     const addChild = (child: t.JSXElement | t.JSXExpressionContainer, at: number) => {
       const separator = kids.find((item, i) => blank(item) && item.value.includes('\n') && i + 1 < kids.length && !blank(kids[i + 1]));
-      if (!separator) kids.splice(at, 0, child);
+      const loc = target.loc;
+      // An empty parent written over several lines gets its first child on a line of its own, one level deeper.
+      if (!separator && loc && loc.start.line !== loc.end.line && kids.every(item => blank(item))) {
+        const indent = ' '.repeat(loc.start.column);
+        kids.splice(0, kids.length, ...([t.jsxText(`\n${indent}  `), child, t.jsxText(`\n${indent}`)] as typeof kids));
+      } else if (!separator) kids.splice(at, 0, child);
       else if (blank(kids[at - 1])) kids.splice(at, 0, child, t.jsxText((separator as t.JSXText).value));
       else kids.splice(at, 0, t.jsxText((separator as t.JSXText).value), child);
     };
@@ -176,7 +183,11 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
       addChild(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)), last);
       return;
     }
-    applyStyles(inserted, styles);
+    // In the page, a frame lays out what is drawn into it, and text hugs its content
+    // (a fixed height would clip it); drafts above keep a fixed box for the preview.
+    const flow: Record<string, string> = change.elementType === 'frame' ? { ...styles, display: 'flex', flexDirection: 'column', gap: '16px' }
+      : text ? (change.width && change.drawn !== false ? { display: 'inline-block', width: styles.width } : {}) : styles;
+    if (Object.keys(flow).length) applyStyles(inserted, flow);
     place(inserted);
     // Join the layout beside the child nearest the drawn point.
     const sibling = change.siblingId ? resolve(change.siblingId) : undefined;

@@ -148,7 +148,19 @@ test('an insert writes its starting styles in the project format, like an edit',
   const inline = await new MutationService(g.root, { theme }).execute('inline', [{ ...g.op('<aside', { type: 'insert', elementType: 'frame', width: 96, height: 80 }), authoringRepresentation: 'inline' }]);
   expect(inline.success, inline.error).toBe(true);
   expect(g.read()).not.toContain('className');
-  expect(g.read()).toMatch(/style=\{\{\s*width: "96px",\s*height: "80px"\s*\}\}/);
+  expect(g.read()).toMatch(/style=\{\{\s*width: "96px",\s*height: "80px",\s*display: "flex",\s*flexDirection: "column",\s*gap: "16px"\s*\}\}/);
+});
+
+test('a frame lays out what is drawn into it, and text hugs its content', async () => {
+  const theme = () => ({ ...defaultTailwindTheme(), version: 4 as const });
+  const f = fixture();
+  const frame = await new MutationService(f.root, { theme }).execute('frame', [f.op('<aside', { type: 'insert', elementType: 'frame', width: 96, height: 80 })]);
+  expect(frame.success, frame.error).toBe(true);
+  expect(f.read()).toContain('<aside><div className="w-24 h-20 flex flex-col gap-4"></div></aside>');
+  const g = fixture();
+  const text = await new MutationService(g.root, { theme }).execute('text', [g.op('<aside', { type: 'insert', elementType: 'text' })]);
+  expect(text.success, text.error).toBe(true);
+  expect(g.read()).toContain('<aside><span>New text</span></aside>');
 });
 
 test.each(['before', 'after', 'last'])('an insert %s a child gets its own line, indented like its siblings', async where => {
@@ -193,4 +205,27 @@ test('a pasteboard draft gets its own line and leaves the closing tag on its own
   const draft = lines.findIndex(line => line.startsWith('      {false && <div'));
   expect(draft, f.read()).toBeGreaterThan(lines.indexOf('      <span>A</span>'));
   expect(lines.indexOf('    </section>')).toBeGreaterThan(draft);
+});
+
+test('the first child of an empty parent written over several lines gets its own line', async () => {
+  const code = 'const App = () => (\n  <main>\n    <div\n      style={{ width: "300px" }}></div>\n  </main>\n);\n';
+  const f = fixture(code);
+  const before = code.slice(0, code.indexOf('<div')).split('\n');
+  const result = await f.service.execute('first', [{ operationId: 'one', filePath: 'App.tsx', expectedDigest: contentDigest(code),
+    line: before.length, column: before.at(-1)!.length + 1, change: { type: 'insert', elementType: 'rectangle', width: 40, height: 40 } }]);
+  expect(result.success, result.error).toBe(true);
+  const lines = f.read().split('\n');
+  const child = lines.findIndex(line => line.startsWith('      <div'));
+  expect(child, f.read()).toBeGreaterThan(lines.findIndex(line => line.includes('width: "300px"')));
+  expect(lines.slice(child).find(line => line.trim() === '</div>')).toBe('    </div>');
+});
+
+test('text created by a click, not a drag, has no fixed width', async () => {
+  const f = fixture();
+  const result = await f.service.execute('click', [f.op('<aside', { type: 'insert', elementType: 'text', width: 120, height: 32, drawn: false })]);
+  expect(result.success, result.error).toBe(true);
+  expect(f.read()).toContain('<aside><span>New text</span></aside>');
+  const g = fixture();
+  await g.service.execute('drag', [g.op('<aside', { type: 'insert', elementType: 'text', width: 240, height: 32 })]);
+  expect(g.read()).toMatch(/width: "240px"/);
 });

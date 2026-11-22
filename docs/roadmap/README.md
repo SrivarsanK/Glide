@@ -33,7 +33,7 @@ at a time. Each item has its own spec file in this folder.
 | # | ID | Feature | Size | Depends on | Status |
 |---|---|---|---|---|---|
 | 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in review**: PR #24 from `feat/f0-layout-first-insert`; `done` when merged |
-| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | todo |
+| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR from `feat/a1-layout-frames` (stacked on F0) |
 | 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | todo |
 | 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | todo |
 | 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | todo |
@@ -147,3 +147,8 @@ flowchart LR
 - 2026-11-21: Pushed; PR #24 opened. Addressed CodeRabbit's review: reversed wrapping rows and stale
   sibling ids in code, plus the spec gaps it found. The user approved continuing with the rest of
   the roadmap after the review.
+- 2026-11-21: A1 done on `feat/a1-layout-frames`: display and radius class rules, hide/show keeps the
+  element's own display, frames start as auto layout, text hugs, an Auto layout button in the inspector,
+  and children of an empty multi-line frame get their own lines. Confirmed hiding was refused in Tailwind
+  projects before the fix. 455 tests pass; checked in the editor. The optional pasteboard attach step was
+  not done.
