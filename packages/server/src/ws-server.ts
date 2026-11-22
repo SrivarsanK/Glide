@@ -1069,6 +1069,12 @@ export class GlideServer {
     }
     let body: unknown;
     try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); }
+    // Presence: open editors show which tool the agent runs, and on which element.
+    for (const item of (Array.isArray(body) ? body : [body]) as any[]) {
+      if (item?.method === 'tools/call' && typeof item.params?.name === 'string') {
+        this.broadcast({ type: 'agent-activity', tool: item.params.name, source: typeof item.params.arguments?.source === 'string' ? item.params.arguments.source : null });
+      }
+    }
     const reply = await handleMcp(body, { paths: this.projectPaths, mutations: this.mutations,
       entryFile: () => findProjectEntryFile(this.projectPaths.root), askEditor: query => this.askEditor(query),
       // The write is recorded as Glide's own, so the watcher stays quiet; tell open editors here instead.

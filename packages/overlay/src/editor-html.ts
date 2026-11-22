@@ -2526,6 +2526,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   return;
                 }
                 if (message.type === 'routes') { renderRoutes(message.routes || []); return; }
+                if (message.type === 'agent-activity') {
+                  showAgentActivity(message.tool, message.source);
+                  return;
+                }
                 if (message.type === 'agent-query') {
                   // An agent asks over MCP what the user is pointing at.
                   const keys = ['display', 'flexDirection', 'gap', 'width', 'height', 'padding', 'margin', 'color', 'backgroundColor',
@@ -8118,6 +8122,25 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               syncUserGuidesToIframe();
             }
           });
+
+          let agentBadgeTimer = null;
+          /** Shows that a coding agent is working through Glide: its latest tool, and the element it named. */
+          function showAgentActivity(tool, source) {
+            let badge = document.getElementById('agent-badge');
+            if (!badge) {
+              badge = document.createElement('div');
+              badge.id = 'agent-badge';
+              badge.setAttribute('role', 'status');
+              badge.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;padding:6px 10px;border-radius:999px;'
+                + 'background:#0f172a;color:#e2e8f0;border:1px solid #38bdf8;font:12px system-ui,sans-serif;pointer-events:none;';
+              document.body.appendChild(badge);
+            }
+            badge.textContent = 'Agent · ' + String(tool || '').replace(/_/g, ' ') + (source ? ' · ' + source : '');
+            badge.hidden = false;
+            clearTimeout(agentBadgeTimer);
+            // MCP over HTTP has no session end, so a quiet agent counts as done.
+            agentBadgeTimer = setTimeout(() => { badge.hidden = true; }, 15000);
+          }
 
           function showToast(type, text) {
             const container = document.getElementById('toast-container');

@@ -1,6 +1,7 @@
 import * as t from '@babel/types';
 import traverseModule from '@babel/traverse';
-import { setAttribute } from './props.js';
+import { parseExpression } from '@babel/parser';
+import { checkAttributeValue, isEditableAttribute, setAttribute } from './props.js';
 
 export interface StructuralChange {
   type: string;
@@ -25,12 +26,16 @@ export interface StructuralChange {
   drawn?: boolean;
   /** The component name an `extract` change creates. */
   name?: string;
+  /** One JSX element an `insert-markup` change adds to the target (an agent's markup). */
+  markup?: string;
 }
 
-export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag', 'extract']);
+export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag', 'extract', 'insert-markup']);
 
 export const RETAG_TARGETS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'a', 'button',
   'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'figure', 'figcaption']);
+// What an agent's inserted markup may contain: the retag tags plus content elements.
+const INSERT_TAGS = new Set([...RETAG_TARGETS, 'img', 'strong', 'em', 'small', 'b', 'i', 'br', 'hr', 'blockquote', 'pre', 'code']);
 // Flow content a paragraph cannot hold (it takes phrasing content only).
 const BLOCK_TAGS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'p',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'figcaption', 'form', 'table', 'pre', 'blockquote', 'dl', 'dt', 'dd',
@@ -264,6 +269,83 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (target.closingElement) (target.closingElement.name as t.JSXIdentifier).name = to;
     return;
   }
+  const blank = (child: t.Node | undefined): child is t.JSXText => t.isJSXText(child) && !child.value.trim();
+  /** Adds a child to the target beside `siblingId`, or last; on its own line, indented like its siblings, when they are on separate lines. */
+  function addChild(child: t.JSXElement | t.JSXExpressionContainer, siblingId?: string, position?: string) {
+    const kids = target.children;
+    // Without a sibling the child goes last, before the whitespace that indents the closing tag.
+    const last = blank(kids[kids.length - 1]) ? kids.length - 1 : kids.length;
+    const sibling = siblingId ? resolve(siblingId) : undefined;
+    // A sibling inside a fragment or `{…}` renders as a child but is not one in source: its direct child is the boundary.
+    const index = sibling ? kids.findIndex(kid => { let found = false; t.traverseFast(kid, node => { if (node === sibling) found = true; }); return found; }) : -1;
+    const at = index < 0 ? last : position === 'before' ? index : index + 1;
+    const separator = kids.find((item, i) => blank(item) && item.value.includes('\n') && i + 1 < kids.length && !blank(kids[i + 1]));
+    const loc = target.loc;
+    // An empty parent written over several lines gets its first child on a line of its own, one level deeper.
+    if (!separator && loc && loc.start.line !== loc.end.line && kids.every(item => blank(item))) {
+      const indent = ' '.repeat(loc.start.column);
+      kids.splice(0, kids.length, ...([t.jsxText(`\n${indent}  `), child, t.jsxText(`\n${indent}`)] as typeof kids));
+    } else if (!separator) kids.splice(at, 0, child);
+    else if (blank(kids[at - 1])) kids.splice(at, 0, child, t.jsxText((separator as t.JSXText).value));
+    else kids.splice(at, 0, t.jsxText((separator as t.JSXText).value), child);
+  }
+  /** An agent's markup, held to what the editor writes itself: HTML elements and literal, allowlisted attributes; no logic. */
+  function agentMarkup(markup: unknown): t.JSXElement {
+    let node: t.Node | null = null;
+    try { node = parseExpression(String(markup ?? ''), { plugins: ['jsx', 'typescript'] }); } catch { /* reported below */ }
+    if (!t.isJSXElement(node)) throw new Error('INVALID_OPERATION: markup is one JSX element, like <section className="p-8"><h2>Pricing</h2></section>.');
+    const ids = new Set<string>();
+    // Ids written as id="x" or id={"x"}; anything computed is left alone, not evaluated.
+    t.traverseFast(ast, item => {
+      if (!t.isJSXAttribute(item) || !t.isJSXIdentifier(item.name, { name: 'id' })) return;
+      const value = t.isJSXExpressionContainer(item.value) ? item.value.expression : item.value;
+      if (t.isStringLiteral(value)) ids.add(value.value);
+    });
+    const staticStyle = (value: t.Node | null | undefined) => t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
+      && value.expression.properties.every(item => t.isObjectProperty(item) && !item.computed && (t.isIdentifier(item.key) || t.isStringLiteral(item.key))
+        && (t.isStringLiteral(item.value) || t.isNumericLiteral(item.value)));
+    t.traverseFast(node, item => {
+      if (t.isJSXSpreadAttribute(item) || t.isJSXSpreadChild(item)) throw new Error('UNSUPPORTED_OPERATION: Markup is static; spreads stay in source.');
+      // React throws on children of an empty element.
+      if (t.isJSXElement(item) && t.isJSXIdentifier(item.openingElement.name) && ['img', 'br', 'hr'].includes(item.openingElement.name.name)
+        && item.children.length) {
+        throw new Error(`INVALID_OPERATION: <${item.openingElement.name.name}> cannot have children; write it as <${item.openingElement.name.name} />.`);
+      }
+      if ((t.isJSXElement(item) || t.isJSXFragment(item)) && item.children.some(child => t.isJSXExpressionContainer(child)
+        && !t.isJSXEmptyExpression(child.expression) && !t.isStringLiteral(child.expression))) {
+        throw new Error('UNSUPPORTED_OPERATION: Markup is static; write expressions and logic in source.');
+      }
+      if (t.isJSXOpeningElement(item)) {
+        if (!t.isJSXIdentifier(item.name) || !INSERT_TAGS.has(item.name.name)) {
+          throw new Error(`UNSUPPORTED_OPERATION: <${t.isJSXIdentifier(item.name) ? item.name.name : 'this element'}> is not an element Glide inserts. Use HTML such as section, div, h2, p, a or img; add components in source.`);
+        }
+        // JSX keeps a repeated attribute, and TypeScript and React reject it.
+        const names = item.attributes.flatMap(a => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) ? [a.name.name.toLowerCase()] : []);
+        const repeated = names.find((key, i) => names.indexOf(key) !== i);
+        if (repeated) throw new Error(`INVALID_OPERATION: <${item.name.name}> sets ${repeated} twice.`);
+        // A new tab must not get a handle on this page.
+        const named = (key: string) => item.attributes.find((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name: key }));
+        const tab = named('target'), rel = named('rel');
+        if (tab && t.isStringLiteral(tab.value) && tab.value.value === '_blank') {
+          const tokens = new Set([...(rel && t.isStringLiteral(rel.value) ? rel.value.value.split(/\s+/).filter(Boolean) : []), 'noopener', 'noreferrer']);
+          if (rel) rel.value = t.stringLiteral([...tokens].join(' ')); else item.attributes.push(t.jsxAttribute(t.jsxIdentifier('rel'), t.stringLiteral([...tokens].join(' '))));
+        }
+      }
+      if (t.isJSXAttribute(item)) {
+        const name = t.isJSXIdentifier(item.name) ? item.name.name : '';
+        if (name !== 'className' && name !== 'style' && !isEditableAttribute(name)) throw new Error(`UNSUPPORTED_OPERATION: ${name || 'This attribute'} is not an attribute Glide writes. Add it in source.`);
+        if (name === 'style' ? !staticStyle(item.value) : !(item.value === null || t.isStringLiteral(item.value))) {
+          throw new Error(`UNSUPPORTED_OPERATION: ${name} must be literal text${name === 'style' ? ' (style is an object of literal values)' : ''}; write expressions in source.`);
+        }
+        if (t.isStringLiteral(item.value) && name !== 'className') checkAttributeValue(name, item.value.value);
+        if (name === 'id' && t.isStringLiteral(item.value)) {
+          if (ids.has(item.value.value)) throw new Error(`INVALID_PROP: The id "${item.value.value}" is already used in this file.`);
+          ids.add(item.value.value);
+        }
+      }
+    });
+    return node;
+  }
   if (change.type === 'insert') {
     if (!['rectangle', 'ellipse', 'frame', 'text'].includes(change.elementType || '')) throw new Error('UNSUPPORTED_OPERATION: Unknown inserted element type.');
     const text = change.elementType === 'text';
@@ -279,27 +361,11 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (change.elementType === 'ellipse') styles.borderRadius = '50%';
     openParent(target);
     const inserted = t.jsxElement(t.jsxOpeningElement(t.jsxIdentifier(tag), []), t.jsxClosingElement(t.jsxIdentifier(tag)), text ? [t.jsxText('New text')] : [], false);
-    const kids = target.children;
-    const blank = (child: t.Node | undefined): child is t.JSXText => t.isJSXText(child) && !child.value.trim();
-    // Give the new child its own line, indented like its siblings, when the children are on separate lines.
-    const addChild = (child: t.JSXElement | t.JSXExpressionContainer, at: number) => {
-      const separator = kids.find((item, i) => blank(item) && item.value.includes('\n') && i + 1 < kids.length && !blank(kids[i + 1]));
-      const loc = target.loc;
-      // An empty parent written over several lines gets its first child on a line of its own, one level deeper.
-      if (!separator && loc && loc.start.line !== loc.end.line && kids.every(item => blank(item))) {
-        const indent = ' '.repeat(loc.start.column);
-        kids.splice(0, kids.length, ...([t.jsxText(`\n${indent}  `), child, t.jsxText(`\n${indent}`)] as typeof kids));
-      } else if (!separator) kids.splice(at, 0, child);
-      else if (blank(kids[at - 1])) kids.splice(at, 0, child, t.jsxText((separator as t.JSXText).value));
-      else kids.splice(at, 0, t.jsxText((separator as t.JSXText).value), child);
-    };
-    // Without a sibling the child goes last, before the whitespace that indents the closing tag.
-    const last = blank(kids[kids.length - 1]) ? kids.length - 1 : kids.length;
     if (change.detached) {
       // The pasteboard previews read inline styles only.
       inlineStyles(inserted, styles);
       setWorkspace(inserted);
-      addChild(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)), last);
+      addChild(t.jsxExpressionContainer(t.logicalExpression('&&', t.booleanLiteral(false), inserted)));
       return;
     }
     // In the page, a frame lays out what is drawn into it, and text hugs its content
@@ -309,10 +375,16 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (Object.keys(flow).length) applyStyles(inserted, flow);
     place(inserted);
     // Join the layout beside the child nearest the drawn point.
-    const sibling = change.siblingId ? resolve(change.siblingId) : undefined;
-    // A sibling inside a fragment or `{…}` renders as a child but is not one in source: its direct child is the boundary.
-    const index = sibling ? kids.findIndex(kid => { let found = false; t.traverseFast(kid, node => { if (node === sibling) found = true; }); return found; }) : -1;
-    addChild(inserted, index < 0 ? last : change.position === 'before' ? index : index + 1);
+    addChild(inserted, change.siblingId, change.position);
+    return;
+  }
+  if (change.type === 'insert-markup') {
+    openParent(target);
+    // A sibling elsewhere would quietly put the markup last instead of where it was asked for.
+    if (change.siblingId && !target.children.includes(resolve(change.siblingId))) {
+      throw new Error('INVALID_TARGET: The sibling must be a direct child of the element the markup goes into.');
+    }
+    addChild(agentMarkup(change.markup), change.siblingId, change.position);
     return;
   }
   if (change.type === 'paste') {

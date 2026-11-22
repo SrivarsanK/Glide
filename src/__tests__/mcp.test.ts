@@ -138,3 +138,13 @@ test('agents can set attributes, retag into links, duplicate, move, extract and 
   expect(read()).toContain('function Hero()');
   expect((await call(ctx, 'get_guide')).text).toMatch(/literal/);
 });
+
+test('agents build a section from static markup', async () => {
+  const { ctx, read } = project();
+  const tree = await call(ctx, 'get_tree', { file: 'App.tsx' });
+  const main = tree.data.elements[0];
+  const added = await call(ctx, 'insert_markup', { source: main.source, markup: '<section className="p-8"><h2>Pricing</h2></section>' });
+  expect(added.error, added.text).toBe(false);
+  expect(read()).toMatch(/<h1 className="text-lg">Hi<\/h1>\s*<section className="p-8">\s*<h2>Pricing<\/h2>/);
+  expect((await call(ctx, 'insert_markup', { source: main.source, markup: '<Card />' })).text).toMatch(/not an element Glide inserts/);
+});

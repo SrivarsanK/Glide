@@ -116,7 +116,7 @@ async function callTool(name: string, args: any, ctx: McpContext): Promise<unkno
     }
     case 'get_guide': return MCP_GUIDE;
     case 'update_styles': case 'set_text': case 'delete_element': case 'set_attribute': case 'retag':
-    case 'duplicate_element': case 'move_element': case 'extract_component': {
+    case 'duplicate_element': case 'move_element': case 'extract_component': case 'insert_markup': {
       const ref = parseReference(args.source);
       const { full, code } = read(ref.file);
       const theme = loadTailwindTheme(root);
@@ -128,6 +128,7 @@ async function callTool(name: string, args: any, ctx: McpContext): Promise<unkno
         : name === 'retag' ? { type: 'retag', tagName: args.tag, attributes: args.attributes && typeof args.attributes === 'object' ? args.attributes : undefined }
         : name === 'duplicate_element' ? { type: 'duplicate' }
         : name === 'extract_component' ? { type: 'extract', name: args.name }
+        : name === 'insert_markup' ? { type: 'insert-markup', markup: args.markup, siblingId: args.sibling ? reference(args.sibling) : undefined, position: args.position }
         : name === 'move_element' ? { type: 'reparent', parentId: reference(args.parent), siblingId: args.sibling ? reference(args.sibling) : undefined,
           position: args.position }
         : { type: 'multi-class', value: args.styles ?? {}, breakpoint: args.breakpoint || undefined, pseudoState: args.state || undefined,

@@ -77,7 +77,8 @@ if (args[1] === 'install') {
   const asked = args.includes('--agent') ? args[args.indexOf('--agent') + 1] : 'claude';
   const agents = asked === 'all' ? Object.keys(CONFIGS) : [asked];
   if (!agents.every(agent => agent in CONFIGS)) {
-    console.error(`Unknown agent "${asked}". Use claude, cursor, vscode or all. Other agents can run \`npx -y @srivarsank/glide mcp\` as a stdio server.`);
+    // Codex keeps its servers in a user-level config, so it is added with its own command.
+    console.error(`Unknown agent "${asked}". Use claude, cursor, vscode or all. For Codex, run \`codex mcp add glide -- npx -y @srivarsank/glide mcp\`. Other agents can run \`npx -y @srivarsank/glide mcp\` as a stdio server.`);
     process.exit(1);
   }
   const ok = agents.map(install).every(Boolean);
