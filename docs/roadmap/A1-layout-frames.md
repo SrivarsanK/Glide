@@ -31,7 +31,10 @@ hugs its content, and `display` and `border-radius` become properties that can b
      replaced `flex` with `hidden`, show would leave a block. In Tailwind, hide adds `hidden` next to
      the existing display class, and show removes only `hidden`. Checked: v3 defines `.hidden` last,
      but v4 orders display classes alphabetically, so `inline`, `inline-block` and `inline-flex` beat
-     `hidden`; hide writes `hidden!` in v4 when one of those is present. In inline format, refuse hide when the element sets its own `display`,
+     `hidden`; hide writes `hidden!` in v4 when one of those is present. A responsive display class
+     such as `md:flex` beats a plain `hidden` at its breakpoint, so hide then writes the important
+     `hidden!` (v4) or `!hidden` (v3) and keeps an authored `hidden` (as in `hidden md:flex`); show
+     removes the important one first, so the authored class survives. In inline format, refuse hide when the element sets its own `display`,
      unless the old value can be restored. `mutateClass` currently rejects values that have no class
      rule, so the removal needs an explicit path.
 3. [x] Add a `borderRadius` rule.
