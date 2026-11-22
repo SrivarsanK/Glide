@@ -1515,9 +1515,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   <i data-lucide="plus" style="width: 12px; height: 12px; cursor:pointer;" title="Add Page"></i>
                 </div>
               </div>
-              <div class="page-item" style="padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; font-weight: 500;">
-                <i data-lucide="file" style="width: 12px; height: 12px;"></i> <span id="active-page-name">Page 1</span>
+              <div id="pages-list">
+                <div class="page-item" style="padding: 6px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; font-weight: 500;">
+                  <i data-lucide="file" style="width: 12px; height: 12px;"></i> <span id="active-page-name">Page 1</span>
+                </div>
               </div>
+              <datalist id="route-options"></datalist>
             </div>
 
             <!-- Search Input Container -->
@@ -1898,7 +1901,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   </select>
                 </div>
                 <div class="props-row" id="interaction-value-row">
-                  <input id="interaction-value" class="props-input" style="flex:1;" aria-label="Link target">
+                  <input id="interaction-value" class="props-input" style="flex:1;" aria-label="Link target" list="route-options">
                   <select id="interaction-scroll" class="props-select" style="flex:1;display:none;" aria-label="Element to scroll to"></select>
                   <select id="interaction-overlay" class="props-select" style="flex:1;display:none;" aria-label="Overlay to open"></select>
                   <button class="icon-btn" id="interaction-show" style="display:none;" title="Open the overlay on the canvas so it can be edited">Show</button>
@@ -2508,8 +2511,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   if (message.tailwind === false) document.getElementById('edit-representation').value = 'inline';
                   sourceTransport.connected();
                   socket.send(JSON.stringify({ type: 'get-tree' }));
+                  socket.send(JSON.stringify({ type: 'list-routes' }));
                   return;
                 }
+                if (message.type === 'routes') { renderRoutes(message.routes || []); return; }
                 const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
                 if (message.file && message.digest) setFileDigest(message.file, message.digest);
                 if (message.type === 'tree' && message.file) {
@@ -7299,6 +7304,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Show the tag the source has until the save re-renders it; a refused change leaves it as it was.
             event.target.value = event.target.dataset.current || event.target.value;
           });
+
+          /** Lists the app's file routes in the Pages panel; apps without file routes keep the current page. */
+          function renderRoutes(routes) {
+            const list = document.getElementById('pages-list');
+            document.getElementById('route-options').replaceChildren(...routes.filter(route => !route.dynamic).map(route => new Option(route.path, route.path)));
+            if (!routes.length) return;
+            list.replaceChildren(...routes.map(route => {
+              const item = document.createElement('button');
+              item.type = 'button'; item.className = 'page-item';
+              item.style.cssText = 'width:100%;padding:6px 14px;font-size:12px;display:flex;align-items:center;gap:6px;background:transparent;border:none;color:var(--text-primary);cursor:pointer;text-align:left;';
+              item.textContent = route.path;
+              item.title = route.dynamic ? route.file + ' (needs a value for its dynamic segment)' : route.file;
+              item.disabled = route.dynamic;
+              if (route.dynamic) item.style.opacity = '0.5';
+              item.addEventListener('click', () => {
+                const bar = document.getElementById('app-url');
+                let next;
+                // The same forms loadApp accepts: a bare port is localhost, and a relative address is on this page's origin.
+                const typed = bar.value.trim(), base = /^\\d+$/.test(typed) ? 'http://localhost:' + typed : typed || window.location.origin;
+                try { next = new URL(route.path, new URL(base, window.location.href)).href; } catch (_) { showToast('error', 'Glide could not open ' + route.path + ' from the address ' + typed + '.'); return; }
+                bar.value = next;
+                loadApp(next);
+              });
+              return item;
+            }));
+          }
 
           const interactions = (${createInteractions.toString()})();
           let interactionInfo = null;

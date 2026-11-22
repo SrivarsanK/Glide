@@ -39,8 +39,8 @@ at a time. Each item has its own spec file in this folder.
 | 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR #28 (stacked on #27) |
 | 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR #29 (stacked on #28) |
 | 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **in review**: PR #30 (stacked on #29) |
-| 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR from `feat/b4-animation` (stacked on B3) |
-| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | todo |
+| 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR #31 (stacked on #30) |
+| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR from `feat/b5-routes` (stacked on B4) |
 | 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | todo |
 | 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | todo |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | todo |
@@ -180,3 +180,9 @@ flowchart LR
   inside `cn()`/`cva` (also fixes A1's show in class expressions); an Animate row in the Interactions panel
   writes the transition on the normal look. Checked in the editor (inline): 200 ms written, read back, and removed.
   477 tests pass. Not done: delay, springs, `@starting-style` enter animations.
+- 2026-11-21: Addressed CodeRabbit's review of A1 (#25: visibility toggle sends an empty display, text by click
+  has no width, important display classes, conditional `hidden`, display edits keep hidden elements hidden) and
+  merged it up the stack. B5 done on `feat/b5-routes`: `listRoutes()` in core for Next.js (App and Pages Router),
+  SvelteKit and Astro; a `list-routes` server message; the Pages panel lists routes and navigates the preview;
+  Go to page suggests them. Checked in the editor with a temporary Next.js layout. 484 tests pass. Not done:
+  refreshing the list when route files are added, and a visited-URL list for apps without file routes.
