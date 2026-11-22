@@ -199,3 +199,6 @@ flowchart LR
 - 2026-11-22: C4 part 1 on `feat/c4-attributes`: attribute edits and retag in Vue, Svelte, Astro and HTML through
   shared rules (`checkAttributeValue`, `checkRetag`), so the Interactions panel and the MCP tools work there. Checked
   in the Vue test app, including undo. 518 tests pass. Insert, delete and move in templates are deferred.
+- 2026-11-22: Addressed CodeRabbit's reviews of #27–#32 on their own branches and merged them up the stack: stricter
+  retag checks, interaction form state, safe toast text, Close overlay checks, case-insensitive JSX attributes,
+  animation reading order, and route rules per router. Summaries are on each PR. 521 tests pass.
