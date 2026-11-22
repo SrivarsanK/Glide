@@ -310,7 +310,8 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     place(inserted);
     // Join the layout beside the child nearest the drawn point.
     const sibling = change.siblingId ? resolve(change.siblingId) : undefined;
-    const index = sibling ? kids.indexOf(sibling) : -1;
+    // A sibling inside a fragment or `{…}` renders as a child but is not one in source: its direct child is the boundary.
+    const index = sibling ? kids.findIndex(kid => { let found = false; t.traverseFast(kid, node => { if (node === sibling) found = true; }); return found; }) : -1;
     addChild(inserted, index < 0 ? last : change.position === 'before' ? index : index + 1);
     return;
   }
