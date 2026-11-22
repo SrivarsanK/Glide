@@ -222,10 +222,10 @@ try {
   const shape = frame.locator('main > div');
   await shape.waitFor();
   const shapeStyle = await shape.evaluate(measure);
-  assert.equal(shapeStyle.position, 'absolute');
-  assert.ok(Math.abs(parseFloat(shapeStyle.left) - 40) <= 1);
-  assert.ok(Math.abs(parseFloat(shapeStyle.top) - 40) <= 1);
+  // Drawn elements join the layout at the drawn size instead of being pinned with left/top.
+  assert.equal(shapeStyle.position, 'static');
   assert.ok(Math.abs(parseFloat(shapeStyle.width) - 120) <= 1);
+  assert.ok(Math.abs(parseFloat(shapeStyle.height) - 80) <= 1);
   await shape.click();
   await page.locator('#btn-move-to-canvas').click();
   await waitForSource(project, code => /false &&/.test(code));
