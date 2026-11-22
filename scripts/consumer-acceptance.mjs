@@ -282,16 +282,21 @@ try {
   // A final runtime bound must not be dropped while persistence is pending.
   await shape.click();
   await page.evaluate(() => { isPendingPositionUpdate = true; });
-  await shape.evaluate(el => { el.style.top = '75px'; });
+  // The shape is in flow, so a transform (not `top`) is what moves it.
+  const restingShape = await shape.boundingBox();
+  await shape.evaluate(el => { el.style.transform = 'translateY(35px)'; });
   await page.waitForFunction(() => {
     const element = document.getElementById('app-iframe').contentDocument.querySelector('main > div');
     return selectedRect && Math.abs(selectedRect.y - element.getBoundingClientRect().top) < 1;
   });
-  const outline = await page.locator('#selection-group rect').first().boundingBox();
   const actualShape = await shape.boundingBox();
+  assert.ok(actualShape.y - restingShape.y > 10, 'The pending-save check must move the shape');
+  const outlineRect = page.locator('#selection-group rect').first();
+  await outlineRect.waitFor();
+  const outline = await outlineRect.boundingBox();
   assert.ok(Math.abs(outline.y - actualShape.y) < 2, 'Selection outline must track the runtime element while a save is pending');
   await page.evaluate(() => { isPendingPositionUpdate = false; });
-  await shape.evaluate((el, top) => { el.style.top = top; }, shapeStyle.top);
+  await shape.evaluate(el => { el.style.transform = ''; });
 
   const activeFile = await page.evaluate(() => currentFile);
   await shape.evaluate(el => {
