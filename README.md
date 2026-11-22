@@ -3,6 +3,12 @@
 </p>
 
 <p align="center">
+  <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
+  <br>
+  <sub>The headline is selected. The <code>className</code> in the properties panel is read from <code>Hero.tsx</code>.</sub>
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/@srivarsank/glide"><img alt="npm version" src="https://img.shields.io/npm/v/@srivarsank/glide?style=for-the-badge&label=npm&logo=npm&logoColor=eef1f5&labelColor=161b26&color=7dd3fc"></a>
   <a href="https://github.com/SrivarsanK/Glide/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SrivarsanK/Glide?style=for-the-badge&label=stars&logo=github&logoColor=eef1f5&labelColor=161b26&color=273042"></a>
   <a href="https://github.com/SrivarsanK/Glide/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/SrivarsanK/Glide/ci.yml?branch=main&style=for-the-badge&label=ci&logo=githubactions&logoColor=eef1f5&labelColor=161b26&color=273042"></a>
@@ -40,12 +46,6 @@ There is no design file to keep in sync and no export step. Your source files ar
   <a href="https://www.youtube.com/watch?v=itpLGY9rQKU"><img src=".github/assets/docs/demo-video.png" alt="Watch the Glide demo on YouTube (2 minutes 22 seconds). A still from the video shows the editor beside App.tsx, with the new text-brand-500 class highlighted in the source." width="100%"></a>
   <br>
   <sub>Two minutes: install Glide, edit the page, and watch each change land in the source.</sub>
-</p>
-
-<p align="center">
-  <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
-  <br>
-  <sub>The headline is selected. The <code>className</code> in the properties panel is read from <code>Hero.tsx</code>.</sub>
 </p>
 
 ## Quick start
