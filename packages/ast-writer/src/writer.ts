@@ -339,7 +339,7 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   // Hide and show toggle `hidden` beside the element's own display class, so showing restores it.
   const toggle = property === 'display' && (valStr === 'none' || valStr === '');
   const bare = (c: string) => splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
-  const replaces = (c: string) => inScope(c)
+  const replaces = (c: string): boolean => inScope(c)
     && (toggle ? bare(c) === 'hidden' && ownHide(c) : matchesProperty(c, property, theme));
   const prefix = COLOR_PREFIXES[property] || (property === 'fontSize' ? 'text-' : '');
   const existingTokens = prefix ? classes.filter(replaces).flatMap(c => classToken(c, prefix) ?? []) : [];
@@ -358,7 +358,7 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   // A display edit on a hidden element keeps it hidden: the hiding class is upgraded if the new display would win.
   const hidden = classes.filter(c => inScope(c) && bare(c) === 'hidden');
   // Hide stacks an important `hidden` on an authored plain one, and show takes the important one off first, so `hidden md:flex` survives.
-  function ownHide(c: string) {
+  function ownHide(c: string): boolean {
     return valStr === 'none' ? important(c) === important(newClass) : important(c) || !hidden.some(important);
   }
   const upgrade = property === 'display' && !toggle && hidden.length > 0 && hidden.every(c => !important(c)) && hiding([newClass]) !== 'hidden';
