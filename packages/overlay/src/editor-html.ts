@@ -2334,6 +2334,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           });
           let selectedRect = null;
           let selectedComputedStyles = null;
+          // The element the computed styles and the inspector's tag describe; a deselection can leave them behind.
+          let selectedComputedSource = null;
           const componentRootSources = new Set();
           let currentGeneration = 0;
           const expandedNodeIds = new Set();
@@ -2529,13 +2531,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   const keys = ['display', 'flexDirection', 'gap', 'width', 'height', 'padding', 'margin', 'color', 'backgroundColor',
                     'fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'borderRadius', 'opacity'];
                   const styles = {};
-                  for (const key of keys) if (selectedComputedStyles && selectedComputedStyles[key] != null) styles[key] = selectedComputedStyles[key];
+                  const current = !!selectedElement && selectedComputedSource === selectedElement.source;
+                  for (const key of keys) if (current && selectedComputedStyles && selectedComputedStyles[key] != null) styles[key] = selectedComputedStyles[key];
                   const sources = selectedSources.length ? selectedSources : selectedElement ? [selectedElement.source] : [];
                   socket.send(JSON.stringify({ type: 'agent-query-result', id: message.id, result: message.query === 'selection' ? {
                     page: document.getElementById('app-url').value,
                     selected: sources,
                     primary: selectedElement ? { source: selectedElement.source,
-                      tag: (document.getElementById('selected-tag').textContent || '').replace(/[<>]/g, '') || null, styles } : null,
+                      tag: current ? (document.getElementById('selected-tag').textContent || '').replace(/[<>]/g, '') || null : null, styles } : null,
                   } : null }));
                   return;
                 }
@@ -4896,6 +4899,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             selectedElement = { source: source, owners: data.owners || [] };
             selectedRect = rect;
             selectedComputedStyles = data.computedStyles;
+            selectedComputedSource = source;
             populatePropsFromComputed(data.computedStyles || {}, rect || {}, data.textContent);
 
             // Highlight selected items in layers tree
