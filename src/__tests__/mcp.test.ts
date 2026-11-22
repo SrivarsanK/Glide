@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as http from 'node:http';
 import { handleMcp, parseReference } from '../../packages/server/src/mcp.js';
 import { MutationService, contentDigest } from '../../packages/server/src/mutation-service.js';
 import { ProjectPaths } from '../../packages/server/src/project-paths.js';
@@ -64,6 +65,19 @@ test('edit refusals come back as readable tool errors', async () => {
   expect((await call(ctx, 'get_source', { source: '../outside.tsx:1:1' })).error).toBe(true);
   expect((await call(ctx, 'get_selection')).text).toMatch(/NO_EDITOR/);
   expect(() => parseReference('App.tsx')).toThrow(/INVALID_TARGET/);
+  // A missing text is a mistake, not a request to empty the element.
+  expect((await call(ctx, 'set_text', { source: 'App.tsx:3:5' })).text).toMatch(/text is a string/);
+});
+
+test('template source comes back as a marked excerpt, and a saved edit is announced', async () => {
+  const { root, ctx } = project();
+  fs.writeFileSync(path.join(root, 'index.html'), '<main><p>Hi</p><p>Other</p></main>\n');
+  const source = await call(ctx, 'get_source', { source: 'index.html:1:7' });
+  expect(source.data).toMatchObject({ excerpt: { fromLine: 1, toLine: 2 } });
+  const committed: string[] = [];
+  const edited = await call({ ...ctx, committed: (file: string) => committed.push(path.basename(file)) }, 'set_text', { source: 'App.tsx:3:5', text: 'Yo' });
+  expect(edited.error, edited.text).toBe(false);
+  expect(committed).toEqual(['App.tsx']);
 });
 
 test('the HTTP endpoint needs the run-file token and refuses browsers', async () => {
@@ -80,6 +94,18 @@ test('the HTTP endpoint needs the run-file token and refuses browsers', async ()
   const ok = await post({ authorization: `Bearer ${run.token}` });
   expect(ok.status).toBe(200);
   expect((await ok.json()).result.tools.length).toBe(MCP_TOOLS.length);
+  // A character split across two network chunks arrives whole.
+  const body = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'set_text', arguments: { source: 'App.tsx:3:5', text: 'Café' } } }));
+  const split = body.indexOf(Buffer.from('é')) + 1;
+  const status = await new Promise<number>((resolve, reject) => {
+    const request = http.request(run.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${run.token}` } },
+      response => { response.resume(); resolve(response.statusCode!); });
+    request.on('error', reject);
+    request.write(body.subarray(0, split));
+    setTimeout(() => request.end(body.subarray(split)), 50);
+  });
+  expect(status).toBe(200);
+  expect(fs.readFileSync(path.join(root, 'App.tsx'), 'utf8')).toContain('>Café</h1>');
   await server.stop(); server = undefined;
   expect(fs.existsSync(path.join(root, 'node_modules/.cache/glide/mcp.json'))).toBe(false);
 }, 15000);

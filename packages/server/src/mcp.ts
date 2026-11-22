@@ -15,6 +15,8 @@ export interface McpContext {
   entryFile(): string | null;
   /** Asks the open editor a question; rejects when no editor is connected. */
   askEditor(query: string): Promise<any>;
+  /** Called after an edit is saved, so an open editor can reload what changed. */
+  committed?(file: string): void;
 }
 
 
@@ -109,13 +111,15 @@ async function callTool(name: string, args: any, ctx: McpContext): Promise<unkno
       }
       // shortcut: templates (Vue, Svelte, Astro, HTML) get the lines from the element on, until template parsing is shared here.
       const text = element ? code.slice(element.start!, element.end!) : code.split('\n').slice(ref.line - 1, ref.line + 19).join('\n');
-      return { source: `${relative(full)}:${ref.line}:${ref.column}`, digest: contentDigest(code), code: text };
+      return { source: `${relative(full)}:${ref.line}:${ref.column}`, digest: contentDigest(code), code: text,
+        ...(element ? {} : { excerpt: { fromLine: ref.line, toLine: ref.line + text.split('\n').length - 1 } }) };
     }
     case 'update_styles': case 'set_text': case 'delete_element': {
       const ref = parseReference(args.source);
       const { full, code } = read(ref.file);
       const theme = loadTailwindTheme(root);
-      const change = name === 'set_text' ? { type: 'text', value: String(args.text ?? '') }
+      if (name === 'set_text' && typeof args.text !== 'string') throw new Error('INVALID_OPERATION: text is a string; pass "" to empty the element.');
+      const change = name === 'set_text' ? { type: 'text', value: args.text }
         : name === 'delete_element' ? { type: 'delete' }
         : { type: 'multi-class', value: args.styles ?? {}, breakpoint: args.breakpoint || undefined, pseudoState: args.state || undefined,
           // The project's own format: Tailwind classes when it has a Tailwind theme, inline styles otherwise.
@@ -128,6 +132,7 @@ async function callTool(name: string, args: any, ctx: McpContext): Promise<unkno
         const hint = /STALE/.test(result.error ?? '') ? ' Read the element again with get_source and retry.' : '';
         throw new Error((result.error ?? 'The edit was refused.') + hint);
       }
+      ctx.committed?.(full);
       // Line numbers after the element may have moved; get_tree or get_source gives the new references.
       return { ok: true, digest: result.changedFiles[0]?.newDigest };
     }

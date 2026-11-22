@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server, request as httpRequest, type ClientRequest, type IncomingMessage, type ServerResponse } from 'http';
 import type { Duplex } from 'stream';
+import { Server as TlsServer } from 'node:tls';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
@@ -1027,7 +1028,9 @@ export class GlideServer {
       const address = (this.hosted?.httpServer ?? this.server)?.address();
       const ip = address && typeof address === 'object' && !['::', '0.0.0.0'].includes(address.address) ? address.address : '127.0.0.1';
       const host = ip.includes(':') ? `[${ip}]` : ip;
-      fs.writeFileSync(file, JSON.stringify({ url: `http://${host}:${this.servedPort()}/__glide/mcp`, token: this.mcpToken, pid: process.pid }), { mode: 0o600 });
+      // An attached HTTPS dev server (a TLS server) answers https only.
+      const scheme = this.hosted?.httpServer instanceof TlsServer ? 'https' : 'http';
+      fs.writeFileSync(file, JSON.stringify({ url: `${scheme}://${host}:${this.servedPort()}/__glide/mcp`, token: this.mcpToken, pid: process.pid }), { mode: 0o600 });
     } catch (error) {
       console.warn('[Glide] Could not write the MCP run file:', error);
     }
@@ -1056,17 +1059,61 @@ export class GlideServer {
     const auth = Buffer.from(String(req.headers.authorization ?? ''));
     const expected = Buffer.from(`Bearer ${this.mcpToken}`);
     if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) return send(401, { error: 'Missing or wrong MCP token. Use `glide mcp`.' });
-    let raw = '';
+    // Bytes first, decoded once: a character split across two chunks stays one character.
+    const chunks: Buffer[] = [];
+    let size = 0;
     for await (const chunk of req) {
-      raw += chunk;
-      if (raw.length > 1024 * 1024) return send(413);
+      size += (chunk as Buffer).length;
+      if (size > 1024 * 1024) return send(413);
+      chunks.push(chunk as Buffer);
     }
     let body: unknown;
-    try { body = JSON.parse(raw); } catch { return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); }
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); }
     const reply = await handleMcp(body, { paths: this.projectPaths, mutations: this.mutations,
-      entryFile: () => findProjectEntryFile(this.projectPaths.root), askEditor: query => this.askEditor(query) });
+      entryFile: () => findProjectEntryFile(this.projectPaths.root), askEditor: query => this.askEditor(query),
+      // The write is recorded as Glide's own, so the watcher stays quiet; tell open editors here instead.
+      committed: file => { this.announceDrift(file); this.broadcast({ type: 'HISTORY_UPDATE', ...this.history.getState() }); } });
     if (reply === null) return send(202);
     send(200, reply);
+  }
+
+  /** A source file changed: bump its generation and send open editors the new elements, tree and digest. */
+  private announceDrift(filePath: string): void {
+    const normPath = normalizePathKey(filePath);
+    this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
+    console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
+
+    // Bidirectional sync: parse JSX elements on drift and broadcast scene_update to overlay
+    try {
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        if (['.tsx', '.jsx', '.js', '.ts'].includes(ext)) {
+          const code = fs.readFileSync(filePath, 'utf-8');
+          const elements = parseJSXElements(code, filePath);
+          this.broadcast({
+            type: 'scene_update',
+            file: filePath,
+            elements,
+            generation: this.fileGenerations.get(normPath) || 0
+          });
+
+          // Proactively update component tree if valid
+          try {
+            const tree = buildComponentTree(code, filePath);
+            this.broadcast({
+              type: 'tree',
+              file: filePath,
+              tree,
+              workspaceObjects: listWorkspaceObjects(code, filePath),
+              digest: contentDigest(code),
+              generation: this.fileGenerations.get(normPath) || 0
+            });
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[Glide] Failed to parse JSX elements on external drift:', err);
+    }
   }
 
   private servedPort(): number {
@@ -1088,14 +1135,20 @@ export class GlideServer {
             next();
             return;
           }
+          // The MCP route checks for itself: no Origin (so no browser) and the run file's token. The bridge
+          // uses the run file's loopback address, which a remoteAccess host list may not include.
+          if (pathname === '/__glide/mcp') {
+            this.handleMcpRequest(req, res).catch(error => {
+              // An aborted upload leaves nothing to answer; anything else gets a 500 instead of a crash.
+              if (!res.headersSent && !res.destroyed) { res.writeHead(500); res.end(); }
+              if (!req.destroyed) console.warn('[Glide] MCP request failed:', error);
+            });
+            return;
+          }
           const port = this.servedPort();
           if (!trustedRequest(req, port, this.config.remoteAccess)) {
             res.writeHead(403);
             res.end('Request origin or host is not allowed.');
-            return;
-          }
-          if (pathname === '/__glide/mcp') {
-            void this.handleMcpRequest(req, res);
             return;
           }
           if (pathname.startsWith('/__glide_assets__/')) {
@@ -1177,40 +1230,7 @@ export class GlideServer {
             console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
             return;
           }
-          this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
-          console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
-
-          // Bidirectional sync: parse JSX elements on drift and broadcast scene_update to overlay
-          try {
-            if (fs.existsSync(filePath)) {
-              const ext = path.extname(filePath).toLowerCase();
-              if (['.tsx', '.jsx', '.js', '.ts'].includes(ext)) {
-                const code = fs.readFileSync(filePath, 'utf-8');
-                const elements = parseJSXElements(code, filePath);
-                this.broadcast({
-                  type: 'scene_update',
-                  file: filePath,
-                  elements,
-                  generation: this.fileGenerations.get(normPath) || 0
-                });
-
-                // Proactively update component tree if valid
-                try {
-                  const tree = buildComponentTree(code, filePath);
-                  this.broadcast({
-                    type: 'tree',
-                    file: filePath,
-                    tree,
-                    workspaceObjects: listWorkspaceObjects(code, filePath),
-                    digest: contentDigest(code),
-                    generation: this.fileGenerations.get(normPath) || 0
-                  });
-                } catch {}
-              }
-            }
-          } catch (err) {
-            console.warn('[Glide] Failed to parse JSX elements on external drift:', err);
-          }
+          this.announceDrift(filePath);
         });
         this.watcher.on('error', (err: any) => {
           console.error('[Glide Watcher] Watcher error:', err);

@@ -14,16 +14,28 @@ const flag = args.indexOf('--project');
 const project = path.resolve(flag >= 0 && args[flag + 1] ? args[flag + 1] : process.cwd());
 const runFile = path.join(project, 'node_modules', '.cache', 'glide', 'mcp.json');
 
+/** A JSON-RPC error for each request in `message`; notifications get no reply. */
+function refusal(message: unknown, text: string): unknown {
+  const one = (item: any) => item && item.id !== undefined ? { jsonrpc: '2.0', id: item.id, error: { code: -32000, message: text } } : null;
+  return Array.isArray(message) ? message.map(one).filter(Boolean) : one(message);
+}
+
 async function forward(message: unknown): Promise<unknown> {
   let run: { url: string; token: string } | null = null;
   try { run = JSON.parse(fs.readFileSync(runFile, 'utf8')); } catch {}
   if (run) {
+    let response: Response | undefined;
     try {
-      const response = await fetch(run.url, { method: 'POST', body: JSON.stringify(message),
+      response = await fetch(run.url, { method: 'POST', body: JSON.stringify(message),
         headers: { 'content-type': 'application/json', accept: 'application/json', authorization: `Bearer ${run.token}` } });
-      if (response.status === 202) return null;
-      if (response.ok) return await response.json();
-    } catch {}
+    } catch {
+      // Glide is running, but Node does not trust the HTTPS dev server's certificate.
+      if (run.url.startsWith('https:')) return refusal(message, 'Glide runs over HTTPS with a certificate Node does not trust. Start the agent with NODE_EXTRA_CA_CERTS set to the dev certificate.');
+    }
+    if (response?.status === 202) return null;
+    if (response?.ok) { try { return await response.json(); } catch {} }
+    // Something else on that port answers 404; Glide itself refused anything else.
+    else if (response && response.status !== 404) return refusal(message, `Glide refused the request (HTTP ${response.status}). Restart Glide, then the agent.`);
   }
   // A stale run file (Glide stopped without cleaning up) is treated like no Glide at all.
   const offline = (item: unknown) => offlineMcpReply(item, packageInfo.version, project);
@@ -36,6 +48,11 @@ function install() {
   if (fs.existsSync(file)) {
     try { config = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {
       console.error(`${file} is not valid JSON, so it was left unchanged. Fix it and run this again.`);
+      process.exit(1);
+    }
+    // `[]` or `null` parse, but the servers would be dropped when written back.
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      console.error(`${file} does not hold a JSON object, so it was left unchanged. Fix it and run this again.`);
       process.exit(1);
     }
   }
