@@ -2,6 +2,8 @@
   <img src=".github/assets/docs/hero.svg" alt="Glide. Design visually. Ship real source code. Works with React, Vue, Svelte, Astro and HTML." width="100%">
 </p>
 
+# Glide
+
 <p align="center">
   <img src=".github/assets/docs/editor.png" alt="The Glide editor with a React and Tailwind landing page on the canvas. The page headline is selected, the layers panel lists the elements of Hero.tsx, and the properties panel shows the headline's className from source." width="100%">
   <br>
