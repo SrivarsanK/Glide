@@ -3,6 +3,7 @@ import { createSourceMapping } from './source-mapping.js';
 import { createMutationTransport } from './mutation-transport.js';
 import { createSourceProps } from './source-props.js';
 import { createMutationScope } from './mutation-scope.js';
+import { createInteractions } from './interactions.js';
 import { createSelectionFeedback } from './selection-feedback.js';
 import { createWorkspaceCanvas } from './workspace-canvas.js';
 import { editorChromeCSS } from './editor-chrome.js';
@@ -1884,6 +1885,24 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 <div class="props-row">
                   <button class="icon-btn" id="btn-auto-layout" title="Lay out the children in a column (display: flex)" style="flex:1;">Add auto layout</button>
                 </div>
+              </div>
+
+              <!-- Interactions — written as plain links, read back from the source -->
+              <div class="props-section" id="section-interactions" style="display:none;">
+                <div class="props-section-title">Interactions</div>
+                <div class="props-row">
+                  <span class="props-label" style="min-width:60px;">On click</span>
+                  <select id="interaction-action" class="props-select" style="flex:1;" aria-label="On click">
+                    <option value="none">Nothing</option><option value="page">Go to page</option><option value="url">Open URL</option><option value="scroll">Scroll to</option>
+                  </select>
+                </div>
+                <div class="props-row" id="interaction-value-row">
+                  <input id="interaction-value" class="props-input" style="flex:1;" aria-label="Link target">
+                  <select id="interaction-scroll" class="props-select" style="flex:1;display:none;" aria-label="Element to scroll to"></select>
+                </div>
+                <label class="props-row" id="interaction-newtab-row"><input type="checkbox" id="interaction-newtab"> <span>Open in a new tab</span></label>
+                <div class="props-row"><button class="icon-btn" id="interaction-apply" style="flex:1;">Apply</button></div>
+                <small id="interaction-problem" style="display:none;color:var(--danger);"></small>
               </div>
 
               <!-- Layout (Flex) — shown only when display=flex -->
@@ -5973,6 +5992,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               tagPicker.value = tag;
               tagPicker.dataset.current = tag;
             }
+            refreshInteractions();
 
             const isComponent = tagName && /^[A-Z]/.test(tagName);
             const jumpBtn = document.getElementById('btn-jump-definition');
@@ -7250,6 +7270,66 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               change: { type: 'retag', tagName: event.target.value } }));
             // Show the tag the source has until the save re-renders it; a refused change leaves it as it was.
             event.target.value = event.target.dataset.current || event.target.value;
+          });
+
+          const interactions = (${createInteractions.toString()})();
+          let interactionInfo = null;
+          let interactionIds = [];
+          // The form keeps unsaved edits while the same element is refreshed (scroll, resize).
+          let interactionSource = null, interactionDirty = false;
+          const INTERACTION_FIELDS = ['interaction-action', 'interaction-value', 'interaction-scroll', 'interaction-newtab'];
+          for (const kind of ['input', 'change']) {
+            document.getElementById('section-interactions').addEventListener(kind, event => { if (INTERACTION_FIELDS.includes(event.target.id)) interactionDirty = true; });
+          }
+          function syncInteractionFields() {
+            const action = document.getElementById('interaction-action').value;
+            document.getElementById('interaction-value-row').style.display = action === 'none' ? 'none' : '';
+            document.getElementById('interaction-value').style.display = action === 'scroll' ? 'none' : '';
+            document.getElementById('interaction-scroll').style.display = action === 'scroll' ? '' : 'none';
+            document.getElementById('interaction-newtab-row').style.display = action === 'url' ? '' : 'none';
+            document.getElementById('interaction-value').placeholder = action === 'page' ? '/pricing' : 'https://example.com';
+            document.getElementById('interaction-problem').style.display = 'none';
+          }
+          /** Shows the selected element's link, read from the page it renders. */
+          function refreshInteractions() {
+            const section = document.getElementById('section-interactions');
+            const source = selectedElement && parseSource(selectedElement.source) ? selectedElement.source : null;
+            if (!source) { section.style.display = 'none'; interactionInfo = interactionSource = null; return; }
+            if (source === interactionSource && interactionDirty) return;
+            // Until the new element answers, Apply has nothing to plan from.
+            if (source !== interactionSource) { interactionInfo = null; section.style.display = 'none'; }
+            interactionSource = source; interactionDirty = false;
+            Promise.all([frameAsk('link-info', { source }), frameAsk('ids')]).then(([info, ids]) => {
+              if (!selectedElement || selectedElement.source !== source) return;
+              if (!info || !RETAG_TAGS.includes(info.tag)) { section.style.display = 'none'; return; }
+              interactionInfo = info;
+              interactionIds = (ids || []).filter(item => item.count === 1).map(item => item.id);
+              const current = interactions.read(info);
+              const scroll = document.getElementById('interaction-scroll');
+              scroll.replaceChildren(...interactionIds.map(id => { const option = document.createElement('option'); option.value = id; option.textContent = '#' + id; return option; }));
+              document.getElementById('interaction-action').value = current.action;
+              document.getElementById('interaction-value').value = current.action === 'page' || current.action === 'url' ? current.value : '';
+              if (current.action === 'scroll') scroll.value = current.value;
+              document.getElementById('interaction-newtab').checked = !!current.newTab;
+              syncInteractionFields();
+              section.style.display = 'block';
+            });
+          }
+          document.getElementById('interaction-action').addEventListener('change', syncInteractionFields);
+          document.getElementById('interaction-apply').addEventListener('click', () => {
+            const parsed = selectedElement && parseSource(selectedElement.source);
+            if (!parsed || !interactionInfo || !socket || socket.readyState !== WebSocket.OPEN) return;
+            const action = document.getElementById('interaction-action').value;
+            const choice = { action, newTab: document.getElementById('interaction-newtab').checked,
+              value: action === 'scroll' ? document.getElementById('interaction-scroll').value : document.getElementById('interaction-value').value };
+            const problem = interactions.problem(choice, interactionIds);
+            const note = document.getElementById('interaction-problem');
+            if (problem) { note.textContent = problem; note.style.display = 'block'; return; }
+            // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
+            interactionDirty = false;
+            socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
+              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              change: interactions.plan(choice, interactionInfo) }));
           });
 
           function triggerUngroup() {
