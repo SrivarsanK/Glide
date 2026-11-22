@@ -17,11 +17,22 @@ export interface StructuralChange {
   y?: number;
   detached?: boolean;
   workspaceId?: string;
+  tagName?: string;
   /** False when the user clicked instead of dragging, so the size is only a default. */
   drawn?: boolean;
 }
 
-export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position']);
+export const structuralKinds = new Set(['delete', 'duplicate', 'paste', 'insert', 'group', 'ungroup', 'reorder', 'reparent', 'arrange', 'detach', 'attach', 'workspace-position', 'retag']);
+
+const RETAG_TARGETS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'a', 'button',
+  'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'figure', 'figcaption']);
+// Flow content a paragraph cannot hold (it takes phrasing content only).
+const BLOCK_TAGS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'p',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'figcaption', 'form', 'table', 'pre', 'blockquote', 'dl', 'dt', 'dd',
+  'hr', 'address', 'fieldset', 'details', 'dialog', 'menu', 'hgroup', 'search']);
+const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'label']);
+const tagOf = (node: t.Node): string | null => t.isJSXElement(node) && t.isJSXIdentifier(node.openingElement.name) ? node.openingElement.name.name : null;
+const attributeOf = (node: t.JSXElement, name: string) => node.openingElement.attributes.find((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name }));
 
 const traverse = (traverseModule as any).default || traverseModule;
 
@@ -144,6 +155,48 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
       }
     });
     return t.cloneNode(node, true);
+  }
+  if (change.type === 'retag') {
+    const from = tagOf(target), to = change.tagName || '';
+    if (!from || !/^[a-z]/.test(from)) throw new Error('UNSUPPORTED_OPERATION: Only HTML elements can change their tag; a component decides what it renders.');
+    if (!RETAG_TARGETS.has(to)) throw new Error(`UNSUPPORTED_OPERATION: <${to}> is not a tag the editor can switch to.`);
+    if (target.openingElement.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may set attributes the new tag depends on; change the tag in source.');
+    if (from === to) return;
+    // HTML validity checks that the source alone can decide.
+    const ancestors: string[] = [];
+    traverse(ast, { JSXElement(p: any) { if (p.node === target) p.findParent((q: any) => { const tag = tagOf(q.node); if (tag) ancestors.push(tag); return false; }); } });
+    const descendants: t.JSXElement[] = [];
+    t.traverseFast(target, item => { if (item !== target && t.isJSXElement(item)) descendants.push(item); });
+    // Fragments are transparent: their children render as this element's children.
+    const rendered = (node: t.JSXElement | t.JSXFragment): string[] => node.children.flatMap(child => t.isJSXFragment(child) ? rendered(child) : tagOf(child) ?? []);
+    const childTags = rendered(target);
+    if ((to === 'a' || to === 'button') && ancestors.some(tag => tag === 'a' || tag === 'button')) {
+      throw new Error(`UNSUPPORTED_OPERATION: A <${to}> cannot sit inside a link or button.`);
+    }
+    if ((to === 'a' || to === 'button') && descendants.some(item => INTERACTIVE_TAGS.has(tagOf(item) ?? '') || attributeOf(item, 'tabIndex'))) {
+      throw new Error(`UNSUPPORTED_OPERATION: A <${to}> cannot contain links, buttons or form fields.`);
+    }
+    if (to === 'li' && !['ul', 'ol'].includes(ancestors[0] ?? '')) throw new Error('UNSUPPORTED_OPERATION: A list item must sit directly in a <ul> or <ol>.');
+    if (from === 'li' && ['ul', 'ol'].includes(ancestors[0] ?? '')) throw new Error('UNSUPPORTED_OPERATION: A list holds list items; change the list first.');
+    if ((from === 'ul' || from === 'ol') && to !== 'ul' && to !== 'ol' && childTags.includes('li')) {
+      throw new Error('UNSUPPORTED_OPERATION: Its list items need a list; change them first.');
+    }
+    if (to === 'p' && descendants.some(item => BLOCK_TAGS.has(tagOf(item) ?? ''))) throw new Error('UNSUPPORTED_OPERATION: A paragraph cannot contain block elements.');
+    if (BLOCK_TAGS.has(to) && ancestors.includes('p')) throw new Error(`UNSUPPORTED_OPERATION: A <${to}> cannot sit inside a paragraph.`);
+    // Attributes that only mean something on the old tag are removed first, so nothing is dropped silently.
+    for (const [tag, names] of [['a', ['href', 'target', 'rel']], ['button', ['type']]] as const) {
+      const left = from === tag && to !== tag ? names.find(name => attributeOf(target, name)) : undefined;
+      if (left) throw new Error(`UNSUPPORTED_OPERATION: Remove ${left} first; it only applies to <${tag}>.`);
+    }
+    if (to === 'button') {
+      const type = attributeOf(target, 'type');
+      if (type && !(t.isStringLiteral(type.value) && type.value.value === 'button')) throw new Error('UNSUPPORTED_OPERATION: Remove type first; a button here gets type="button".');
+      // A button inside a form submits it unless it says otherwise.
+      if (!type) target.openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('type'), t.stringLiteral('button')));
+    }
+    (target.openingElement.name as t.JSXIdentifier).name = to;
+    if (target.closingElement) (target.closingElement.name as t.JSXIdentifier).name = to;
+    return;
   }
   if (change.type === 'insert') {
     if (!['rectangle', 'ellipse', 'frame', 'text'].includes(change.elementType || '')) throw new Error('UNSUPPORTED_OPERATION: Unknown inserted element type.');

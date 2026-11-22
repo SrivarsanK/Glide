@@ -1,6 +1,6 @@
 # A3: Tag picker (retag)
 
-Status: todo · Size: M · Depends on: A2 · Branch: `feat/a3-retag`
+Status: **in review** · Size: M · Depends on: A2 · Branch: `feat/a3-retag`
 
 ## Goal
 
