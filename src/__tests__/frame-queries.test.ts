@@ -111,3 +111,13 @@ test('a wrapped line spans all its items, also when their heights differ', () =>
   document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
   expect(createFrameQueries(win, attributes)('container-at', { x: 210, y: 75 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
 });
+
+test('a grid item spanning two rows does not merge them', () => {
+  const box = (source: string, left: number, top: number, height: number) => ({ ...element('div', source), getBoundingClientRect: () => ({ left, top, width: 100, height }) });
+  // A spans both rows; B is in the first row and C in the second.
+  const container = { ...element('section', 'App.tsx:3:5', null, 'relative'), children: [box('App.tsx:4:7', 0, 0, 110), box('App.tsx:5:7', 120, 0, 50), box('App.tsx:6:7', 120, 60, 50)] };
+  const win = { scrollX: 0, scrollY: 0, getComputedStyle: (el: any) => el === container
+    ? { position: 'relative', transform: 'none', display: 'grid', flexDirection: 'row', flexWrap: 'nowrap' } : { position: 'static', transform: 'none' },
+  document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
+  expect(createFrameQueries(win, attributes)('container-at', { x: 115, y: 85 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'before' });
+});
