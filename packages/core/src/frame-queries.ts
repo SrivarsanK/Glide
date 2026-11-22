@@ -52,7 +52,8 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       // A reversed row runs right to left, also within each wrapped line.
       const later = reverse && row ? cx < x : cx > x;
-      const line = wraps ? lineOf(r) : null;
+      // A grid item can span rows, so only a flex line (which no item spans) takes the union.
+      const line = wraps ? (flex ? lineOf(r) : { top: r.top, bottom: r.top + r.height }) : null;
       const after = line ? (upward ? line.bottom < y || (line.top < y && later) : line.top > y || (line.bottom > y && later))
         : row ? later : (reverse ? cy < y : cy > y);
       if (after) return { siblingId: id, position: 'before' };
