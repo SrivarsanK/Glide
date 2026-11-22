@@ -41,7 +41,7 @@ at a time. Each item has its own spec file in this folder.
 | 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR #34 (stacked on #33) |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | **deferred**: see the spec for why |
 | 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | **in review** (part 1: attributes, retag): PR #36 (stacked on #35) |
-| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review**: part 1 PR #35 (stacked on #34), part 2 PR from `feat/c5-mcp-build` (stacked on #36) |
+| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review**: part 1 PR #35 (stacked on #34), part 2 PR #37 (stacked on #36) |
 
 Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
 (committed, not on GitHub), `in review` (PR open), `done` (merged), `deferred` (skipped for now; its spec says why).
