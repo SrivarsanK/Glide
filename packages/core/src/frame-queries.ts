@@ -41,20 +41,23 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     const wraps = display.indexOf('grid') >= 0 || (row && style.flexWrap && style.flexWrap !== 'nowrap');
     // `wrap-reverse` stacks the lines bottom to top, whatever the row direction.
     const upward = row && style.flexWrap === 'wrap-reverse';
-    let last: any = null;
-    for (const child of Array.prototype.slice.call(container.children || [])) {
-      const id = child.getAttribute(attributes.source);
-      const position = win.getComputedStyle(child).position;
-      if (!id || file(id) !== file(parentId) || position === 'absolute' || position === 'fixed') continue;
-      const r = child.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const items = Array.prototype.slice.call(container.children || []).filter((child: any) => {
+      const id = child.getAttribute(attributes.source), position = win.getComputedStyle(child).position;
+      return id && file(id) === file(parentId) && position !== 'absolute' && position !== 'fixed';
+    }).map((child: any) => ({ id: child.getAttribute(attributes.source), r: child.getBoundingClientRect() }));
+    // Items of one wrapped line overlap vertically, but unequal heights align to either edge: the line spans them all.
+    const lineOf = (r: any) => items.reduce((line: any, item: any) => item.r.top < line.bottom && item.r.top + item.r.height > line.top
+      ? { top: Math.min(line.top, item.r.top), bottom: Math.max(line.bottom, item.r.top + item.r.height) } : line, { top: r.top, bottom: r.top + r.height });
+    for (const { id, r } of items) {
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       // A reversed row runs right to left, also within each wrapped line.
       const later = reverse && row ? cx < x : cx > x;
-      const after = wraps ? (upward ? r.top + r.height < y || (r.top < y && later) : r.top > y || (r.top + r.height > y && later))
+      const line = wraps ? lineOf(r) : null;
+      const after = line ? (upward ? line.bottom < y || (line.top < y && later) : line.top > y || (line.bottom > y && later))
         : row ? later : (reverse ? cy < y : cy > y);
       if (after) return { siblingId: id, position: 'before' };
-      last = child;
     }
-    return last ? { siblingId: last.getAttribute(attributes.source), position: 'after' } : {};
+    return items.length ? { siblingId: items[items.length - 1].id, position: 'after' } : {};
   }
 
   function stampedElements(): any[] {
