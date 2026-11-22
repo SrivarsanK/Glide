@@ -96,7 +96,8 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
   }
   if (opening.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may supply or override this attribute; edit it in source.');
   if (value !== null && value !== true && typeof value !== 'string') throw new Error('INVALID_PROP: An attribute value is text, true, or null to remove it.');
-  const named = (key: string) => opening.attributes.filter((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name, { name: key }));
+  // HTML attribute names ignore case, so a hand-written `popovertarget` is the same attribute as `popoverTarget`.
+  const named = (key: string) => opening.attributes.filter((a): a is t.JSXAttribute => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name.toLowerCase() === key.toLowerCase());
   const existing = named(name);
   if (existing.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   if (existing[0] && literal(existing[0].value) === undefined) throw new Error('UNSUPPORTED_OPERATION: This attribute is computed; edit it in source.');
@@ -121,7 +122,7 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
     const current = named(key)[0];
     if (next === null) { if (current) opening.attributes.splice(opening.attributes.indexOf(current), 1); return; }
     const node = next === true ? null : t.stringLiteral(next);
-    if (current) current.value = node; else opening.attributes.push(t.jsxAttribute(t.jsxIdentifier(key), node));
+    if (current) { current.name = t.jsxIdentifier(key); current.value = node; } else opening.attributes.push(t.jsxAttribute(t.jsxIdentifier(key), node));
   };
   write(name, value as string | true | null);
   // A new tab must not get a handle on this page.
