@@ -90,3 +90,14 @@ test('a reversed wrapping row orders each line right to left', () => {
   document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
   expect(createFrameQueries(win, attributes)('container-at', { x: 250, y: 25 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
 });
+
+test('wrap-reverse orders the lines bottom to top', () => {
+  const box = (source: string, left: number, top: number) => ({ ...element('div', source), getBoundingClientRect: () => ({ left, top, width: 100, height: 50 }) });
+  // Source order A, B on the bottom line, then C on the line above.
+  const container = { ...element('section', 'App.tsx:3:5', null, 'relative'), children: [box('App.tsx:4:7', 120, 60), box('App.tsx:5:7', 0, 60), box('App.tsx:6:7', 120, 0)] };
+  const win = { scrollX: 0, scrollY: 0, getComputedStyle: (el: any) => el === container
+    ? { position: 'relative', transform: 'none', display: 'flex', flexDirection: 'row-reverse', flexWrap: 'wrap-reverse' } : { position: 'static', transform: 'none' },
+  document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
+  expect(createFrameQueries(win, attributes)('container-at', { x: 250, y: 25 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'before' });
+  expect(createFrameQueries(win, attributes)('container-at', { x: 250, y: 85 })).toMatchObject({ siblingId: 'App.tsx:4:7', position: 'before' });
+});

@@ -39,6 +39,8 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     const flex = display.indexOf('flex') >= 0, reverse = flex && direction.indexOf('reverse') >= 0;
     const row = flex && direction.indexOf('row') === 0;
     const wraps = display.indexOf('grid') >= 0 || (row && style.flexWrap && style.flexWrap !== 'nowrap');
+    // `wrap-reverse` stacks the lines bottom to top, whatever the row direction.
+    const upward = row && style.flexWrap === 'wrap-reverse';
     let last: any = null;
     for (const child of Array.prototype.slice.call(container.children || [])) {
       const id = child.getAttribute(attributes.source);
@@ -47,7 +49,7 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       const r = child.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       // A reversed row runs right to left, also within each wrapped line.
       const later = reverse && row ? cx < x : cx > x;
-      const after = wraps ? r.top > y || (r.top + r.height > y && later)
+      const after = wraps ? (upward ? r.top + r.height < y || (r.top < y && later) : r.top > y || (r.top + r.height > y && later))
         : row ? later : (reverse ? cy < y : cy > y);
       if (after) return { siblingId: id, position: 'before' };
       last = child;
