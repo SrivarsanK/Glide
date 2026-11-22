@@ -109,6 +109,18 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
     },
 
     configureServer(server) {
+      // The MCP run file holds the agent token. Vite serves files under the root (also as /@fs/...),
+      // and its deny list is fixed before plugins see the resolved config, so refuse the path here.
+      server.middlewares.use((req, res, next) => {
+        let pathname = (req.url || '').split('?')[0];
+        try { pathname = decodeURIComponent(pathname); } catch { /* keep the raw path */ }
+        if (/\/node_modules\/\.cache\/glide(\/|$)/i.test(path.posix.normalize(pathname.replace(/\\/g, '/')))) {
+          res.statusCode = 403;
+          res.end('Glide keeps this file private.');
+          return;
+        }
+        next();
+      });
       // ── EDITOR AT /__glide/ ──────────────────────────────────────────────
       // Glide's server attaches to this dev server: the editor, its assets and
       // its socket share the app's origin, so the preview needs no proxy and
