@@ -34,7 +34,7 @@ Glide runs on the developer's machine and rewrites their source, so these deserv
 
 - Inline `style` values: writing styles into the user's source is what Glide does.
 - `var` and older JavaScript inside the browser scripts Glide injects as strings (`packages/vite-plugin/src/bridge.ts`, `packages/server/src/ws-server.ts`, `packages/overlay/src/editor-html.ts`).
-- `innerHTML` that builds the editor's own static markup. Flag it only when page- or user-controlled data reaches it unescaped.
+- `innerHTML` that builds the editor's own static markup. Flag it when page- or user-controlled data reaches it unescaped, or reaches a URL attribute such as `href` or `src` without a check on its scheme: escaping does not stop a `javascript:` URL.
 
 ## Deeper local review
 
