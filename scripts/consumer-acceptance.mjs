@@ -257,6 +257,18 @@ try {
   await textInput.press('Tab');
   await waitForSource(project, code => /Canvas note/.test(code));
   await outside.filter({ hasText: 'Canvas note' }).waitFor();
+  // Each write reloads the preview a few hundred ms later, or folds into a reload already under way,
+  // so wait until the preview stops navigating before measuring the drop target.
+  // shortcut: a fixed 1s quiet window, not a reload signal; lengthen it if CI shows reloads later than that.
+  let lastNavigation = Date.now();
+  const markNavigation = f => { if (f.parentFrame()) lastNavigation = Date.now(); };
+  page.on('framenavigated', markNavigation);
+  for (const deadline = Date.now() + 10000; Date.now() - lastNavigation < 1000;) {
+    assert.ok(Date.now() < deadline, 'Preview kept reloading after the canvas text edit');
+    await page.waitForTimeout(100);
+  }
+  page.off('framenavigated', markNavigation);
+  await frame.locator('main').waitFor();
   const outsideBounds = await outside.boundingBox();
   const destinationBounds = await frame.locator('main').boundingBox();
   await page.mouse.move(outsideBounds.x + 5, outsideBounds.y + 5);
