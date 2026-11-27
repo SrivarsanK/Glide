@@ -1,8 +1,9 @@
 # Glide roadmap: real elements, interactions and the agent bridge
 
 The plan for turning Glide's drawing tools into real, working page elements, adding Figma-style
-interactions as plain code, and letting coding agents work through Glide. Work through it one item
-at a time. Each item has its own spec file in this folder.
+interactions as plain code, and letting coding agents work through Glide. Batch D takes the lessons
+from a comparison with Onlook (2026-11-28). Work through it one item at a time. Each item has its own
+spec file in this folder.
 
 ## How to resume
 
@@ -32,25 +33,34 @@ at a time. Each item has its own spec file in this folder.
 
 | # | ID | Feature | Size | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **in review**: PR #24 from `feat/f0-layout-first-insert`; `done` when merged |
-| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **in review**: PR #25 (stacked on #24) |
-| 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **in review**: PR #26 (stacked on #25) |
-| 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **in review**: PR #27 (stacked on #26) |
-| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **in review**: PR #28 (stacked on #27) |
-| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **in review**: PR #29 (stacked on #28) |
-| 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **in review**: PR #30 (stacked on #29) |
-| 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **in review**: PR #31 (stacked on #30) |
-| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **in review**: PR #32 (stacked on #31) |
-| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **in review**: PR #33 (stacked on #32) |
-| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **in review** (same-file v1): PR #34 (stacked on #33) |
+| 1 | [F0](F0-layout-first-insert.md) | Land layout-first inserts | S | — | **done**: PR #24 |
+| 2 | [A1](A1-layout-frames.md) | Frames lay out their children; `display` and radius class rules | S–M | F0 | **done**: PR #25 |
+| 3 | [A2](A2-attribute-edit.md) | Attribute edit for HTML elements | M | F0 | **done**: PR #26 |
+| 4 | [A3](A3-tag-picker.md) | Tag picker (retag) | M | A2 | **done**: PR #27 |
+| 5 | [B1](B1-links.md) | Interactions panel: go to page, open URL, scroll to | M | A2, A3 | **done**: PR #28 |
+| 6 | [B2](B2-overlays.md) | Overlays with the Popover API | M | B1 | **done**: PR #29 |
+| 7 | [B3](B3-interaction-states.md) | Hover, press and focus states | S | B1 | **done**: PR #30 |
+| 8 | [B4](B4-animation.md) | Animation: transition duration and easing | S–M | F0 | **done**: PR #31 |
+| 9 | [B5](B5-routes.md) | Real route list (Pages panel and link targets) | M | B1 | **done**: PR #32 |
+| 10 | [C1](C1-mcp-bridge.md) | MCP bridge, step 1: read tools and safe edits | L | F0 | **done**: PR #33 |
+| 11 | [C2](C2-extract-component.md) | Extract component | L | A2 | **done** (same-file v1): PR #34 |
 | 12 | [C3](C3-page-transitions.md) | Page transitions (View Transitions) | M | B1, B5 | **deferred**: see the spec for why |
-| 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | **in review** (part 1: attributes, retag): PR #36 (stacked on #35) |
-| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **in review**: part 1 PR #35 (stacked on #34), part 2 PR #37 (stacked on #36) |
+| 13 | [C4](C4-template-parity.md) | Vue, Svelte and Astro parity | L | A2, A3 | **done** (part 1: attributes, retag): PR #36; template insert, delete and move deferred |
+| 14 | [C5](C5-mcp-complete.md) | MCP bridge, steps 2–3: writes, presence, one-click setup | L | C1 | **done**: part 1 PR #35, part 2 PR #37 |
+| 15 | [D1](D1-agent-screenshot.md) | Screenshot and inspect tools for agents | S–M | C1, C5 | todo |
+| 16 | [D2](D2-element-requests.md) | Requests pinned to elements, for agents | M | C1 | todo |
+| 17 | [D3](D3-breakpoint-previews.md) | Breakpoint previews side by side | L | — | todo |
+| 18 | [D4](D4-react-owner-stacks.md) | Find source from React's owner stack, without the plugin | M–L | — | todo |
+| 19 | [D5](D5-theme-tokens.md) | Theme tokens and fonts panel | M | — | todo |
+| 20 | [D6](D6-branch-pr.md) | Push and open a pull request from branch mode | S–M | — | todo |
+| 21 | [D7](D7-agent-docs.md) | Root `AGENTS.md`, `GLOSSARY.md` and an unused-code check | S | — | todo |
+| 22 | [D8](D8-built-in-agent.md) | Decide whether to build an agent into the editor | decision | D1, D2 | todo |
 
 Status values: `todo`, `in progress`, `needs commit` (finished, not committed), `needs push`
 (committed, not on GitHub), `in review` (PR open), `done` (merged), `deferred` (skipped for now; its spec says why).
 Sizes: **S** is one focused change (a few files, roughly 100 lines with tests). **M** is several
-files plus a piece of editor UI. **L** is a new subsystem; its spec splits it into steps.
+files plus a piece of editor UI. **L** is a new subsystem; its spec splits it into steps. A
+**decision** row ends in a recorded decision, not code.
 
 ## Why this order
 
@@ -60,6 +70,10 @@ files plus a piece of editor UI. **L** is a new subsystem; its spec splits it in
   cover most of Figma's prototype features as plain HTML and CSS.
 - **C: agents and scale.** The MCP bridge hands real logic to agents. C1 doesn't depend on A or B,
   so it can be pulled forward at any point.
+- **D: lessons from Onlook.** D1 and D2 come first, because they extend the MCP bridge with little
+  new code. D3 changes how editing feels the most. D4 is the route to Next.js. D5 and D6 are
+  independent. D7 is small and can be pulled forward at any point. D8 is a decision, taken after D1
+  and D2 ship.
 
 ```mermaid
 flowchart LR
@@ -70,6 +84,14 @@ flowchart LR
   B1 & B5 --> C3
   A2 & A3 --> C4
   C1 --> C5
+  C1 & C5 --> D1
+  C1 --> D2
+  D1 & D2 --> D8
+  D3
+  D4
+  D5
+  D6
+  D7
 ```
 
 ## Ground rules (from Glide's code)
@@ -209,3 +231,6 @@ flowchart LR
 - 2026-11-22: Addressed CodeRabbit's reviews of #33 (run-file privacy in Vite, editor refresh after agent edits,
   endpoint hardening) and #34 (extract refuses `this` and outer writes). C5 part 2 on `feat/c5-mcp-build`:
   `insert_markup` and an agent badge, checked live in test-site with undo. Reviews of #35–#37 addressed; 527 tests pass.
+- 2026-11-28: F0–C5 marked `done` on the board; all were merged on 2026-11-22 (PRs #24–#37), and C3 stays
+  deferred. Batch D added from a comparison with Onlook 2.0 (desktop, agent-driven) and its retired v1
+  (web): eight specs, D1–D8. Nothing in it is implemented yet.
