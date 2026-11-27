@@ -87,7 +87,7 @@
     "@vue/compiler-sfc": "^3.4.21",
     "chokidar": "^3.6.0",
     "html-dom-parser": "^8.0.0",
-    "lucide": "0.468.0",
+    "lucide": "1.77.0",
     "picocolors": "^1.0.0",
     "postcss": "^8.4.0",
     "recast": "^0.23.12",
