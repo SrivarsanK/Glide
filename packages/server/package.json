@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@types/ws": "^8.5.10",
-    "typescript": "^5.4.2"
+    "typescript": "^7.0.2"
   },
   "repository": {
     "type": "git",

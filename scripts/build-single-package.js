@@ -1,6 +1,4 @@
 import { build } from 'esbuild';
-import { rollup } from 'rollup';
-import { dts } from 'rollup-plugin-dts';
 import { spawn } from 'child_process';
 import { createRequire } from 'module';
 import * as fs from 'fs';
@@ -64,12 +62,14 @@ const buildLevels = [
   ['core', 'babel-plugin'],
   ['ast-writer', 'adapters/vue', 'adapters/svelte', 'adapters/astro', 'overlay'],
   ['server'],
-  ['vite-plugin'],
+  ['vite-plugin', 'cli'],
 ];
 const internalPackages = buildLevels.flat();
 
 const require = createRequire(import.meta.url);
-const tscBin = require.resolve('typescript/bin/tsc');
+const tsPkgPath = require.resolve('typescript/package.json');
+const tsPkg = JSON.parse(fs.readFileSync(tsPkgPath, 'utf8'));
+const tscBin = path.resolve(path.dirname(tsPkgPath), tsPkg.bin.tsc);
 
 // Runs a Node CLI directly: npx adds about a second to every call on Windows.
 function runNode(bin, args, cwd) {
@@ -88,7 +88,7 @@ function runNode(bin, args, cwd) {
 const workspacePackages = new Map(internalPackages.map(pkg => {
   const pkgDir = path.join(projectRoot, 'packages', pkg);
   const manifest = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
-  return [manifest.name, { main: path.join(pkgDir, manifest.main), types: path.join(pkgDir, manifest.types) }];
+  return [manifest.name, { pkg, pkgDir, main: path.join(pkgDir, manifest.main), types: path.join(pkgDir, manifest.types) }];
 }));
 
 // An alias, unlike a path returned by a plugin, still reads each package.json "type".
@@ -105,7 +105,7 @@ const workspaceGuardPlugin = {
   },
 };
 
-// tsc and dts-bundle-generator read a generated tsconfig beside the real one, so the
+// tsc reads a generated tsconfig beside the real one, so the
 // rest of it (relative paths, @types lookup) resolves exactly as before.
 const workspacePaths = Object.fromEntries([...workspacePackages].map(([name, pkg]) => [name, [pkg.types]]));
 const workspaceTsconfigs = new Set();
@@ -204,22 +204,64 @@ async function runBuild() {
     plugins: [workspaceGuardPlugin],
   });
 
-  // dts-bundle-generator spent ~15s walking @babel/types, which no public type uses. npm run typecheck
-  // compiles these bundles, as dts-bundle-generator's own output check did.
-  console.log('Bundling typings with rollup-plugin-dts...');
-  // Glide's own packages are inlined; libraries and Node built-ins stay imports.
-  const external = id => !id.startsWith('.') && !path.isAbsolute(id) && !workspacePackages.has(id);
-  await Promise.all([
-    ['dist/index.d.ts', 'src/index.ts', projectRoot],
-    ['dist/cli.d.ts', 'packages/cli/src/index.ts', path.join(projectRoot, 'packages/cli')],
-    ['dist/vite-plugin.d.ts', 'packages/vite-plugin/src/index.ts', path.join(projectRoot, 'packages/vite-plugin')],
-    ['dist/babel-plugin.d.ts', 'packages/babel-plugin/src/index.ts', path.join(projectRoot, 'packages/babel-plugin')],
-  ].map(async ([out, entry, project]) => {
-    const bundle = await rollup({ input: path.join(projectRoot, entry), external,
-      plugins: [dts({ tsconfig: workspaceTsconfig(project), respectExternal: true })] });
-    await bundle.write({ file: path.join(projectRoot, out), format: 'es' });
-    await bundle.close();
-  }));
+  // Emit published typings directly from TypeScript (tsgo): copy the already-compiled
+  // workspace declarations into dist/types/ and rewrite internal @srivarsank/* specifiers
+  // to relative paths so published .d.ts files are self-contained without a second bundler pass.
+  console.log('Emitting published typings with tsc...');
+  await runNode(tscBin, ['-p', workspaceTsconfig(projectRoot), '--emitDeclarationOnly', '--declarationMap', 'false'], projectRoot);
+
+  const distTypesDir = path.join(distDir, 'types');
+  const publishedTypeTargets = new Map();
+  function copyDeclarations(srcDir, destDir) {
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      const srcPath = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        copyDeclarations(srcPath, destPath);
+      } else if (entry.name.endsWith('.d.ts')) {
+        fs.mkdirSync(destDir, { recursive: true });
+        const stripped = fs.readFileSync(srcPath, 'utf8').replace(/^\/\/# sourceMappingURL=.*(?:\r?\n)?/m, '');
+        fs.writeFileSync(destPath, stripped, 'utf8');
+      }
+    }
+  }
+  for (const [name, info] of workspacePackages) {
+    const destPkgDir = path.join(distTypesDir, info.pkg);
+    copyDeclarations(path.join(info.pkgDir, 'dist'), destPkgDir);
+    publishedTypeTargets.set(name, path.join(destPkgDir, 'index.js'));
+  }
+
+  fs.writeFileSync(path.join(distDir, 'vite-plugin.d.ts'), "export * from './types/vite-plugin/index.js';\n", 'utf8');
+  fs.writeFileSync(path.join(distDir, 'babel-plugin.d.ts'), "export { default } from './types/babel-plugin/index.js';\n", 'utf8');
+  fs.writeFileSync(path.join(distDir, 'cli.d.ts'), "export * from './types/cli/index.js';\n", 'utf8');
+
+  function collectDtsFiles(dir, out = []) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) collectDtsFiles(full, out);
+      else if (entry.name.endsWith('.d.ts')) out.push(full);
+    }
+    return out;
+  }
+
+  const internalSpecifier = /((?:\bfrom\s+|\bimport\s*\(\s*))(['"])(@srivarsank\/[^'"]+)\2/g;
+  for (const dtsFile of collectDtsFiles(distDir)) {
+    const fileDir = path.dirname(dtsFile);
+    const original = fs.readFileSync(dtsFile, 'utf8');
+    const rewritten = original.replace(internalSpecifier, (match, prefix, quote, pkgName) => {
+      const target = publishedTypeTargets.get(pkgName);
+      if (!target) {
+        throw new Error(`Unmapped internal package specifier ${pkgName} in ${path.relative(projectRoot, dtsFile)}`);
+      }
+      let rel = path.relative(fileDir, target).split(path.sep).join('/');
+      if (!rel.startsWith('.')) rel = `./${rel}`;
+      return `${prefix}${quote}${rel}${quote}`;
+    });
+    if (rewritten !== original) fs.writeFileSync(dtsFile, rewritten, 'utf8');
+    if (/(?:\bfrom\s+|\bimport\s*\(\s*)['"]@srivarsank\//.test(rewritten)) {
+      throw new Error(`Unresolved @srivarsank/ specifier remained in ${path.relative(projectRoot, dtsFile)}`);
+    }
+  }
 
   // 5. Package skills and synchronize to .agents/skills/
   console.log('Packaging AI agent skills...');

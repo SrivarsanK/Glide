@@ -6,7 +6,9 @@ import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const require = createRequire(import.meta.url);
-const compiler = require.resolve('typescript/bin/tsc');
+const tsPkgPath = require.resolve('typescript/package.json');
+const tsPkg = JSON.parse(readFileSync(tsPkgPath, 'utf8'));
+const compiler = path.resolve(path.dirname(tsPkgPath), tsPkg.bin.tsc);
 const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const projects = [];
 
@@ -44,7 +46,7 @@ for (const project of projects) {
 const typings = ['index', 'cli', 'vite-plugin', 'babel-plugin'].map(name => path.join(root, 'dist', `${name}.d.ts`));
 console.log('Typechecking dist typings...');
 const typingsResult = spawnSync(process.execPath, [compiler, '--noEmit', '--strict', '--skipLibCheck', 'false',
-  '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', '--types', 'node', ...typings], {
+  '--ignoreConfig', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', '--types', 'node', ...typings], {
   cwd: root,
   stdio: 'inherit',
   windowsHide: true,
