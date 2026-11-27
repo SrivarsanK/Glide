@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^8.1.2",
     "@babel/helper-plugin-utils": "^7.0.0",
     "@babel/types": "^7.24.0"
   },
