@@ -42,6 +42,7 @@ test('selection bounds remain live while a persisted position update is pending'
     const sourceMapping = createSourceMapping();
     let currentFile = 'App.tsx', isResizing = false, isDragging = false, isPendingPositionUpdate = true;
     let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionTags = new Map();
     const document = { querySelectorAll() { return []; } };
     let draws = 0;
     function drawOverlay() { draws++; } function populatePropsFromComputed() {}
@@ -51,6 +52,25 @@ test('selection bounds remain live while a persisted position update is pending'
   `, context);
   expect(vm.runInContext('selectedRect.y', context)).toBe(25);
   expect(vm.runInContext('draws', context)).toBe(1);
+});
+
+test('deselecting one of two selected elements keeps the other one\'s tag for its label', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isResizing = false, isDragging = false, isPendingPositionUpdate = false;
+    let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionTags = new Map();
+    const document = { querySelectorAll() { return []; } };
+    function drawOverlay() {} function populatePropsFromComputed() {} function resetEditScope() {} function showNoSelection() {}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
+    const rect = { x: 0, y: 0, width: 10, height: 10 };
+    acceptSelection({ source: 'App.tsx:1:1', rect, computedStyles: { tagName: 'h1' } });
+    acceptSelection({ source: 'App.tsx:2:1', rect, isShift: true, computedStyles: { tagName: 'p' } });
+    const data = { type: 'glide:element-deselected', source: 'App.tsx:2:1' };
+    (function() { ${branch('glide:element-deselected')} })();
+  `, context);
+  expect(vm.runInContext('selectedElement', context)).toMatchObject({ source: 'App.tsx:1:1', tagName: 'h1' });
 });
 
 test('resolved relative and absolute file aliases do not repeatedly reload the tree', () => {

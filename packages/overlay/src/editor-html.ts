@@ -4922,6 +4922,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             get isEmpty() { return this._index.size === 0; }
           };
 
+          // Each selected element's tag, so the label of the one left after a Shift-deselect keeps it.
+          const selectionTags = new Map();
+
           /** Applies a selection the page reports; a refresh re-reports an element already selected and is not a click. */
           function acceptSelection(data) {
             const isShift = data.isShift;
@@ -4943,6 +4946,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             } else if (!isShift) {
               selectedSources = [source];
               selectedRects = [rect];
+              selectionTags.clear();
             } else {
               if (!isSourceSelected(source, selectedSources)) {
                 selectedSources.push(source);
@@ -4951,7 +4955,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
 
             // The bridges send the tag inside computedStyles on overlay messages.
-            selectedElement = { source: source, owners: data.owners || [], tagName: (data.computedStyles && data.computedStyles.tagName) || data.tagName };
+            const tagName = (data.computedStyles && data.computedStyles.tagName) || data.tagName;
+            if (tagName) selectionTags.set(source, tagName);
+            selectedElement = { source: source, owners: data.owners || [], tagName: tagName };
             selectedRect = rect;
             selectedComputedStyles = data.computedStyles;
             selectedComputedSource = source;
@@ -5171,11 +5177,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const source = data.source;
               const idx = selectedSources.findIndex(s => isSourceMatch(s, source));
               if (idx !== -1) {
+                selectionTags.delete(selectedSources[idx]);
                 selectedSources.splice(idx, 1);
                 selectedRects.splice(idx, 1);
               }
               if (selectedSources.length > 0) {
-                selectedElement = { source: selectedSources[selectedSources.length - 1] };
+                const remaining = selectedSources[selectedSources.length - 1];
+                selectedElement = { source: remaining, tagName: selectionTags.get(remaining) };
                 selectedRect = selectedRects[selectedRects.length - 1];
                 resetEditScope();
               } else {
