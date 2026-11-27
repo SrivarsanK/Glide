@@ -1141,6 +1141,15 @@ export class GlideServer {
             next();
             return;
           }
+          if (this.hosted) {
+            // Never inherit host dev-server CORS headers (Vite 8 runs corsMiddleware before
+            // configureServer hooks) on Glide's editor, MCP, or asset routes.
+            res.removeHeader('Access-Control-Allow-Origin');
+            res.removeHeader('Access-Control-Allow-Credentials');
+            res.removeHeader('Access-Control-Allow-Headers');
+            res.removeHeader('Access-Control-Allow-Methods');
+            res.removeHeader('Access-Control-Expose-Headers');
+          }
           // The MCP route checks for itself: no Origin (so no browser) and the run file's token. The bridge
           // uses the run file's loopback address, which a remoteAccess host list may not include.
           if (pathname === '/__glide/mcp') {
