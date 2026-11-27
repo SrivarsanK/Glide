@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify:release
@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
@@ -68,7 +68,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           registry-url: 'https://npm.pkg.github.com'
           scope: '@srivarsank'
 
