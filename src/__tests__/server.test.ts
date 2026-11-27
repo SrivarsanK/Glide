@@ -191,6 +191,7 @@ test('file watcher ignores node_modules and dist while watching source files eve
   fs.mkdirSync(path.join(root, 'node_modules', '.cache', 'glide'), { recursive: true });
   fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
   fs.writeFileSync(path.join(root, 'App.tsx'), 'const App = () => <main><button>A</button></main>;');
+  fs.writeFileSync(path.join(root, 'Untouched.tsx'), 'const Untouched = () => <p>idle</p>;');
   fs.writeFileSync(path.join(root, 'node_modules', '.cache', 'glide', 'mcp.json'), '{"v":1}');
   fs.writeFileSync(path.join(root, 'node_modules', 'dep.js'), 'export const a = 1;');
   fs.writeFileSync(path.join(root, 'dist', 'bundle.js'), 'export const b = 1;');
@@ -232,7 +233,8 @@ test('file watcher ignores node_modules and dist while watching source files eve
     const generations: Map<string, number> = (server as any).fileGenerations;
     const driftedKeys = [...generations.keys()];
     expect(driftedKeys.some(key => key.includes('node_modules') || key.includes('/dist/'))).toBe(false);
-    expect(seenUpdates.some(file => file.includes('node_modules') || file.includes('bundle.js'))).toBe(false);
+    expect(driftedKeys.some(key => key.includes('untouched.tsx'))).toBe(false);
+    expect(seenUpdates.some(file => file.includes('node_modules') || file.includes('bundle.js') || file.endsWith('Untouched.tsx'))).toBe(false);
     expect(seenUpdates.some(file => file.endsWith('App.tsx'))).toBe(true);
   } finally {
     client?.close();

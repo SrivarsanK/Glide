@@ -5,9 +5,9 @@ import { Server as TlsServer } from 'node:tls';
 import * as fs from 'fs';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getEditorHTML } from '@srivarsank/overlay';
-import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme, listRoutes } from '@srivarsank/core';
+import { buildComponentTree, GlideConfig, DEFAULT_CONFIG, resolveComponentDefinition, trustedWindowMessage, loadTailwindTheme, listRoutes, isIgnoredWatchPath } from '@srivarsank/core';
 import * as path from 'path';
-import chokidar from 'chokidar';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { parseJSXElements, inspectJSXProps, listWorkspaceObjects, forwardsClassName, activeVariants } from '@srivarsank/ast-writer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -930,24 +930,7 @@ export function typingStep(operations: MutationOperation[]): { squashKey?: strin
   return { squashKey: `text:${op.filePath}:${op.line}:${op.column}:${words}` };
 }
 
-const IGNORED_WATCH_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  '.next',
-  '.svelte-kit',
-  '.nuxt',
-]);
-
-/** Match ignored directory segments relative to the watched project root (compatible with chokidar v3 and v4+). */
-export function isIgnoredWatchPath(projectRoot: string, targetPath: string): boolean {
-  const relative = path.relative(projectRoot, targetPath);
-  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    return false;
-  }
-  return relative.split(/[\\/]/).some(part => IGNORED_WATCH_DIRS.has(part.toLowerCase()));
-}
+export { isIgnoredWatchPath };
 
 export class GlideServer {
   private sessionToken = randomBytes(32).toString('hex');
@@ -968,7 +951,7 @@ export class GlideServer {
   private history = new HistoryStore();
   private notifiedTransactions = new Set<string>();
   private fileGenerations = new Map<string, number>();
-  private watcher: any = null;
+  private watcher: FSWatcher | null = null;
   private lastSelfWrites = new Map<string, string>();
   private proxiedSockets = new Set<Duplex>();
   /** Set by attach(): a dev server that serves Glide alongside the app, with no proxy. */
@@ -1244,9 +1227,7 @@ export class GlideServer {
         this.watcher = chokidar.watch(srcPath, {
           persistent: true,
           followSymlinks: false,
-          // Native Windows watching can abort Node during atomic source replacement.
-          usePolling: process.platform === 'win32',
-          interval: 200,
+          backend: 'auto',
           ignored: (filePath: string) => isIgnoredWatchPath(srcPath, filePath),
         });
         this.watcher.on('change', (filePath: string) => {

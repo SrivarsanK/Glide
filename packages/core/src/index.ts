@@ -14,7 +14,7 @@ export { buildComponentTree, getNestingPath } from './tree.js';
 export { DEFAULT_CONFIG, resolveConfig } from './config.js';
 export type { GlideConfig, GlideEditorTheme, GlideViewport, DeepPartial } from './config.js';
 export { loadConfigFromDisk } from './config-loader.js';
-export { buildRegistry, watchRegistry, collectSourceFiles } from './component-registry.js';
+export { buildRegistry, watchRegistry, collectSourceFiles, isIgnoredWatchPath } from './component-registry.js';
 export type { ComponentRegistry, ComponentBucket, RegistryElement, RegistryOptions } from './component-registry.js';
 export { camelToKebab, kebabToCamel, parseInlineStyle, mergeInlineStyle } from './style-utils.js';
 export * from './staged-edits.js';

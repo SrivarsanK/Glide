@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { buildRegistry, collectSourceFiles } from '../../packages/core/src/component-registry.js';
+import { buildRegistry, collectSourceFiles, watchRegistry } from '../../packages/core/src/component-registry.js';
 import type { ComponentRegistry, ComponentBucket, RegistryElement } from '../../packages/core/src/component-registry.js';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -293,5 +293,49 @@ describe('collectSourceFiles', () => {
     const files = collectSourceFiles(path.join(tmpDir, 'src'));
     expect(files.some(f => f.endsWith('Button.tsx'))).toBe(true);
     expect(files.some(f => f.endsWith('Home.tsx'))).toBe(true);
+  });
+});
+
+describe('watchRegistry', () => {
+  test('rebuilds on source edits under a build ancestor directory while ignoring node_modules and dist', async () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-watch-reg-'));
+    const projectRoot = path.join(outer, 'build', 'app');
+    fs.mkdirSync(path.join(projectRoot, 'src', 'node_modules', 'dep'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'src', 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, 'package.json'), JSON.stringify({ dependencies: { react: '*' } }));
+    fs.writeFileSync(path.join(projectRoot, 'src', 'App.tsx'), `export function App() { return <div>Initial</div>; }`);
+    fs.writeFileSync(path.join(projectRoot, 'src', 'node_modules', 'dep', 'index.js'), `export const dep = 1;`);
+    fs.writeFileSync(path.join(projectRoot, 'src', 'dist', 'out.js'), `export const out = 1;`);
+
+    const updates: ComponentRegistry[] = [];
+    let resolveUpdate!: (reg: ComponentRegistry) => void;
+    let timeoutId!: ReturnType<typeof setTimeout>;
+    const updated = new Promise<ComponentRegistry>((resolve, reject) => {
+      resolveUpdate = (reg) => { clearTimeout(timeoutId); resolve(reg); };
+      timeoutId = setTimeout(() => reject(new Error('Timed out waiting for watchRegistry update')), 4000);
+    });
+
+    const watcher = watchRegistry(projectRoot, reg => {
+      updates.push(reg);
+      if (reg.buckets.some(b => b.name === 'Hero')) resolveUpdate(reg);
+    });
+
+    try {
+      await Promise.race([
+        new Promise<void>(resolve => watcher.once('ready', () => resolve())),
+        new Promise<void>(resolve => setTimeout(resolve, 300)),
+      ]);
+      fs.writeFileSync(path.join(projectRoot, 'src', 'node_modules', 'dep', 'index.js'), `export const dep = 2;`);
+      fs.writeFileSync(path.join(projectRoot, 'src', 'dist', 'out.js'), `export const out = 2;`);
+      await new Promise(resolve => setTimeout(resolve, 450));
+      expect(updates).toHaveLength(0);
+
+      fs.writeFileSync(path.join(projectRoot, 'src', 'App.tsx'), `export function Hero() { return <section>Updated</section>; }`);
+      const next = await updated;
+      expect(next.buckets.some(b => b.name === 'Hero')).toBe(true);
+    } finally {
+      await watcher.close();
+      fs.rmSync(outer, { recursive: true, force: true });
+    }
   });
 });

@@ -17,7 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { createRequire } from 'module';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { parse as parseBabel, type ParseResult } from '@babel/parser';
 import _traverse from '@babel/traverse';
 import type { File } from '@babel/types';
@@ -27,9 +27,27 @@ import type { FrameworkId } from './types.js';
 import { detectProjectMeta } from './detect.js';
 
 // CJS interop
-const require = createRequire(import.meta.url);
 const traverse = (_traverse as any).default ?? _traverse;
 const parseDOM = (parseDOMModule as any).default ?? parseDOMModule;
+
+const IGNORED_WATCH_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  '.svelte-kit',
+  '.nuxt',
+]);
+
+/** Match ignored directory segments relative to the watched project root. */
+export function isIgnoredWatchPath(projectRoot: string, targetPath: string): boolean {
+  const relative = path.relative(projectRoot, targetPath);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return false;
+  }
+  return relative.split(/[\\/]/).some(part => IGNORED_WATCH_DIRS.has(part.toLowerCase()));
+}
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -506,9 +524,7 @@ export function buildRegistry(opts: RegistryOptions): ComponentRegistry {
 export function watchRegistry(
   projectRoot: string,
   onUpdate: (registry: ComponentRegistry) => void,
-): any /* FSWatcher */ {
-  // chokidar is a CJS package, so it is loaded with require.
-  const chokidar = require('chokidar');
+): FSWatcher {
   const meta = detectProjectMeta(projectRoot);
   const WATCH_EXTS = /\.(jsx|tsx|js|ts|vue|svelte|astro|html)$/i;
 
@@ -522,10 +538,10 @@ export function watchRegistry(
     }, 300);
   }
 
-  const watcher = chokidar.watch(meta.srcDir, {
-    usePolling: process.platform === 'win32',
-    interval: 200,
-    ignored: /(node_modules|\.git|dist|build)/,
+  const watchRoot = meta.srcDir;
+  const watcher = chokidar.watch(watchRoot, {
+    backend: 'auto',
+    ignored: (filePath: string) => isIgnoredWatchPath(watchRoot, filePath),
     persistent: true,
     ignoreInitial: true,
   });
