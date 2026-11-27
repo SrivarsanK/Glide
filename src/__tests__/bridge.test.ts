@@ -235,4 +235,115 @@ describe('Bridge Script Syntax & Integrity', () => {
     }));
     expect(messages.map(m => m.type)).toEqual(['glide:element-deselected']);
   });
+
+  test('Shift-deselecting one of two selected elements sends a refresh update for the remaining element', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    const messages: any[] = [];
+    const windowListeners: Record<string, Function[]> = {};
+    const documentListeners: Record<string, Function[]> = {};
+    const makeEl = (source: string, tagName: string, text: string) => {
+      const attrs = new Map<string, string>([
+        ['data-gl-source', source],
+        ['data-glide-selected', ''],
+      ]);
+      const node: any = {
+        nodeType: 1,
+        tagName,
+        className: 'item',
+        isConnected: true,
+        childNodes: [{ nodeType: 3, textContent: text }],
+        children: [],
+        parentNode: null,
+        contentEditable: 'inherit',
+        getAttribute: (attr: string) => (attrs.has(attr) ? attrs.get(attr)! : null),
+        hasAttribute: (attr: string) => attrs.has(attr),
+        setAttribute: (attr: string, val: string) => attrs.set(attr, val),
+        removeAttribute: (attr: string) => attrs.delete(attr),
+        closest: (sel: string) => (sel === '[data-gl-source]' ? node : null),
+        getBoundingClientRect: () => ({ left: 20, top: 20, right: 120, bottom: 60, width: 100, height: 40 }),
+      };
+      return node;
+    };
+    const elA = makeEl('src/App.tsx:1:1', 'H1', 'Title');
+    const elB = makeEl('src/App.tsx:2:1', 'P', 'Body');
+    const all = [elA, elB];
+    const parentWindow = { postMessage: (data: any) => messages.push(data) };
+    const sandbox: any = {
+      window: {
+        __glide_initialized__: false,
+        get top() { return {}; },
+        parent: parentWindow,
+        location: { href: 'http://localhost:5173/', ancestorOrigins: ['http://localhost:5173'] },
+        addEventListener: (ev: string, fn: Function) => { (windowListeners[ev] ||= []).push(fn); },
+        removeEventListener: () => {},
+        getComputedStyle: () => ({ position: 'static', marginLeft: '0px', marginTop: '0px', left: 'auto', top: 'auto' }),
+      },
+      document: {
+        head: { appendChild: () => {} },
+        referrer: 'http://localhost:5173/',
+        createElement: () => ({ id: '', textContent: '', appendChild: () => {} }),
+        addEventListener: (ev: string, fn: Function) => { (documentListeners[ev] ||= []).push(fn); },
+        readyState: 'complete',
+        body: { tagName: 'BODY', children: all, querySelectorAll: () => all },
+        documentElement: { tagName: 'HTML', setAttribute: () => {}, removeAttribute: () => {} },
+        querySelectorAll: (sel: string) => {
+          if (sel === '[data-gl-source]') return all;
+          if (sel === '[data-glide-selected]') return all.filter(n => n.hasAttribute('data-glide-selected'));
+          return [];
+        },
+        querySelector: (sel: string) => {
+          if (sel === '[data-glide-selected]') return all.find(n => n.hasAttribute('data-glide-selected')) || null;
+          return all.find(n => sel.includes(n.getAttribute('data-gl-source'))) || null;
+        },
+      },
+      URL, Set, Map,
+      setTimeout: (fn: any) => fn(),
+      clearTimeout: () => {},
+      setInterval: () => 123,
+      clearInterval: () => {},
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      Math, String, Number, Boolean, Array, Object, parseInt, isFinite, console,
+    };
+    all.forEach(n => { n.parentNode = sandbox.document.body; });
+    sandbox.window.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
+    sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
+    sandbox.window.cancelAnimationFrame = sandbox.cancelAnimationFrame;
+
+    new vm.Script(scriptCode).runInContext(vm.createContext(sandbox));
+    messages.length = 0;
+
+    // 1. Canvas Shift-deselect of elB leaves elA selected and refreshes elA
+    documentListeners.pointerdown.forEach(fn => fn({
+      target: elB,
+      shiftKey: true,
+      metaKey: false,
+      ctrlKey: false,
+      pointerId: 1,
+      clientX: 30,
+      clientY: 30,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    }));
+    expect(messages.map(m => ({ type: m.type, source: m.source, refresh: !!m.refresh }))).toEqual([
+      { type: 'glide:element-deselected', source: 'src/App.tsx:2:1', refresh: false },
+      { type: 'glide:element-selected', source: 'src/App.tsx:1:1', refresh: true },
+      { type: 'glide:overlay', source: 'src/App.tsx:1:1', refresh: true },
+    ]);
+
+    // 2. Layers-panel Shift-deselect of elB leaves elA selected and refreshes elA
+    elB.setAttribute('data-glide-selected', '');
+    messages.length = 0;
+    windowListeners.message.forEach(fn => fn({
+      source: parentWindow,
+      origin: 'http://localhost:5173',
+      data: { type: 'glide:select-element-by-id', id: 'src/App.tsx:2:1', isShift: true },
+    }));
+    expect(messages.map(m => ({ type: m.type, source: m.source, refresh: !!m.refresh }))).toEqual([
+      { type: 'glide:element-deselected', source: 'src/App.tsx:2:1', refresh: false },
+      { type: 'glide:element-selected', source: 'src/App.tsx:1:1', refresh: true },
+      { type: 'glide:overlay', source: 'src/App.tsx:1:1', refresh: true },
+    ]);
+  });
 });

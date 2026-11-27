@@ -145,7 +145,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   }
 
   // Like sendMsg() but works for ANY element — with or without sourceAttr.
-  function sendMsgForAny(type, el, isShift) {
+  function sendMsgForAny(type, el, isShift, refresh) {
     if (type === 'glide:element-selected') rememberSlot(el);
     var src = getElId(el);
     var r = el.getBoundingClientRect();
@@ -178,6 +178,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       tagName: el.tagName.toLowerCase(),
       classNames: el.className,
       isShift: !!isShift,
+      refresh: !!refresh,
       rect: { left: r.left, top: r.top, width: r.width, height: r.height }
     }, '*');
     if (type !== 'glide:element-deselected') {
@@ -186,6 +187,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
         source: src,
         isUnstamped: isUnstamped,
         isShift: !!isShift,
+        refresh: !!refresh,
         rect: { x: r.left, y: r.top, width: r.width, height: r.height },
         isHover: type === 'glide:element-hovered',
         computedStyles: computedStyles,
@@ -1053,6 +1055,13 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
         selectTarget.removeAttribute('__GLIDE_SELECTED_ATTR__');
         sendMsgForAny('glide:element-deselected', selectTarget, isShift);
         selected = document.querySelector('[__GLIDE_SELECTED_ATTR__]');
+        if (selected) {
+          if (selected.hasAttribute('__GLIDE_SOURCE_ATTR__')) {
+            sendMsg('glide:element-selected', selected, false, true);
+          } else {
+            sendMsgForAny('glide:element-selected', selected, false, true);
+          }
+        }
       } else {
         selected = selectTarget;
         selectTarget.setAttribute('__GLIDE_SELECTED_ATTR__', '');
@@ -1711,6 +1720,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
           el.removeAttribute('__GLIDE_SELECTED_ATTR__');
           sendMsg('glide:element-deselected', el, isShift);
           selected = document.querySelector('[__GLIDE_SELECTED_ATTR__]');
+          if (selected) sendMsg('glide:element-selected', selected, false, true);
         } else {
           selected = el;
           el.setAttribute('__GLIDE_SELECTED_ATTR__', '');
