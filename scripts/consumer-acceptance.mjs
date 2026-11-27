@@ -22,7 +22,8 @@ const runNpm = (args, cwd) => execFileSync(process.execPath, [npmCli, ...args], 
   cwd, encoding: 'utf8', timeout: 180000, env: npmEnv,
 });
 let cli, browser, vite, production;
-const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).version;
+const rootManifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const packageVersion = rootManifest.version;
 async function waitForSource(project, predicate) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
@@ -34,7 +35,8 @@ async function waitForSource(project, predicate) {
 try {
   const packed = JSON.parse(runNpm(['pack', '--json', '--pack-destination', temp], root));
   fs.writeFileSync(path.join(temp, 'package.json'), JSON.stringify({ name: 'glide-isolated-consumer', private: true, type: 'module' }));
-  runNpm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', path.join(temp, packed[0].filename)], temp);
+  // vite is an optional peerDependency of @srivarsank/glide, so a Vite consumer installs its own vite alongside Glide.
+  runNpm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', `vite@${rootManifest.devDependencies.vite}`, path.join(temp, packed[0].filename)], temp);
   const requireConsumer = createRequire(path.join(temp, 'package.json'));
   const entry = requireConsumer.resolve('@srivarsank/glide');
   assert.ok(entry.startsWith(temp), 'Consumer must resolve the installed tarball');
@@ -70,7 +72,7 @@ try {
 `);
   const { createServer, build, preview } = await import(pathToFileURL(requireConsumer.resolve('vite')));
   const { glideSourceStamping } = await import(pathToFileURL(requireConsumer.resolve('@srivarsank/glide/vite-plugin')));
-  vite = await createServer({ root: project, configFile: false, esbuild: { jsxFactory: 'h' }, plugins: [glideSourceStamping()], server: { host: '127.0.0.1', port: 0, watch: { usePolling: true } } });
+  vite = await createServer({ root: project, configFile: false, optimizeDeps: { noDiscovery: true }, oxc: { jsx: { runtime: 'classic', pragma: 'h' } }, plugins: [glideSourceStamping()], server: { host: '127.0.0.1', port: 0, watch: { usePolling: true } } });
   await vite.listen();
   const targetPort = vite.httpServer.address().port;
   const reserve = createNetServer();
@@ -361,7 +363,7 @@ try {
   assert.ok(await repeated.nth(1).evaluate(el => el.hasAttribute('data-glide-selected')), 'Source selection must retain the selected repeated DOM instance');
   console.log('PASS: shared-template warning and repeated instance selection');
 
-  await build({ root: project, configFile: false, esbuild: { jsxFactory: 'h' }, plugins: [], logLevel: 'error' });
+  await build({ root: project, configFile: false, oxc: { jsx: { runtime: 'classic', pragma: 'h' } }, plugins: [], logLevel: 'error' });
   production = await preview({ root: project, configFile: false, plugins: [], preview: { host: '127.0.0.1', port: 0 } });
   await page.goto(`http://127.0.0.1:${production.httpServer.address().port}`);
   const productionButton = page.getByRole('button', { name: 'Consumer button' });

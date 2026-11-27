@@ -39,12 +39,17 @@ async function devServer() {
   return { http, glide, port, root, origin: `http://127.0.0.1:${port}`, app: `http://localhost:${port}` };
 }
 
-function get(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string; location?: string }> {
+function get(url: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string; location?: string; headers: Record<string, string | string[] | undefined> }> {
   return new Promise((resolve, reject) => {
     const req = request(url, { headers: { Connection: 'close', ...headers } }, res => {
       let body = '';
       res.on('data', chunk => { body += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode!, body, ...(res.headers.location ? { location: res.headers.location } : {}) }));
+      res.on('end', () => resolve({
+        status: res.statusCode!,
+        body,
+        headers: res.headers,
+        ...(res.headers.location ? { location: res.headers.location } : {}),
+      }));
     });
     req.on('error', reject);
     req.end();
@@ -66,8 +71,8 @@ test('attached to a dev server, Glide serves only its own paths and leaves the a
   expect(editor.body).toContain('var appBase = "";');
   expect((await get(origin + '/__glide')).status).toBe(200);
   expect((await get(origin + '/__glide_assets__/lucide.js')).status).toBe(200);
-  expect(await get(origin + '/')).toEqual({ status: 200, body: 'app' });
-  expect(await get(origin + '/src/App.tsx')).toEqual({ status: 200, body: 'app' });
+  expect(await get(origin + '/')).toMatchObject({ status: 200, body: 'app' });
+  expect(await get(origin + '/src/App.tsx')).toMatchObject({ status: 200, body: 'app' });
   expect((await get(origin + '/__glide/unknown')).status).toBe(404);
   expect((await get(origin + '/__glide/', { Host: 'evil.test' })).status).toBe(403);
 });
@@ -92,7 +97,7 @@ test('the editor socket shares the dev server with its HMR socket and still need
 test('stopping Glide leaves the dev server and its HMR socket running', async () => {
   const { origin, glide } = await devServer();
   await glide.stop();
-  expect(await get(origin + '/')).toEqual({ status: 200, body: 'app' });
+  expect(await get(origin + '/')).toMatchObject({ status: 200, body: 'app' });
   const hmr = await open(origin.replace('http', 'ws') + '/', origin);
   expect(await hmr.first).toBe('hmr-connected');
   hmr.close();
@@ -149,4 +154,46 @@ test('the editor lives on the loopback IP, so scripts in the app on "localhost" 
   editor.close();
   // The preview loads the app from the other origin.
   expect(page.body).toContain("appBase = window.location.protocol + '//localhost'");
+});
+
+test('attached to a dev server with CORS middleware, Glide strips Access-Control headers from its own routes only', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-hosted-cors-'));
+  fs.writeFileSync(path.join(root, 'App.tsx'), 'export const App = () => <main>A</main>;\n');
+  let glideMiddleware: ((req: any, res: any, next: () => void) => void) | null = null;
+  const http: Server = createServer((req, res) => {
+    // Simulate Vite 8's corsMiddleware running before plugin configureServer middlewares.
+    if (req.headers.origin) {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    const app = () => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('app'); };
+    glideMiddleware ? glideMiddleware(req, res, app) : app();
+  });
+  await new Promise<void>(resolve => http.listen(0, '127.0.0.1', resolve));
+  const port = (http.address() as any).port as number;
+  const glide = new GlideServer(port, port, DEFAULT_CONFIG, root);
+  glideMiddleware = await glide.attach(http);
+  cleanups.push(() => { fs.rmSync(root, { recursive: true, force: true }); });
+  cleanups.push(() => new Promise<void>(resolve => { http.closeAllConnections(); http.close(() => resolve()); }));
+  cleanups.push(() => glide.stop());
+
+  const origin = `http://127.0.0.1:${port}`;
+  const appOrigin = `http://localhost:${port}`;
+
+  const crossOriginEditor = await get(origin + '/__glide/', { Origin: appOrigin });
+  expect(crossOriginEditor.status).toBe(403);
+  expect(crossOriginEditor.headers['access-control-allow-origin']).toBeUndefined();
+  expect(crossOriginEditor.headers['access-control-allow-credentials']).toBeUndefined();
+
+  const sameOriginEditor = await get(origin + '/__glide/', { Origin: origin });
+  expect(sameOriginEditor.status).toBe(200);
+  expect(sameOriginEditor.headers['access-control-allow-origin']).toBeUndefined();
+
+  const asset = await get(origin + '/__glide_assets__/lucide.js', { Origin: origin });
+  expect(asset.status).toBe(200);
+  expect(asset.headers['access-control-allow-origin']).toBeUndefined();
+
+  const appRoute = await get(origin + '/App.tsx', { Origin: appOrigin });
+  expect(appRoute.status).toBe(200);
+  expect(appRoute.headers['access-control-allow-origin']).toBe(appOrigin);
 });
