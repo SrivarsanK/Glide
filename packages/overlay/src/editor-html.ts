@@ -2380,6 +2380,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
           let selectedSources = [];
           let selectedRects = [];
+          // Per-source inspector snapshot so Shift-deselect restores the remaining element's label, styles, text, and owners.
+          const selectionSnapshots = new Map();
           let hoveredElement = null;
           let hoveredRect = null;
           let currentTool = 'select';
@@ -3178,9 +3180,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return parsed && deleted.has(parsed.file + ':' + parsed.line + ':' + parsed.column);
             };
             selectedSources = selectedSources.filter(source => !isDeleted(source));
+            for (const key of Array.from(selectionSnapshots.keys())) {
+              if (isDeleted(key)) selectionSnapshots.delete(key);
+            }
             if (selectedElement && isDeleted(selectedElement.source)) {
               selectedElement = null;
               selectedRects = [];
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
             }
@@ -3189,7 +3196,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             trackStaleStamps(remaps);
             const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
+            if (selectionSnapshots.size) {
+              const entries = Array.from(selectionSnapshots.entries());
+              selectionSnapshots.clear();
+              entries.forEach(([key, snapshot]) => { selectionSnapshots.set(remap(key), snapshot); });
+            }
             if (selectedElement) selectedElement = { ...selectedElement, source: remap(selectedElement.source) };
+            if (selectedComputedSource) selectedComputedSource = remap(selectedComputedSource);
             if (glideClipboard && glideClipboard.source) glideClipboard.source = remap(glideClipboard.source);
             // Edits still waiting to be sent were aimed at the coordinates before this save.
             _styleTimers.forEach(entry => { entry.target = remap(entry.target); });
@@ -3408,6 +3421,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const vp = document.getElementById('canvas-viewport');
             vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
             document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
+            document.querySelectorAll('.glide-selection-label').forEach(scaleSelectionLabel);
+            // The page measures its drag threshold in screen pixels, so it needs the zoom.
+            const appFrame = document.getElementById('app-iframe');
+            if (appFrame && appFrame.contentWindow) appFrame.contentWindow.postMessage({ type: 'glide:set-zoom', zoom: zoomLevel }, '*');
             const dzs = document.getElementById('draw-zoom-select');
             if (dzs) {
               const roundedPct = Math.round(zoomLevel * 100);
@@ -3812,8 +3829,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               selectedElement = null;
               selectedRect = null;
               selectedComputedStyles = null;
+              selectedComputedSource = null;
               selectedSources = [];
               selectedRects = [];
+              selectionSnapshots.clear();
               hoveredElement = null;
               hoveredRect = null;
               clearOverlay();
@@ -3969,7 +3988,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             host: document.getElementById('workspace-objects'), layers: document.getElementById('workspace-layers'),
             point: canvasPoint, inside: insideFrame, destination: resolveParentAtPoint, mutate: mutateWorkspace,
             error: message => showToast('error', message),
-            select: source => { selectedElement = { source }; selectedSources = [source]; clearOverlay(); showNoSelection(); }
+            select: source => { selectedElement = { source }; selectedSources = [source]; selectionSnapshots.clear(); selectedComputedStyles = null; selectedComputedSource = null; clearOverlay(); showNoSelection(); }
           });
           function detachToCanvas(source, x, y) {
             mutateWorkspace(source, { type: 'detach', workspaceId: crypto.randomUUID(), x: Math.round(x), y: Math.round(y) });
@@ -4371,8 +4390,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
               selectedSources = [];
               selectedRects = [];
+              selectionSnapshots.clear();
               selectedElement = null;
               selectedRect = null;
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
               document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
@@ -4414,7 +4436,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             return g;
           }
 
-          function drawSelectionBox(rect, isHover) {
+          function drawSelectionBox(rect, isHover, label) {
             const container = isHover ? svg : (document.getElementById('selection-group') || createSelectionGroup());
 
             const rx = rect.x !== undefined ? rect.x : (rect.left !== undefined ? rect.left : 0);
@@ -4427,9 +4449,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             r.setAttribute('y', ry);
             r.setAttribute('width', rw);
             r.setAttribute('height', rh);
-            r.setAttribute('fill', 'none');
-            r.setAttribute('stroke', '#0d99ff');
-            r.setAttribute('stroke-width', '1');
+            r.setAttribute('fill', isHover ? 'none' : 'rgba(56,189,248,0.06)');
+            r.setAttribute('stroke', '#38bdf8');
+            r.setAttribute('stroke-width', isHover ? '1' : '1.5');
             if (isHover) {
               r.setAttribute('stroke-dasharray', '4 2');
               r.setAttribute('opacity', '0.5');
@@ -4437,7 +4459,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             container.appendChild(r);
 
-            if (!isHover) {
+            // A resize writes one element's size, so a box around several elements has no handles:
+            // dragging one would give a single element the size of the whole group.
+            if (!isHover && !rect.group) {
               // Add corners resize handles
               const handles = [
                 { x: rx, y: ry, cursor: 'nwse-resize', dir: 'tl' },
@@ -4455,8 +4479,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 h.setAttribute('y', pos.y - 4);
                 h.setAttribute('width', '8');
                 h.setAttribute('height', '8');
-                h.setAttribute('fill', 'white');
-                h.setAttribute('stroke', '#0d99ff');
+                h.setAttribute('fill', '#0b0e14');
+                h.setAttribute('stroke', '#38bdf8');
                 h.setAttribute('stroke-width', '1.5');
                 h.style.cursor = pos.cursor;
                 h.style.pointerEvents = 'auto';
@@ -4546,6 +4570,49 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 container.appendChild(h);
               });
             }
+
+            if (label) {
+              // A pill under the box names the element and where it is in source, like "h1  Hero.tsx:10".
+              // It is drawn at screen size in its own group, anchored at the box's bottom centre.
+              const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+              group.setAttribute('class', 'glide-selection-label');
+              group.dataset.x = rx + rw / 2;
+              group.dataset.y = ry + rh;
+              const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              text.setAttribute('y', '24');
+              text.setAttribute('text-anchor', 'middle');
+              text.setAttribute('font-size', '11');
+              text.setAttribute('font-weight', '500');
+              text.setAttribute('fill', '#0b0e14');
+              text.style.fontFamily = "'JetBrains Mono', 'Fira Code', monospace";
+              text.style.whiteSpace = 'pre';
+              text.textContent = label;
+              group.appendChild(text);
+              container.appendChild(group);
+              const width = (text.getComputedTextLength() || label.length * 6.6) + 16;
+              const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+              pill.setAttribute('x', -width / 2);
+              pill.setAttribute('y', '10');
+              pill.setAttribute('width', width);
+              pill.setAttribute('height', '20');
+              pill.setAttribute('rx', '3');
+              pill.setAttribute('fill', '#38bdf8');
+              group.insertBefore(pill, text);
+              scaleSelectionLabel(group);
+            }
+          }
+
+          /** The canvas is zoomed, so the label is scaled by the inverse to keep a fixed screen size. */
+          function scaleSelectionLabel(group) {
+            group.setAttribute('transform', 'translate(' + group.dataset.x + ',' + group.dataset.y + ') scale(' + (1 / (zoomLevel || 1)) + ')');
+          }
+
+          /** "h1  Hero.tsx:10" for the selected element, or '' when its source is unknown. */
+          function selectionLabel() {
+            const parsed = selectedElement && parseSource(selectedElement.source);
+            if (!parsed) return '';
+            const place = String(parsed.file).split(/[\\\\/]/).pop() + ':' + parsed.line;
+            return selectedElement.tagName ? selectedElement.tagName + '  ' + place : place;
           }
 
           function drawDistanceIndicators(selRect, refRect) {
@@ -4650,7 +4717,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (selectedRects && selectedRects.length > 0) {
               if (selectedRects.length === 1) {
                 if (selectedRects[0]) {
-                  drawSelectionBox(selectedRects[0], false);
+                  drawSelectionBox(selectedRects[0], false, selectionLabel());
                   if (altPressed && hoveredRect && hoveredElement && !isSourceSelected(hoveredElement.source, selectedSources)) {
                     drawDistanceIndicators(selectedRects[0], hoveredRect);
                   }
@@ -4677,7 +4744,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                     x: minX,
                     y: minY,
                     width: maxX - minX,
-                    height: maxY - minY
+                    height: maxY - minY,
+                    group: true
                   }, false);
                 }
               }
@@ -4893,6 +4961,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             } else if (!isShift) {
               selectedSources = [source];
               selectedRects = [rect];
+              selectionSnapshots.clear();
             } else {
               if (!isSourceSelected(source, selectedSources)) {
                 selectedSources.push(source);
@@ -4900,7 +4969,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               }
             }
 
-            selectedElement = { source: source, owners: data.owners || [] };
+            // The bridges send the tag inside computedStyles on overlay messages.
+            const tagName = (data.computedStyles && data.computedStyles.tagName) || data.tagName;
+            const owners = data.owners || [];
+            const snapshotKey = refreshed !== -1 ? selectedSources[refreshed] : source;
+            selectionSnapshots.set(snapshotKey, {
+              tagName: tagName,
+              owners: owners,
+              computedStyles: data.computedStyles || null,
+              textContent: data.textContent,
+            });
+            selectedElement = { source: source, owners: owners, tagName: tagName };
             selectedRect = rect;
             selectedComputedStyles = data.computedStyles;
             selectedComputedSource = source;
@@ -4961,6 +5040,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({ type: 'glide:request-dom-tree' }, '*');
+                // Ready can come before the load event; the drag threshold needs the zoom from the first click.
+                iframe.contentWindow.postMessage({ type: 'glide:set-zoom', zoom: zoomLevel }, '*');
               }
               // Also try AST path if we have a file source
               const parsed = parseSource(data.source);
@@ -5118,16 +5199,28 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const source = data.source;
               const idx = selectedSources.findIndex(s => isSourceMatch(s, source));
               if (idx !== -1) {
+                selectionSnapshots.delete(selectedSources[idx]);
                 selectedSources.splice(idx, 1);
                 selectedRects.splice(idx, 1);
               }
               if (selectedSources.length > 0) {
-                selectedElement = { source: selectedSources[selectedSources.length - 1] };
+                const remaining = selectedSources[selectedSources.length - 1];
+                const snapshot = selectionSnapshots.get(remaining);
+                selectedElement = {
+                  source: remaining,
+                  owners: (snapshot && snapshot.owners) || [],
+                  tagName: snapshot ? snapshot.tagName : undefined,
+                };
                 selectedRect = selectedRects[selectedRects.length - 1];
+                selectedComputedStyles = (snapshot && snapshot.computedStyles) || null;
+                selectedComputedSource = snapshot && snapshot.computedStyles ? remaining : null;
+                populatePropsFromComputed(selectedComputedStyles || {}, selectedRect || {}, snapshot ? snapshot.textContent : undefined);
                 resetEditScope();
               } else {
                 selectedElement = null;
                 selectedRect = null;
+                selectedComputedStyles = null;
+                selectedComputedSource = null;
                 showNoSelection();
               }
               drawOverlay();
@@ -5145,8 +5238,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               isPendingPositionUpdate = false;
               selectedSources = [];
               selectedRects = [];
+              selectionSnapshots.clear();
               selectedElement = null;
               selectedRect = null;
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
               document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
@@ -5643,6 +5739,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 if (isComponent) {
                   selectedElement = { source: nodeSource };
                   selectedSources = [nodeSource];
+                  selectionSnapshots.clear();
+                  selectedComputedStyles = null;
+                  selectedComputedSource = null;
                   showPropsPanel(node.name || node.tagName);
                   return;
                 }
@@ -5930,6 +6029,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 }, '*');
                 iframe.contentWindow.postMessage({ type: 'glide:set-snap-object', enabled: snapObjectEnabled }, '*');
                 iframe.contentWindow.postMessage({ type: 'glide:set-snap-pixel', enabled: snapPixelEnabled }, '*');
+                iframe.contentWindow.postMessage({ type: 'glide:set-zoom', zoom: zoomLevel }, '*');
               }
             };
             iframe.onerror = function() {

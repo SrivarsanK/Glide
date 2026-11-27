@@ -145,7 +145,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   }
 
   // Like sendMsg() but works for ANY element — with or without sourceAttr.
-  function sendMsgForAny(type, el, isShift) {
+  function sendMsgForAny(type, el, isShift, refresh) {
     if (type === 'glide:element-selected') rememberSlot(el);
     var src = getElId(el);
     var r = el.getBoundingClientRect();
@@ -178,18 +178,22 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       tagName: el.tagName.toLowerCase(),
       classNames: el.className,
       isShift: !!isShift,
+      refresh: !!refresh,
       rect: { left: r.left, top: r.top, width: r.width, height: r.height }
     }, '*');
-    window.parent.postMessage({
-      type: 'glide:overlay',
-      source: src,
-      isUnstamped: isUnstamped,
-      isShift: !!isShift,
-      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-      isHover: type === 'glide:element-hovered',
-      computedStyles: computedStyles,
-      textContent: getElementTextContent(el)
-    }, '*');
+    if (type !== 'glide:element-deselected') {
+      window.parent.postMessage({
+        type: 'glide:overlay',
+        source: src,
+        isUnstamped: isUnstamped,
+        isShift: !!isShift,
+        refresh: !!refresh,
+        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+        isHover: type === 'glide:element-hovered',
+        computedStyles: computedStyles,
+        textContent: getElementTextContent(el)
+      }, '*');
+    }
   }
 
   // ── DOM tree serializer ─────────────────────────────────────────────────
@@ -472,22 +476,24 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       }
     }, '*');
 
-    window.parent.postMessage({
-      type: 'glide:overlay',
-      source: src,
-      isShift: !!isShift,
-      refresh: !!refresh,
-      rect: {
-        x: r.left,
-        y: r.top,
-        width: r.width,
-        height: r.height
-      },
-      isHover: type === 'glide:element-hovered',
-      owners: type === 'glide:element-hovered' ? [] : glideOwners(el),
-      computedStyles: computedStyles,
-      textContent: getElementTextContent(el)
-    }, '*');
+    if (type !== 'glide:element-deselected') {
+      window.parent.postMessage({
+        type: 'glide:overlay',
+        source: src,
+        isShift: !!isShift,
+        refresh: !!refresh,
+        rect: {
+          x: r.left,
+          y: r.top,
+          width: r.width,
+          height: r.height
+        },
+        isHover: type === 'glide:element-hovered',
+        owners: type === 'glide:element-hovered' ? [] : glideOwners(el),
+        computedStyles: computedStyles,
+        textContent: getElementTextContent(el)
+      }, '*');
+    }
   }
 
   var isDragging = false;
@@ -503,6 +509,8 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   var initialPosition = 'static';
   var currentDx = 0;
   var currentDy = 0;
+  // The editor's canvas zoom: page pixels times this are screen pixels.
+  var canvasZoom = 1;
   var rafId = null;
   var dragOriginalStyles = null;
   var dragBaseTransform = '';
@@ -1047,6 +1055,13 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
         selectTarget.removeAttribute('__GLIDE_SELECTED_ATTR__');
         sendMsgForAny('glide:element-deselected', selectTarget, isShift);
         selected = document.querySelector('[__GLIDE_SELECTED_ATTR__]');
+        if (selected) {
+          if (selected.hasAttribute('__GLIDE_SOURCE_ATTR__')) {
+            sendMsg('glide:element-selected', selected, false, true);
+          } else {
+            sendMsgForAny('glide:element-selected', selected, false, true);
+          }
+        }
       } else {
         selected = selectTarget;
         selectTarget.setAttribute('__GLIDE_SELECTED_ATTR__', '');
@@ -1093,8 +1108,9 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
   document.addEventListener('pointermove', function(e) {
     if (interactionMode) return;
     if (dragCandidate && !isDragging) {
-      var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (moveDist >= 3) {
+      // 4 screen pixels at any zoom, so a click that wobbles never moves the element.
+      var moveDist = Math.hypot(e.clientX - startX, e.clientY - startY) * canvasZoom;
+      if (moveDist >= 4) {
         isDragging = true;
         dragEl = dragCandidate;
         dragOriginalStyles = captureInlineStyles(dragEl, ['transform', 'z-index', 'transition', 'transition-property']);
@@ -1584,6 +1600,10 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     if (e.data.type === 'glide:set-grid-visible') {
       gridVisible = !!e.data.enabled;
     }
+    if (e.data.type === 'glide:set-zoom') {
+      var zoom = Number(e.data.zoom);
+      if (zoom > 0 && isFinite(zoom)) canvasZoom = zoom;
+    }
     if (e.data.type === 'glide:select-marquee') {
       var x = e.data.x;
       var y = e.data.y;
@@ -1700,6 +1720,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
           el.removeAttribute('__GLIDE_SELECTED_ATTR__');
           sendMsg('glide:element-deselected', el, isShift);
           selected = document.querySelector('[__GLIDE_SELECTED_ATTR__]');
+          if (selected) sendMsg('glide:element-selected', selected, false, true);
         } else {
           selected = el;
           el.setAttribute('__GLIDE_SELECTED_ATTR__', '');

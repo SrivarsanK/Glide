@@ -160,7 +160,36 @@ try {
   await page.reload();
   const button = frame.getByRole('button', { name: 'Consumer button' });
   await button.click();
+  // The label names the tag and source line, and keeps its screen size when the zoom changes.
+  const label = page.locator('#selection-group .glide-selection-label');
+  await label.waitFor();
+  assert.match(await label.textContent(), /^button {2}App\.tsx:\d+$/);
+  const zoomBefore = await page.evaluate(() => zoomLevel);
+  const pillHeight = async () => (await label.locator('rect').boundingBox()).height;
+  const atStart = await pillHeight();
+  await page.evaluate(zoom => zoomCanvasTo(zoom * 2), zoomBefore);
+  const zoomed = await pillHeight();
+  await page.evaluate(zoom => zoomCanvasTo(zoom), zoomBefore);
+  assert.ok(Math.abs(atStart - 20) < 1 && Math.abs(zoomed - 20) < 1, `label height ${atStart}px, then ${zoomed}px after zooming`);
   const bounds = await button.boundingBox();
+  // A click that wobbles a few screen pixels selects; it must not move the element.
+  const beforeWobble = fs.readFileSync(path.join(project, 'App.tsx'), 'utf8');
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 + 3, bounds.y + bounds.height / 2, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+  assert.equal(fs.readFileSync(path.join(project, 'App.tsx'), 'utf8'), beforeWobble, 'A wobbling click must not move the element');
+  // A box around several elements cannot be resized: the resize would write one element's size.
+  assert.equal(await page.evaluate(() => {
+    const real = selectedRects;
+    selectedRects = [{ x: 0, y: 0, width: 40, height: 20 }, { x: 80, y: 60, width: 40, height: 20 }];
+    drawOverlay();
+    const handles = document.querySelectorAll('#selection-group rect[width="8"]').length;
+    selectedRects = real;
+    drawOverlay();
+    return handles;
+  }), 0);
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width / 2 + 32, bounds.y + bounds.height / 2 + 24, { steps: 6 });
