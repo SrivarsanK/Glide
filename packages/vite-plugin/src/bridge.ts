@@ -180,16 +180,18 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       isShift: !!isShift,
       rect: { left: r.left, top: r.top, width: r.width, height: r.height }
     }, '*');
-    window.parent.postMessage({
-      type: 'glide:overlay',
-      source: src,
-      isUnstamped: isUnstamped,
-      isShift: !!isShift,
-      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-      isHover: type === 'glide:element-hovered',
-      computedStyles: computedStyles,
-      textContent: getElementTextContent(el)
-    }, '*');
+    if (type !== 'glide:element-deselected') {
+      window.parent.postMessage({
+        type: 'glide:overlay',
+        source: src,
+        isUnstamped: isUnstamped,
+        isShift: !!isShift,
+        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+        isHover: type === 'glide:element-hovered',
+        computedStyles: computedStyles,
+        textContent: getElementTextContent(el)
+      }, '*');
+    }
   }
 
   // ── DOM tree serializer ─────────────────────────────────────────────────
@@ -472,22 +474,24 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       }
     }, '*');
 
-    window.parent.postMessage({
-      type: 'glide:overlay',
-      source: src,
-      isShift: !!isShift,
-      refresh: !!refresh,
-      rect: {
-        x: r.left,
-        y: r.top,
-        width: r.width,
-        height: r.height
-      },
-      isHover: type === 'glide:element-hovered',
-      owners: type === 'glide:element-hovered' ? [] : glideOwners(el),
-      computedStyles: computedStyles,
-      textContent: getElementTextContent(el)
-    }, '*');
+    if (type !== 'glide:element-deselected') {
+      window.parent.postMessage({
+        type: 'glide:overlay',
+        source: src,
+        isShift: !!isShift,
+        refresh: !!refresh,
+        rect: {
+          x: r.left,
+          y: r.top,
+          width: r.width,
+          height: r.height
+        },
+        isHover: type === 'glide:element-hovered',
+        owners: type === 'glide:element-hovered' ? [] : glideOwners(el),
+        computedStyles: computedStyles,
+        textContent: getElementTextContent(el)
+      }, '*');
+    }
   }
 
   var isDragging = false;

@@ -133,4 +133,106 @@ describe('Bridge Script Syntax & Integrity', () => {
     const domTreeMsg = messages.find(m => m.type === 'glide:dom-tree');
     expect(domTreeMsg.tree[0].className).toBe('badge text-sm');
   });
+
+  test('Shift-deselecting on the canvas or from Layers omits glide:overlay so the editor does not re-select', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    const messages: any[] = [];
+    const windowListeners: Record<string, Function[]> = {};
+    const documentListeners: Record<string, Function[]> = {};
+    const attrs = new Map<string, string>([
+      ['data-gl-source', 'src/App.tsx:1:1'],
+      ['data-glide-selected', ''],
+    ]);
+    const el: any = {
+      nodeType: 1,
+      tagName: 'BUTTON',
+      className: 'cta',
+      isConnected: true,
+      childNodes: [{ nodeType: 3, textContent: 'Click' }],
+      children: [],
+      parentNode: null,
+      contentEditable: 'inherit',
+      getAttribute: (attr: string) => (attrs.has(attr) ? attrs.get(attr)! : null),
+      hasAttribute: (attr: string) => attrs.has(attr),
+      setAttribute: (attr: string, val: string) => attrs.set(attr, val),
+      removeAttribute: (attr: string) => attrs.delete(attr),
+      closest: (sel: string) => (sel === '[data-gl-source]' ? el : null),
+      getBoundingClientRect: () => ({ left: 20, top: 20, right: 120, bottom: 60, width: 100, height: 40 }),
+    };
+    const parentWindow = {
+      postMessage: (data: any) => messages.push(data),
+    };
+    const sandbox: any = {
+      window: {
+        __glide_initialized__: false,
+        get top() { return {}; },
+        parent: parentWindow,
+        location: { href: 'http://localhost:5173/', ancestorOrigins: ['http://localhost:5173'] },
+        addEventListener: (ev: string, fn: Function) => { (windowListeners[ev] ||= []).push(fn); },
+        removeEventListener: () => {},
+        getComputedStyle: () => ({ position: 'static', marginLeft: '0px', marginTop: '0px', left: 'auto', top: 'auto' }),
+      },
+      document: {
+        head: { appendChild: () => {} },
+        referrer: 'http://localhost:5173/',
+        createElement: () => ({ id: '', textContent: '', appendChild: () => {} }),
+        addEventListener: (ev: string, fn: Function) => { (documentListeners[ev] ||= []).push(fn); },
+        readyState: 'complete',
+        body: { tagName: 'BODY', children: [el], querySelectorAll: () => [el] },
+        documentElement: { tagName: 'HTML', setAttribute: () => {}, removeAttribute: () => {} },
+        querySelectorAll: (sel: string) => (sel === '[data-gl-source]' || (sel === '[data-glide-selected]' && attrs.has('data-glide-selected')) ? [el] : []),
+        querySelector: (sel: string) => (sel.includes('src/App.tsx:1:1') ? el : null),
+      },
+      URL,
+      Set,
+      Map,
+      setTimeout: (fn: any) => fn(),
+      clearTimeout: () => {},
+      setInterval: () => 123,
+      clearInterval: () => {},
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      Math,
+      String,
+      Number,
+      Boolean,
+      Array,
+      Object,
+      parseInt,
+      isFinite,
+      console,
+    };
+    el.parentNode = sandbox.document.body;
+    sandbox.window.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
+    sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
+    sandbox.window.cancelAnimationFrame = sandbox.cancelAnimationFrame;
+
+    new vm.Script(scriptCode).runInContext(vm.createContext(sandbox));
+    messages.length = 0;
+
+    // 1. Canvas Shift-click deselect (sendMsgForAny)
+    documentListeners.pointerdown.forEach(fn => fn({
+      target: el,
+      shiftKey: true,
+      metaKey: false,
+      ctrlKey: false,
+      pointerId: 1,
+      clientX: 30,
+      clientY: 30,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    }));
+    expect(messages.map(m => m.type)).toEqual(['glide:element-deselected']);
+
+    // 2. Layers-panel Shift-click deselect (sendMsg)
+    attrs.set('data-glide-selected', '');
+    messages.length = 0;
+    windowListeners.message.forEach(fn => fn({
+      source: parentWindow,
+      origin: 'http://localhost:5173',
+      data: { type: 'glide:select-element-by-id', id: 'src/App.tsx:1:1', isShift: true },
+    }));
+    expect(messages.map(m => m.type)).toEqual(['glide:element-deselected']);
+  });
 });
