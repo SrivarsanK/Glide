@@ -1,4 +1,9 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
+import { GlideServer, isIgnoredWatchPath } from '../../packages/server/src/ws-server.js';
+import { connectLocal } from './ws-client.js';
 import { startTestProject, closeTestProjects, request } from './server-fixture.js';
 
 afterEach(closeTestProjects);
@@ -164,5 +169,74 @@ test('the editor can point the preview at another local port, and only at a vali
   for (const port of [0, 70000, 4321.5, '4321', null]) {
     const refused = await request(client, { type: 'set-target-port', port }, 'target-port');
     expect(refused).toMatchObject({ success: false, port: 4321 });
+  }
+});
+
+test('isIgnoredWatchPath matches only ignored directory segments inside the project root', () => {
+  const root = path.resolve(os.tmpdir(), 'build', 'demo-app');
+  expect(isIgnoredWatchPath(root, root)).toBe(false);
+  expect(isIgnoredWatchPath(root, path.join(root, 'src', 'App.tsx'))).toBe(false);
+  expect(isIgnoredWatchPath(root, path.join(root, 'src', 'builder.tsx'))).toBe(false);
+  expect(isIgnoredWatchPath(root, path.join(root, 'src', 'distance.ts'))).toBe(false);
+  for (const dir of ['node_modules', '.git', 'dist', 'build', '.next', '.svelte-kit', '.nuxt']) {
+    expect(isIgnoredWatchPath(root, path.join(root, dir))).toBe(true);
+    expect(isIgnoredWatchPath(root, path.join(root, dir, 'nested', 'file.js'))).toBe(true);
+    expect(isIgnoredWatchPath(root, path.join(root, 'packages', 'ui', dir, 'out.js'))).toBe(true);
+  }
+});
+
+test('file watcher ignores node_modules and dist while watching source files even under a build parent directory', async () => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-watcher-'));
+  const root = path.join(outer, 'build', 'app');
+  fs.mkdirSync(path.join(root, 'node_modules', '.cache', 'glide'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'App.tsx'), 'const App = () => <main><button>A</button></main>;');
+  fs.writeFileSync(path.join(root, 'node_modules', '.cache', 'glide', 'mcp.json'), '{"v":1}');
+  fs.writeFileSync(path.join(root, 'node_modules', 'dep.js'), 'export const a = 1;');
+  fs.writeFileSync(path.join(root, 'dist', 'bundle.js'), 'export const b = 1;');
+
+  const server = new GlideServer(0, 5173, undefined, root);
+  let client: Awaited<ReturnType<typeof connectLocal>> | null = null;
+  try {
+    await server.start();
+    const watcher = (server as any).watcher;
+    await Promise.race([
+      new Promise<void>(resolve => watcher.once('ready', () => resolve())),
+      new Promise<void>(resolve => setTimeout(resolve, 300)),
+    ]);
+    const port = (server as any).server.address().port as number;
+    client = await connectLocal(port);
+    const seenUpdates: string[] = [];
+    const appUpdated = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for App.tsx drift update')), 4000);
+      client!.on('message', (data: any) => {
+        const msg = JSON.parse(String(data));
+        if (msg.type === 'scene_update') {
+          seenUpdates.push(String(msg.file));
+          if (String(msg.file).endsWith('App.tsx')) {
+            clearTimeout(timer);
+            resolve();
+          }
+        }
+      });
+    });
+
+    // Touch ignored files first, then modify real source file on the next poll cycle.
+    fs.writeFileSync(path.join(root, 'node_modules', '.cache', 'glide', 'mcp.json'), '{"v":2,"extra":"ignored"}');
+    fs.writeFileSync(path.join(root, 'node_modules', 'dep.js'), 'export const a = 222;');
+    fs.writeFileSync(path.join(root, 'dist', 'bundle.js'), 'export const b = 222;');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    fs.writeFileSync(path.join(root, 'App.tsx'), 'const App = () => <main><button>Updated</button></main>;');
+
+    await appUpdated;
+    const generations: Map<string, number> = (server as any).fileGenerations;
+    const driftedKeys = [...generations.keys()];
+    expect(driftedKeys.some(key => key.includes('node_modules') || key.includes('/dist/'))).toBe(false);
+    expect(seenUpdates.some(file => file.includes('node_modules') || file.includes('bundle.js'))).toBe(false);
+    expect(seenUpdates.some(file => file.endsWith('App.tsx'))).toBe(true);
+  } finally {
+    client?.close();
+    await server.stop();
+    fs.rmSync(outer, { recursive: true, force: true });
   }
 });

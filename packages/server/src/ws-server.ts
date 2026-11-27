@@ -930,6 +930,25 @@ export function typingStep(operations: MutationOperation[]): { squashKey?: strin
   return { squashKey: `text:${op.filePath}:${op.line}:${op.column}:${words}` };
 }
 
+const IGNORED_WATCH_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  '.svelte-kit',
+  '.nuxt',
+]);
+
+/** Match ignored directory segments relative to the watched project root (compatible with chokidar v3 and v4+). */
+export function isIgnoredWatchPath(projectRoot: string, targetPath: string): boolean {
+  const relative = path.relative(projectRoot, targetPath);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return false;
+  }
+  return relative.split(/[\\/]/).some(part => IGNORED_WATCH_DIRS.has(part.toLowerCase()));
+}
+
 export class GlideServer {
   private sessionToken = randomBytes(32).toString('hex');
   private authenticated = new WeakSet<WebSocket>();
@@ -1228,15 +1247,7 @@ export class GlideServer {
           // Native Windows watching can abort Node during atomic source replacement.
           usePolling: process.platform === 'win32',
           interval: 200,
-          ignored: [
-            '**/node_modules/**',
-            '**/.git/**',
-            '**/dist/**',
-            '**/build/**',
-            '**/.next/**',
-            '**/.svelte-kit/**',
-            '**/.nuxt/**'
-          ]
+          ignored: (filePath: string) => isIgnoredWatchPath(srcPath, filePath),
         });
         this.watcher.on('change', (filePath: string) => {
           const normPath = normalizePathKey(filePath);

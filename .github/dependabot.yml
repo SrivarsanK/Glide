@@ -14,6 +14,9 @@ updates:
       # recast 0.24+ raises engines.node to >=22; keep on 0.23.x while Glide supports Node 20.
       - dependency-name: "recast"
         versions: [">=0.24.0"]
+      # chokidar 5+ is ESM-only and requires Node >=22.22; keep on 4.x while Glide supports Node 20.
+      - dependency-name: "chokidar"
+        versions: [">=5.0.0"]
 
   - package-ecosystem: github-actions
     directory: /
