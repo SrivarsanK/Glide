@@ -5012,6 +5012,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({ type: 'glide:request-dom-tree' }, '*');
+                // Ready can come before the load event; the drag threshold needs the zoom from the first click.
+                iframe.contentWindow.postMessage({ type: 'glide:set-zoom', zoom: zoomLevel }, '*');
               }
               // Also try AST path if we have a file source
               const parsed = parseSource(data.source);
