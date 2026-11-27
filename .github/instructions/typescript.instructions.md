@@ -35,10 +35,10 @@ Adapted (modified) from the `ts_js_tsx_jsx` rules of [alibaba/open-code-review](
 ## Async code
 - Async functions handle their errors, with messages a person can act on.
 - Prefer `async`/`await` over promise chains and callbacks.
-- Independent async work in a loop runs with `Promise.all`; dependent work runs in sequence.
+- Independent async work in a loop runs in parallel with `Promise.all`, or with a concurrency limit when the calls share a rate or resource limit. Dependent work runs in sequence.
 
 ## Security
-- User input is escaped before it reaches the DOM.
+- User input is escaped before it reaches anything that parses HTML (`innerHTML`, `outerHTML`, `insertAdjacentHTML`). Text set with `textContent` needs no escaping; escaping it shows `&amp;` on the page.
 - No `innerHTML` with page- or user-controlled data; use `textContent` or sanitize.
 - No `eval()`, `Function()` or string arguments to `setTimeout`/`setInterval`.
 - No `document.write()`.
