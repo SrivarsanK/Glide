@@ -2380,6 +2380,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
           let selectedSources = [];
           let selectedRects = [];
+          // Each selected element's tag, so the label of the one left after a Shift-deselect keeps it.
+          const selectionTags = new Map();
           let hoveredElement = null;
           let hoveredRect = null;
           let currentTool = 'select';
@@ -3178,6 +3180,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return parsed && deleted.has(parsed.file + ':' + parsed.line + ':' + parsed.column);
             };
             selectedSources = selectedSources.filter(source => !isDeleted(source));
+            for (const key of Array.from(selectionTags.keys())) {
+              if (isDeleted(key)) selectionTags.delete(key);
+            }
             if (selectedElement && isDeleted(selectedElement.source)) {
               selectedElement = null;
               selectedRects = [];
@@ -3189,6 +3194,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             trackStaleStamps(remaps);
             const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
+            if (selectionTags.size) {
+              const entries = Array.from(selectionTags.entries());
+              selectionTags.clear();
+              entries.forEach(([key, tag]) => { selectionTags.set(remap(key), tag); });
+            }
             if (selectedElement) selectedElement = { ...selectedElement, source: remap(selectedElement.source) };
             if (glideClipboard && glideClipboard.source) glideClipboard.source = remap(glideClipboard.source);
             // Edits still waiting to be sent were aimed at the coordinates before this save.
@@ -3818,6 +3828,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               selectedComputedStyles = null;
               selectedSources = [];
               selectedRects = [];
+              selectionTags.clear();
               hoveredElement = null;
               hoveredRect = null;
               clearOverlay();
@@ -3973,7 +3984,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             host: document.getElementById('workspace-objects'), layers: document.getElementById('workspace-layers'),
             point: canvasPoint, inside: insideFrame, destination: resolveParentAtPoint, mutate: mutateWorkspace,
             error: message => showToast('error', message),
-            select: source => { selectedElement = { source }; selectedSources = [source]; clearOverlay(); showNoSelection(); }
+            select: source => { selectedElement = { source }; selectedSources = [source]; selectionTags.clear(); clearOverlay(); showNoSelection(); }
           });
           function detachToCanvas(source, x, y) {
             mutateWorkspace(source, { type: 'detach', workspaceId: crypto.randomUUID(), x: Math.round(x), y: Math.round(y) });
@@ -4375,6 +4386,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
               selectedSources = [];
               selectedRects = [];
+              selectionTags.clear();
               selectedElement = null;
               selectedRect = null;
               clearOverlay();
@@ -4922,9 +4934,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             get isEmpty() { return this._index.size === 0; }
           };
 
-          // Each selected element's tag, so the label of the one left after a Shift-deselect keeps it.
-          const selectionTags = new Map();
-
           /** Applies a selection the page reports; a refresh re-reports an element already selected and is not a click. */
           function acceptSelection(data) {
             const isShift = data.isShift;
@@ -5206,6 +5215,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               isPendingPositionUpdate = false;
               selectedSources = [];
               selectedRects = [];
+              selectionTags.clear();
               selectedElement = null;
               selectedRect = null;
               clearOverlay();
@@ -5704,6 +5714,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 if (isComponent) {
                   selectedElement = { source: nodeSource };
                   selectedSources = [nodeSource];
+                  selectionTags.clear();
                   showPropsPanel(node.name || node.tagName);
                   return;
                 }

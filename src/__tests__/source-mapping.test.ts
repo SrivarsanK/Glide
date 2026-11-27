@@ -73,6 +73,7 @@ test('the served editor executes the typed mapper and consumes successful transa
     let selectedSources = ['App.tsx:1:1:aaaaaaaa'];
     let selectedElement = { source: selectedSources[0] };
     let glideClipboard = { source: selectedSources[0] };
+    const selectionTags = new Map([[selectedSources[0], 'button']]);
     const fileDigests = new Map();
     const normalizePathSlash = value => value.split(String.fromCharCode(92)).join('/');
     const parseSource = value => sourceMapping.parse(value, currentFile);
@@ -85,6 +86,7 @@ test('the served editor executes the typed mapper and consumes successful transa
     if (selectedElement.source !== 'App.tsx:1:1:aaaaaaaa') throw new Error('Failed transaction changed selection');
     applyTransactionMappings(message);
     if (selectedElement.source !== 'App.tsx:3:4:bbbbbbbb' || selectedSources[0] !== selectedElement.source
+      || selectionTags.get(selectedElement.source) !== 'button' || selectionTags.size !== 1
       || glideClipboard.source !== selectedElement.source || fileDigests.get('App.tsx') !== 'digest-two') {
       throw new Error('Served transaction handler did not update selection and revision');
     }`, context);

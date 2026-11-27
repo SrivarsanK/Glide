@@ -73,6 +73,55 @@ test('deselecting one of two selected elements keeps the other one\'s tag for it
   expect(vm.runInContext('selectedElement', context)).toMatchObject({ source: 'App.tsx:1:1', tagName: 'h1' });
 });
 
+test('deselecting after a source remap keeps the remaining element\'s tag and drops deleted tags', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isResizing = false, isDragging = false, isPendingPositionUpdate = false;
+    let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    let glideClipboard = null;
+    const selectionTags = new Map(), fileDigests = new Map(), _styleTimers = new Map(), _pendingEdits = [];
+    const document = { querySelectorAll() { return []; } };
+    function drawOverlay() {} function populatePropsFromComputed() {} function resetEditScope() {}
+    function showNoSelection() {} function clearOverlay() {} function setFileDigest() {} function trackStaleStamps() {}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('applyTransactionMappings')} ${fn('acceptSelection')}
+    const rect = { x: 0, y: 0, width: 10, height: 10 };
+    acceptSelection({ source: 'App.tsx:1:1', rect, computedStyles: { tagName: 'h1' } });
+    acceptSelection({ source: 'App.tsx:2:1', rect, isShift: true, computedStyles: { tagName: 'p' } });
+    applyTransactionMappings({
+      success: true,
+      selectionRemaps: [
+        { oldSourceId: 'App.tsx:1:1', oldHash: '', newHash: 'aa11', newCoordinates: { line: 2, column: 1 } },
+        { oldSourceId: 'App.tsx:2:1', oldHash: '', newHash: 'bb22', newCoordinates: { line: 3, column: 1 } },
+      ],
+    });
+    const data = { type: 'glide:element-deselected', source: 'App.tsx:3:1:bb22' };
+    (function() { ${branch('glide:element-deselected')} })();
+  `, context);
+  expect(vm.runInContext('selectedElement', context)).toMatchObject({ source: 'App.tsx:2:1:aa11', tagName: 'h1' });
+  expect(vm.runInContext('selectionTags.size', context)).toBe(1);
+  vm.runInContext(`applyTransactionMappings({ success: true, deletedSourceIds: ['App.tsx:2:1'] });`, context);
+  expect(vm.runInContext('selectionTags.size', context)).toBe(0);
+});
+
+test('clearing selection empties selectionTags', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isPendingPositionUpdate = false;
+    let selectedElement, selectedRect, selectedComputedStyles, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionTags = new Map();
+    const document = { querySelectorAll() { return []; } };
+    function populatePropsFromComputed() {} function clearOverlay() {} function showNoSelection() {}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
+    const rect = { x: 0, y: 0, width: 10, height: 10 };
+    acceptSelection({ source: 'App.tsx:1:1', rect, computedStyles: { tagName: 'h1' } });
+    const data = { type: 'glide:clear-selection' };
+    (function() { ${branch('glide:clear-selection')} })();
+  `, context);
+  expect(vm.runInContext('selectionTags.size', context)).toBe(0);
+});
+
 test('resolved relative and absolute file aliases do not repeatedly reload the tree', () => {
   const context = vm.createContext({ createSourceMapping });
   vm.runInContext(`
