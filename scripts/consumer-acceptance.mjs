@@ -160,6 +160,17 @@ try {
   await page.reload();
   const button = frame.getByRole('button', { name: 'Consumer button' });
   await button.click();
+  // The label names the tag and source line, and keeps its screen size when the zoom changes.
+  const label = page.locator('#selection-group .glide-selection-label');
+  await label.waitFor();
+  assert.match(await label.textContent(), /^button {2}App\.tsx:\d+$/);
+  const zoomBefore = await page.evaluate(() => zoomLevel);
+  const pillHeight = async () => (await label.locator('rect').boundingBox()).height;
+  const atStart = await pillHeight();
+  await page.evaluate(zoom => zoomCanvasTo(zoom * 2), zoomBefore);
+  const zoomed = await pillHeight();
+  await page.evaluate(zoom => zoomCanvasTo(zoom), zoomBefore);
+  assert.ok(Math.abs(atStart - 20) < 1 && Math.abs(zoomed - 20) < 1, `label height ${atStart}px, then ${zoomed}px after zooming`);
   const bounds = await button.boundingBox();
   // A click that wobbles a few screen pixels selects; it must not move the element.
   const beforeWobble = fs.readFileSync(path.join(project, 'App.tsx'), 'utf8');

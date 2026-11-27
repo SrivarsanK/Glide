@@ -6,7 +6,7 @@ import { getEditorHTML } from '../../packages/overlay/src/editor-html.js';
 const script = getEditorHTML().match(/<script>\s*([\s\S]*?)<\/script>/)?.[1] ?? '';
 const ast = parse(script);
 const functionNames = new Set([
-  'framePointFromClient', 'zoomCanvasTo', 'applyTransform',
+  'framePointFromClient', 'zoomCanvasTo', 'applyTransform', 'scaleSelectionLabel',
   'setIframeWidth', 'setIframeHeight', 'fitToScreen',
 ]);
 const functions = ast.program.body
@@ -71,7 +71,7 @@ function canvasHarness() {
       'canvas-viewport': { style: style() }, 'zoom-label': {},
       'draw-zoom-select': {}, 'canvas-loading': { style: style() },
     };
-    const document = { getElementById(id) { return elements[id] || null; } };
+    const document = { getElementById(id) { return elements[id] || null; }, querySelectorAll() { return []; } };
     let layerTree = [{ id: 'existing' }];
     let expandedNodeIds = new Set();
     const snapObjectEnabled = true, snapPixelEnabled = true;

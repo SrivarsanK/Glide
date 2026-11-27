@@ -3408,6 +3408,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const vp = document.getElementById('canvas-viewport');
             vp.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
             document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
+            document.querySelectorAll('.glide-selection-label').forEach(scaleSelectionLabel);
             // The page measures its drag threshold in screen pixels, so it needs the zoom.
             const appFrame = document.getElementById('app-iframe');
             if (appFrame && appFrame.contentWindow) appFrame.contentWindow.postMessage({ type: 'glide:set-zoom', zoom: zoomLevel }, '*');
@@ -4554,29 +4555,38 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             if (label) {
               // A pill under the box names the element and where it is in source, like "h1  Hero.tsx:10".
-              // The overlay is drawn inside the zoomed canvas, so the pill is scaled back to a fixed screen size.
-              const s = 1 / (zoomLevel || 1);
+              // It is drawn at screen size in its own group, anchored at the box's bottom centre.
+              const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+              group.setAttribute('class', 'glide-selection-label');
+              group.dataset.x = rx + rw / 2;
+              group.dataset.y = ry + rh;
               const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-              text.setAttribute('x', rx + rw / 2);
-              text.setAttribute('y', ry + rh + 24 * s);
+              text.setAttribute('y', '24');
               text.setAttribute('text-anchor', 'middle');
-              text.setAttribute('font-size', 11 * s);
+              text.setAttribute('font-size', '11');
               text.setAttribute('font-weight', '500');
               text.setAttribute('fill', '#0b0e14');
               text.style.fontFamily = "'JetBrains Mono', 'Fira Code', monospace";
               text.style.whiteSpace = 'pre';
               text.textContent = label;
-              container.appendChild(text);
-              const width = (text.getComputedTextLength() || label.length * 6.6 * s) + 16 * s;
+              group.appendChild(text);
+              container.appendChild(group);
+              const width = (text.getComputedTextLength() || label.length * 6.6) + 16;
               const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-              pill.setAttribute('x', rx + rw / 2 - width / 2);
-              pill.setAttribute('y', ry + rh + 10 * s);
+              pill.setAttribute('x', -width / 2);
+              pill.setAttribute('y', '10');
               pill.setAttribute('width', width);
-              pill.setAttribute('height', 20 * s);
-              pill.setAttribute('rx', 3 * s);
+              pill.setAttribute('height', '20');
+              pill.setAttribute('rx', '3');
               pill.setAttribute('fill', '#38bdf8');
-              container.insertBefore(pill, text);
+              group.insertBefore(pill, text);
+              scaleSelectionLabel(group);
             }
+          }
+
+          /** The canvas is zoomed, so the label is scaled by the inverse to keep a fixed screen size. */
+          function scaleSelectionLabel(group) {
+            group.setAttribute('transform', 'translate(' + group.dataset.x + ',' + group.dataset.y + ') scale(' + (1 / (zoomLevel || 1)) + ')');
           }
 
           /** "h1  Hero.tsx:10" for the selected element, or '' when its source is unknown. */
@@ -4940,7 +4950,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               }
             }
 
-            selectedElement = { source: source, owners: data.owners || [], tagName: data.tagName };
+            // The bridges send the tag inside computedStyles on overlay messages.
+            selectedElement = { source: source, owners: data.owners || [], tagName: (data.computedStyles && data.computedStyles.tagName) || data.tagName };
             selectedRect = rect;
             selectedComputedStyles = data.computedStyles;
             selectedComputedSource = source;
