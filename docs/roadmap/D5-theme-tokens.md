@@ -16,14 +16,17 @@ Onlook v1 had a brand panel for this.
   with PostCSS. It caches the result against the files' stamps.
 - **There are no font families.** `TailwindTheme` (`tailwind-tokens.ts`) has `colors`,
   `projectColors`, `fontSizes`, `spacing` and `breakpoints`.
-- **Tokens are already preferred.** `colorToken()` prefers `projectColors`, so a color added here is
-  written as `bg-brand-500` from then on, with no extra work.
+- **Tokens are matched by value.** `colorToken()` takes the first match among the classes already on
+  the element, then `projectColors`, then the palette. A new color that has its own value is written by
+  name with no extra work, but if `accent` and `brand-500` share a value, the earlier one wins.
 - **Nothing writes the theme.**
 
 ## Design
 
 - **Panel.** A "Theme" section lists the project's colors (swatch, name, value) and font families. You
   can edit a value, or add a token by name and value. Built-in palette colors are shown but read-only.
+- **Keeping the chosen name.** When the user picks a theme color in the color picker, the change
+  carries the token's name, and the writer puts it first in `colorToken()`'s `preferred` list.
 - **Writing v4.** Edit the `@theme` block that declares the token, through PostCSS so comments and
   formatting stay as written. A new token goes into the `@theme` block of the CSS file that imports
   Tailwind. Add one if there is none.
@@ -53,6 +56,7 @@ Onlook v1 had a brand panel for this.
 - v4: edit a color, add one, and add the first `@theme` block. Comments and formatting are kept.
 - v3: edit and add inside `extend`; refuse a config that spreads another object.
 - A shadcn token is edited at its `:root` variable.
+- Picking `brand-500` writes `brand-500` even when an earlier token has the same value.
 - The theme cache picks up the change without a restart.
 
 ## Done when

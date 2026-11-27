@@ -231,6 +231,6 @@ flowchart LR
 - 2026-11-22: Addressed CodeRabbit's reviews of #33 (run-file privacy in Vite, editor refresh after agent edits,
   endpoint hardening) and #34 (extract refuses `this` and outer writes). C5 part 2 on `feat/c5-mcp-build`:
   `insert_markup` and an agent badge, checked live in test-site with undo. Reviews of #35–#37 addressed; 527 tests pass.
-- 2026-11-28: F0–C5 marked `done` on the board; all were merged on 2026-11-22 (PRs #24–#37), and C3 stays
-  deferred. Batch D added from a comparison with Onlook 2.0 (desktop, agent-driven) and its retired v1
+- 2026-11-28: F0–C5 except C3 marked `done` on the board; they were merged on 2026-11-22 (PRs #24–#37).
+  C3 stays deferred. Batch D added from a comparison with Onlook 2.0 (desktop, agent-driven) and its retired v1
   (web): eight specs, D1–D8. Nothing in it is implemented yet.

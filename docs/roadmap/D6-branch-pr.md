@@ -48,7 +48,8 @@ available. Onlook 2.0 has the same flow (commit, push, PR, then follow the check
 - Remote URL parsing for SSH, HTTPS and non-GitHub hosts.
 - In a temporary repository with a bare `origin`: publish pushes the branch, refuses on the default
   branch, and refuses with no commits ahead.
-- With `gh` absent (an empty `PATH` for the test), the compare URL comes back.
+- With `gh` absent, the compare URL comes back. The test gives the publisher a `gh` command that
+  doesn't exist; trimming `PATH` won't do, because `git` and `gh` can share a directory.
 
 ## Done when
 

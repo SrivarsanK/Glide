@@ -62,14 +62,21 @@ are out of scope for this item.
     `webpack://<name>/./src/App.tsx` and `turbopack://[project]/src/App.tsx`.
   - It refuses anything outside `ProjectPaths` or inside `node_modules`.
 
-  The first frame that resolves wins. Results are cached per module URL until the page reloads.
+  The first frame that resolves wins. Each module's source map is cached by its URL until the page
+  reloads, and every position is traced against it separately, since one module holds many elements.
 - **Read-only first.** A resolved element gets a source reference in memory, used by the selection
   label, layers, jump to definition, `get_selection` and `get_source`. An edit on it is refused with
   `UNSTAMPED: add glideSourceStamping() to edit this element`.
-- **Then exact writes.** The server re-parses the file and accepts the reference only when
-  `findJSXElementAt()` finds an element at that position, within the strictness found in Verify first.
-  It computes the hash with `computeNodeHash()`, and the edit then goes through the normal transaction
-  (digests, undo). Anything else is refused with `UNMAPPED_SOURCE` and a reason.
+- **Then exact writes.** The server re-parses the file and accepts the reference only when two things
+  hold:
+  - `findJSXElementAt()` finds an element at that position, within the strictness found in Verify first.
+  - That element is the selected one: a lowercase HTML or SVG tag with the same name as the DOM
+    element. The first project frame can be a component's call site (`<Card>`), for example when the
+    element comes from a package. Such a reference stays read-only, because an edit there would change
+    the component instance, not the selected element.
+
+  The server then computes the hash with `computeNodeHash()`, and the edit goes through the normal
+  transaction (digests, undo). Anything else is refused with `UNMAPPED_SOURCE` and a reason.
 
 ## Steps
 
@@ -86,7 +93,9 @@ are out of scope for this item.
 - Source-path mapping for each dev server's form, and refusal for paths outside the project or in
   `node_modules`.
 - The resolver against stored source maps (no network in unit tests).
-- The write gate: an exact position is accepted, and a position inside an attribute value is refused.
+- The write gate: an exact position is accepted; a position inside an attribute value, a component
+  call site and a tag that differs from the DOM element are refused.
+- Two positions in one module resolve to their own lines.
 
 ## Done when
 
