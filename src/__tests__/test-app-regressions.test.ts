@@ -34,9 +34,9 @@ const editorScript = () => getEditorHTML().match(/<script>\s*([\s\S]*?)<\/script
 function editor(names: string[]) {
   const context = vm.createContext({ createSourceMapping, createMutationScope, setTimeout, clearTimeout });
   vm.runInContext(`
-    const sourceMapping = createSourceMapping(), sourceFileAliases = new Map(), fileDigests = new Map(), selectionTags = new Map();
+    const sourceMapping = createSourceMapping(), sourceFileAliases = new Map(), fileDigests = new Map(), selectionSnapshots = new Map();
     let currentFile = 'src/App.tsx', currentGeneration = 0, editScope = null, representation = '', stagingModeActive = false;
-    let selectedElement = null, selectedSources = [], selectedRects = [], selectedRect = null, selectedComputedStyles = null;
+    let selectedElement = null, selectedSources = [], selectedRects = [], selectedRect = null, selectedComputedStyles = null, selectedComputedSource = null;
     const iframeWidth = { current: 800 };
     const mutationScope = createMutationScope(() => ({ authoringRepresentation: representation || undefined }));
     const sent = [], toasts = [], WebSocket = { OPEN: 1 };

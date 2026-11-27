@@ -2380,8 +2380,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
           let selectedSources = [];
           let selectedRects = [];
-          // Each selected element's tag, so the label of the one left after a Shift-deselect keeps it.
-          const selectionTags = new Map();
+          // Per-source inspector snapshot so Shift-deselect restores the remaining element's label, styles, text, and owners.
+          const selectionSnapshots = new Map();
           let hoveredElement = null;
           let hoveredRect = null;
           let currentTool = 'select';
@@ -3180,12 +3180,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return parsed && deleted.has(parsed.file + ':' + parsed.line + ':' + parsed.column);
             };
             selectedSources = selectedSources.filter(source => !isDeleted(source));
-            for (const key of Array.from(selectionTags.keys())) {
-              if (isDeleted(key)) selectionTags.delete(key);
+            for (const key of Array.from(selectionSnapshots.keys())) {
+              if (isDeleted(key)) selectionSnapshots.delete(key);
             }
             if (selectedElement && isDeleted(selectedElement.source)) {
               selectedElement = null;
               selectedRects = [];
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
             }
@@ -3194,12 +3196,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             trackStaleStamps(remaps);
             const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
-            if (selectionTags.size) {
-              const entries = Array.from(selectionTags.entries());
-              selectionTags.clear();
-              entries.forEach(([key, tag]) => { selectionTags.set(remap(key), tag); });
+            if (selectionSnapshots.size) {
+              const entries = Array.from(selectionSnapshots.entries());
+              selectionSnapshots.clear();
+              entries.forEach(([key, snapshot]) => { selectionSnapshots.set(remap(key), snapshot); });
             }
             if (selectedElement) selectedElement = { ...selectedElement, source: remap(selectedElement.source) };
+            if (selectedComputedSource) selectedComputedSource = remap(selectedComputedSource);
             if (glideClipboard && glideClipboard.source) glideClipboard.source = remap(glideClipboard.source);
             // Edits still waiting to be sent were aimed at the coordinates before this save.
             _styleTimers.forEach(entry => { entry.target = remap(entry.target); });
@@ -3826,9 +3829,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               selectedElement = null;
               selectedRect = null;
               selectedComputedStyles = null;
+              selectedComputedSource = null;
               selectedSources = [];
               selectedRects = [];
-              selectionTags.clear();
+              selectionSnapshots.clear();
               hoveredElement = null;
               hoveredRect = null;
               clearOverlay();
@@ -3984,7 +3988,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             host: document.getElementById('workspace-objects'), layers: document.getElementById('workspace-layers'),
             point: canvasPoint, inside: insideFrame, destination: resolveParentAtPoint, mutate: mutateWorkspace,
             error: message => showToast('error', message),
-            select: source => { selectedElement = { source }; selectedSources = [source]; selectionTags.clear(); clearOverlay(); showNoSelection(); }
+            select: source => { selectedElement = { source }; selectedSources = [source]; selectionSnapshots.clear(); selectedComputedStyles = null; selectedComputedSource = null; clearOverlay(); showNoSelection(); }
           });
           function detachToCanvas(source, x, y) {
             mutateWorkspace(source, { type: 'detach', workspaceId: crypto.randomUUID(), x: Math.round(x), y: Math.round(y) });
@@ -4386,9 +4390,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (!isSidebar && !isHeader && !isToolbar && !isIframe) {
               selectedSources = [];
               selectedRects = [];
-              selectionTags.clear();
+              selectionSnapshots.clear();
               selectedElement = null;
               selectedRect = null;
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
               document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
@@ -4955,7 +4961,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             } else if (!isShift) {
               selectedSources = [source];
               selectedRects = [rect];
-              selectionTags.clear();
+              selectionSnapshots.clear();
             } else {
               if (!isSourceSelected(source, selectedSources)) {
                 selectedSources.push(source);
@@ -4965,8 +4971,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // The bridges send the tag inside computedStyles on overlay messages.
             const tagName = (data.computedStyles && data.computedStyles.tagName) || data.tagName;
-            if (tagName) selectionTags.set(source, tagName);
-            selectedElement = { source: source, owners: data.owners || [], tagName: tagName };
+            const owners = data.owners || [];
+            const snapshotKey = refreshed !== -1 ? selectedSources[refreshed] : source;
+            selectionSnapshots.set(snapshotKey, {
+              tagName: tagName,
+              owners: owners,
+              computedStyles: data.computedStyles || null,
+              textContent: data.textContent,
+            });
+            selectedElement = { source: source, owners: owners, tagName: tagName };
             selectedRect = rect;
             selectedComputedStyles = data.computedStyles;
             selectedComputedSource = source;
@@ -5186,18 +5199,28 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const source = data.source;
               const idx = selectedSources.findIndex(s => isSourceMatch(s, source));
               if (idx !== -1) {
-                selectionTags.delete(selectedSources[idx]);
+                selectionSnapshots.delete(selectedSources[idx]);
                 selectedSources.splice(idx, 1);
                 selectedRects.splice(idx, 1);
               }
               if (selectedSources.length > 0) {
                 const remaining = selectedSources[selectedSources.length - 1];
-                selectedElement = { source: remaining, tagName: selectionTags.get(remaining) };
+                const snapshot = selectionSnapshots.get(remaining);
+                selectedElement = {
+                  source: remaining,
+                  owners: (snapshot && snapshot.owners) || [],
+                  tagName: snapshot ? snapshot.tagName : undefined,
+                };
                 selectedRect = selectedRects[selectedRects.length - 1];
+                selectedComputedStyles = (snapshot && snapshot.computedStyles) || null;
+                selectedComputedSource = snapshot && snapshot.computedStyles ? remaining : null;
+                populatePropsFromComputed(selectedComputedStyles || {}, selectedRect || {}, snapshot ? snapshot.textContent : undefined);
                 resetEditScope();
               } else {
                 selectedElement = null;
                 selectedRect = null;
+                selectedComputedStyles = null;
+                selectedComputedSource = null;
                 showNoSelection();
               }
               drawOverlay();
@@ -5215,9 +5238,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               isPendingPositionUpdate = false;
               selectedSources = [];
               selectedRects = [];
-              selectionTags.clear();
+              selectionSnapshots.clear();
               selectedElement = null;
               selectedRect = null;
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
               clearOverlay();
               showNoSelection();
               document.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
@@ -5714,7 +5739,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 if (isComponent) {
                   selectedElement = { source: nodeSource };
                   selectedSources = [nodeSource];
-                  selectionTags.clear();
+                  selectionSnapshots.clear();
+                  selectedComputedStyles = null;
+                  selectedComputedSource = null;
                   showPropsPanel(node.name || node.tagName);
                   return;
                 }
