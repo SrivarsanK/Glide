@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "devDependencies": {
-    "typescript": "^5.4.2"
+    "typescript": "^7.0.2"
   },
   "repository": {
     "type": "git",
