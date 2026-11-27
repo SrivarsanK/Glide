@@ -75,8 +75,13 @@ are out of scope for this item.
     element comes from a package. Such a reference stays read-only, because an edit there would change
     the component instance, not the selected element.
 
-  The server then computes the hash with `computeNodeHash()`, and the edit goes through the normal
-  transaction (digests, undo). Anything else is refused with `UNMAPPED_SOURCE` and a reason.
+  Anything else is refused with `UNMAPPED_SOURCE` and a reason.
+- **Bound to the selection.** The file digest and the element's `computeNodeHash()` are taken when the
+  reference is resolved, never at write time, and are returned with it. The source map's
+  `sourcesContent` must also match the file on disk (ignoring line endings), so a module served before
+  the last change, or a map without it, stays read-only. The edit carries both values through the normal
+  transaction (undo included). If the file changed after selection, the write is refused with
+  `STALE_DIGEST` or `STALE_NODE`, and the user selects the element again.
 
 ## Steps
 
@@ -96,6 +101,8 @@ are out of scope for this item.
 - The write gate: an exact position is accepted; a position inside an attribute value, a component
   call site and a tag that differs from the DOM element are refused.
 - Two positions in one module resolve to their own lines.
+- A same-tag element inserted above the target after selection gets the write refused, and so does a
+  source map that no longer matches the file.
 
 ## Done when
 
