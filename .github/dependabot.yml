@@ -10,6 +10,10 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # recast 0.24+ raises engines.node to >=22; keep on 0.23.x while Glide supports Node 20.
+      - dependency-name: "recast"
+        versions: [">=0.24.0"]
 
   - package-ecosystem: github-actions
     directory: /
