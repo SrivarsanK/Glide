@@ -93,7 +93,7 @@
     "@babel/types": "^7.24.0",
     "@fontsource/inter": "5.3.0",
     "@vue/compiler-sfc": "^3.4.21",
-    "chokidar": "^3.6.0",
+    "chokidar": "^6.0.0",
     "html-dom-parser": "^8.0.0",
     "lucide": "1.77.0",
     "picocolors": "^1.0.0",
