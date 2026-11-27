@@ -40,7 +40,7 @@ async function waitForSource(predicate, what, file) {
 
 let vite, browser;
 try {
-  vite = await createServer({ root: project, configFile: false, logLevel: 'silent', esbuild: { jsxFactory: 'h' },
+  vite = await createServer({ root: project, configFile: false, logLevel: 'silent', optimizeDeps: { noDiscovery: true }, oxc: { jsx: { runtime: 'classic', pragma: 'h' } },
     plugins: [glideSourceStamping()], server: { host: '127.0.0.1', port: 0, watch: { usePolling: true } } });
   await vite.listen();
   const port = vite.httpServer.address().port;
