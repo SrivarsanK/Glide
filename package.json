@@ -109,9 +109,7 @@
     "@types/ws": "^8.5.10",
     "esbuild": "^0.28.2",
     "playwright": "1.65.1",
-    "rollup": "^4.68.7",
-    "rollup-plugin-dts": "^6.5.1",
-    "typescript": "^5.4.2",
+    "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^4.1.12"
   },
