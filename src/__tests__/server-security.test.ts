@@ -99,6 +99,8 @@ test('blocks mutation callbacks before a session handshake', async () => {
 });
 
 import { trustedRequest } from '../../packages/server/src/session-security.js';
+import { getEditorHTML } from '../../packages/overlay/src/editor-html.js';
+import { DEFAULT_CONFIG } from '../../packages/core/src/index.js';
 
 test('a dev server over TLS accepts its own https origin and still refuses others', () => {
   const req = (origin: string, encrypted: boolean) =>
@@ -139,4 +141,14 @@ test('resolve_component and open_component stay contained inside projectRoot and
   } finally {
     fs.rmSync(outer, { recursive: true, force: true });
   }
+});
+
+test('editor HTML escapes node.id and comment id before interpolating into innerHTML attributes', () => {
+  const html = getEditorHTML(DEFAULT_CONFIG, 'test-token', { hosted: true });
+  expect(html).not.toContain(`data-node-id="' + node.id + '"`);
+  expect(html).toContain(`data-node-id="' + escapeHtml(node.id) + '"`);
+  expect(html).not.toContain(`data-id="' + c.id + '"`);
+  expect(html).toContain(`data-id="' + escapeHtml(c.id) + '"`);
+  // Only a single escapeHtml definition should exist (preserving single-quote escaping).
+  expect((html.match(/function escapeHtml\(/g) || []).length).toBe(1);
 });

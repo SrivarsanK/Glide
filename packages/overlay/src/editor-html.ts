@@ -5548,10 +5548,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           let layerTree = null;
 
-          function escapeHtml(s) {
-            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-          }
-
           function renderLayersTree(tree) {
             layerTree = tree;
             const list = document.getElementById('layers-list');
@@ -5697,9 +5693,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 '</span>' +
                 '<div class="layer-actions">' +
                   jumpActionHTML +
-                  '<button class="layer-action-btn edit-btn" data-node-id="' + node.id + '" title="Edit text directly">' + editSVG + '</button>' +
-                  '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + node.id + '" title="Toggle lock">' + lockSVG + '</button>' +
-                  '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
+                  '<button class="layer-action-btn edit-btn" data-node-id="' + escapeHtml(node.id) + '" title="Edit text directly">' + editSVG + '</button>' +
+                  '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + escapeHtml(node.id) + '" title="Toggle lock">' + lockSVG + '</button>' +
+                  '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + escapeHtml(node.id) + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
 
               if (isComponent) {
@@ -7814,7 +7810,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   '</div>' +
                   '<div class="comment-card-text">' + escapeHtml(c.text) + '</div>' +
                   '<div class="comment-card-actions">' +
-                    '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + c.id + '">✓ Resolve</button>' +
+                    '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + escapeHtml(c.id) + '">✓ Resolve</button>' +
                     '<button class="comment-btn-primary comment-close-btn">Close</button>' +
                   '</div>';
 

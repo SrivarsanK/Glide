@@ -135,6 +135,16 @@ try {
     return result;
   }, port);
   assert.deepEqual(attack, { parentDocument: false, ownOrigin: null, editorOrigin: null, socketEditorHost: 'refused', socketAppHost: 'refused', nestedOrigin: `http://localhost:${port}` });
+  // A hostile glide:dom-tree message from the app iframe must not inject HTML/JS via node.id.
+  await page.evaluate(() => { layerTree = []; window.__glideXssCheck = false; });
+  await appFrame.evaluate(() => {
+    window.parent.postMessage({
+      type: 'glide:dom-tree',
+      tree: [{ id: '"><img src=x onerror="window.__glideXssCheck=true">', name: 'div', children: [] }],
+    }, '*');
+  });
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => window.__glideXssCheck), false, 'Layers panel must escape node.id in innerHTML');
   console.log('PASS: app scripts cannot read the editor page, fetch the token, or open the editor socket');
   assert.deepEqual(errors, [], 'no browser errors');
   console.log('PASS: no browser errors');
