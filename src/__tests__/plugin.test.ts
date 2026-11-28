@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import * as babel from '@babel/core';
+import * as os from 'os';
+import glideSourceStampingPlugin from '../../packages/babel-plugin/src/index.js';
 import { glideSourceStamping } from '../../packages/vite-plugin/src/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -186,6 +189,80 @@ describe('glideSourceStamping Vite Plugin', () => {
       if (fs.existsSync(mockRoot)) {
         fs.rmdirSync(mockRoot);
       }
+    }
+  });
+
+  test('babel-plugin skips Fragment / React.Fragment / aliased Fragment and guards NODE_ENV=production', () => {
+    const code = `
+      import React, { Fragment, Fragment as F } from 'react';
+      export function App() {
+        return (
+          <React.Fragment>
+            <Fragment>
+              <F>
+                <div>Hello</div>
+              </F>
+            </Fragment>
+          </React.Fragment>
+        );
+      }
+    `;
+    const devOut = babel.transformSync(code, {
+      filename: '/project/src/App.tsx',
+      configFile: false,
+      babelrc: false,
+      parserOpts: { plugins: ['jsx', 'typescript'] },
+      plugins: [glideSourceStampingPlugin],
+    })!.code!;
+    expect(devOut).toContain('<React.Fragment>');
+    expect(devOut).toContain('<Fragment>');
+    expect(devOut).toContain('<F>');
+    expect(devOut).toContain('project/src/App.tsx:8:17">Hello</div>');
+
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const prodOut = babel.transformSync(code, {
+        filename: '/project/src/App.tsx',
+        configFile: false,
+        babelrc: false,
+        parserOpts: { plugins: ['jsx', 'typescript'] },
+        plugins: [glideSourceStampingPlugin],
+      })!.code!;
+      expect(prodOut).not.toContain('data-gl-source');
+    } finally {
+      if (prevEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevEnv;
+    }
+  });
+
+  test('vite-plugin awaits configResolved, guards SSR window in HMR snippet, and ignores Astro frontmatter/comment <head>', async () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-vite-cfg-'));
+    try {
+      fs.writeFileSync(path.join(tmpRoot, 'glide.config.json'), JSON.stringify({ sourceAttribute: 'data-custom-source' }), 'utf-8');
+      const plugin = glideSourceStamping({ editor: false }) as any;
+      await plugin.configResolved({ command: 'serve', root: tmpRoot });
+
+      const jsxRes = plugin.transform.handler.call({}, 'export const A = () => <div>Hi</div>;', path.join(tmpRoot, 'src', 'A.tsx'));
+      expect(jsxRes.code).toContain('data-custom-source=');
+      expect(jsxRes.code).toContain("typeof window !== 'undefined' && window !== window.top");
+
+      const astroPage = [
+        '---',
+        'const fake = "<head><title>Not real</title></head>";',
+        '---',
+        '<!-- <head>commented</head> -->',
+        '<html>',
+        '  <head><title>Real</title></head>',
+        '  <body><main>Hi</main></body>',
+        '</html>',
+      ].join('\n');
+      const astroRes = plugin.transform.handler.call({}, astroPage, path.join(tmpRoot, 'src', 'pages', 'index.astro'));
+      expect(astroRes.code).toContain('const fake = "<head><title>Not real</title></head>";');
+      expect(astroRes.code).toContain('<!-- <head>commented</head> -->');
+      expect(astroRes.code).toContain('  <head><script is:inline>');
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
 });
