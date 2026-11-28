@@ -78,6 +78,51 @@ describe('Tailwind class edits keep classes they cannot classify', () => {
   test('arbitrary values with spaces stay one class', () => {
     expect(updateClassString('p-2', 'backgroundColor', 'rgb(1 2 3)')).toBe('p-2 bg-[rgb(1_2_3)]');
   });
+
+  test('flex alignment maps CSS keywords to valid Tailwind utilities', () => {
+    expect(updateClassString('flex justify-start justify-items-center justify-self-end', 'justifyContent', 'space-between'))
+      .toBe('flex justify-items-center justify-self-end justify-between');
+    expect(updateClassString('flex justify-between', 'justifyContent', 'flex-start')).toBe('flex justify-start');
+    expect(updateClassString('flex justify-start', 'justifyContent', 'flex-end')).toBe('flex justify-end');
+    expect(updateClassString('flex', 'justifyContent', 'space-around')).toBe('flex justify-around');
+    expect(updateClassString('flex', 'justifyContent', 'space-evenly')).toBe('flex justify-evenly');
+    expect(updateClassString('flex items-center', 'alignItems', 'flex-start')).toBe('flex items-start');
+    expect(updateClassString('flex items-start', 'alignItems', 'flex-end')).toBe('flex items-end');
+  });
+
+  test('inset properties preserve units, handle decimals, and replace negative classes', () => {
+    expect(updateClassString('relative', 'left', '12.5px')).toBe('relative left-[12.5px]');
+    expect(updateClassString('relative', 'left', '50%')).toBe('relative left-[50%]');
+    expect(updateClassString('relative', 'top', '2rem')).toBe('relative top-[2rem]');
+    expect(updateClassString('relative', 'right', -12.5)).toBe('relative right-[-12.5px]');
+    expect(updateClassString('relative -left-4 -top-2', 'left', '8px')).toBe('relative -top-2 left-[8px]');
+    expect(updateClassString('relative -top-2', 'top', '0px')).toBe('relative top-[0px]');
+    expect(updateClassString('relative -right-1', 'right', '4px')).toBe('relative right-[4px]');
+    expect(updateClassString('relative -bottom-1', 'bottom', '4px')).toBe('relative bottom-[4px]');
+  });
+
+  test('borderWidth replaces bare border and decimal/unit arbitrary widths without touching border colors', () => {
+    expect(updateClassString('rounded border border-red-500', 'borderWidth', '2px'))
+      .toBe('rounded border-red-500 border-[2px]');
+    expect(updateClassString('rounded border border-red-500', 'borderWidth', ''))
+      .toBe('rounded border-red-500');
+    expect(updateClassString('border-[1.5px] border-t border-red-500', 'borderWidth', '3px'))
+      .toBe('border-t border-red-500 border-[3px]');
+    expect(updateClassString('border', 'borderWidth', '1.5')).toBe('border-[1.5px]');
+    expect(updateClassString('border-[1.5px] border-red-500', 'borderColor', '#fff'))
+      .toBe('border-[1.5px] border-white');
+  });
+
+  test('Tailwind important modifiers are matched and replaced across properties', () => {
+    expect(updateClassString('!p-4 text-sm', 'padding', '8px')).toBe('text-sm p-2');
+    expect(updateClassString('p-4! text-sm', 'padding', '8px')).toBe('text-sm p-2');
+    expect(updateClassString('bg-red-500! p-2', 'backgroundColor', '#000')).toBe('p-2 bg-black');
+    expect(updateClassString('!bg-red-500 p-2', 'backgroundColor', '#000')).toBe('p-2 bg-black');
+    expect(updateClassString('!-left-4 relative', 'left', '10px')).toBe('relative left-[10px]');
+    expect(updateClassString('!border border-red-500', 'borderWidth', '2px')).toBe('border-red-500 border-[2px]');
+    expect(updateClassString('md:!p-4 p-2', 'padding', '32px', 'md')).toBe('p-2 md:p-8');
+    expect(updateClassString('!p-4', 'padding', '+=4px')).toBe('p-5');
+  });
 });
 
 describe('Tailwind theme', () => {
