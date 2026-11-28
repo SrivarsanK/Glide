@@ -56,6 +56,23 @@ function findProjectRoot(startDir: string): string {
   return path.resolve(startDir);
 }
 
+const ESM_TS_MAP: Record<string, string[]> = {
+  '.js': ['.tsx', '.ts', '.jsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts', '.tsx', '.ts'],
+  '.cjs': ['.cts', '.tsx', '.ts'],
+};
+
+function isTopLevelDeclaration(p: any): boolean {
+  const parent = p.parentPath;
+  if (!parent) return false;
+  if (p.isVariableDeclarator()) {
+    const grand = parent.parentPath;
+    return parent.isVariableDeclaration() && !!(grand?.isProgram() || grand?.isExportNamedDeclaration());
+  }
+  return parent.isProgram() || parent.isExportNamedDeclaration() || parent.isExportDefaultDeclaration();
+}
+
 function resolveFileCandidate(basePath: string): string | null {
   if (fs.existsSync(basePath)) {
     try {
@@ -70,6 +87,21 @@ function resolveFileCandidate(basePath: string): string | null {
         }
       }
     } catch {}
+  }
+
+  // TypeScript ESM imports write `./Button.js` or `./Button.jsx` for `.ts`/`.tsx` sources.
+  const extLower = path.extname(basePath).toLowerCase();
+  const mappedExts = ESM_TS_MAP[extLower];
+  if (mappedExts) {
+    const stem = basePath.slice(0, -extLower.length);
+    for (const tsExt of mappedExts) {
+      const candidate = stem + tsExt;
+      if (fs.existsSync(candidate)) {
+        try {
+          if (fs.statSync(candidate).isFile()) return candidate;
+        } catch {}
+      }
+    }
   }
 
   for (const ext of CANDIDATE_EXTENSIONS) {
@@ -195,13 +227,13 @@ function findExportCoordinatesInFile(
     if (!foundLoc) {
       traverse(ast, {
         FunctionDeclaration(p: any) {
-          if (p.node.id?.name === targetExport) {
+          if (p.node.id?.name === targetExport && isTopLevelDeclaration(p)) {
             const loc = p.node.loc?.start;
             if (loc && !foundLoc) foundLoc = { line: loc.line, column: loc.column };
           }
         },
         VariableDeclarator(p: any) {
-          if (p.node.id?.name === targetExport) {
+          if (p.node.id?.name === targetExport && isTopLevelDeclaration(p)) {
             const loc = p.node.loc?.start;
             if (loc && !foundLoc) foundLoc = { line: loc.line, column: loc.column };
           }
@@ -249,19 +281,19 @@ export function resolveComponentDefinition(
 
       traverse(ast, {
         FunctionDeclaration(p: any) {
-          if (p.node.id?.name === rootName) {
+          if (p.node.id?.name === rootName && isTopLevelDeclaration(p)) {
             const loc = p.node.loc?.start;
             if (loc && !localLoc) localLoc = { line: loc.line, column: loc.column };
           }
         },
         VariableDeclarator(p: any) {
-          if (p.node.id?.name === rootName) {
+          if (p.node.id?.name === rootName && isTopLevelDeclaration(p)) {
             const loc = p.node.loc?.start;
             if (loc && !localLoc) localLoc = { line: loc.line, column: loc.column };
           }
         },
         ClassDeclaration(p: any) {
-          if (p.node.id?.name === rootName) {
+          if (p.node.id?.name === rootName && isTopLevelDeclaration(p)) {
             const loc = p.node.loc?.start;
             if (loc && !localLoc) localLoc = { line: loc.line, column: loc.column };
           }

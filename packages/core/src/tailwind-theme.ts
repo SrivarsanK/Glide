@@ -55,6 +55,16 @@ function collectVars(root: Root, vars: Map<string, string>): void {
   root.walkRules(rule => {
     const light = rule.selectors.some(selector => /^(:root|html|:host)$/.test(selector.trim()));
     if (!light) return;
+    // Skip nested rules (e.g. `.dark { :root }`) and conditional at-rules such as `@media (prefers-color-scheme: dark)`.
+    for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
+      if (parent.type === 'rule') return;
+      if (parent.type === 'atrule') {
+        const name = parent.name.toLowerCase();
+        if (name === 'layer') continue;
+        if (name === 'media' && (/^\s*(all|screen)\s*$/i.test(parent.params) || /prefers-color-scheme\s*:\s*light/i.test(parent.params))) continue;
+        return;
+      }
+    }
     rule.walkDecls(/^--/, decl => { if (decl.parent === rule) vars.set(decl.prop, decl.value); });
   });
 }
@@ -104,6 +114,8 @@ function loadV4(pkgDir: string | null, cssFiles: string[]): TailwindTheme {
     // Replace the bundled name list with the real default palette and scale.
     theme.colors.clear(); theme.fontSizes.clear(); theme.breakpoints.clear(); theme.spacing.clear();
     theme.colors.set('inherit', ''); theme.colors.set('current', ''); theme.colors.set('transparent', 'transparent');
+    // Tailwind v4 keeps built-in `0` and `px` spacing utilities alongside `--spacing`.
+    theme.spacing.set('0', '0px'); theme.spacing.set('px', '1px');
     applyThemeBlocks(postcss.parse(fs.readFileSync(defaults, 'utf8')), theme, vars, false);
   }
   const parsed = cssFiles.flatMap(file => {

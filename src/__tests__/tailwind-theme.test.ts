@@ -211,6 +211,29 @@ describe('Tailwind theme', () => {
     fs.utimesSync(css, new Date(), new Date(Date.now() + 5000));
     expect(loadTailwindTheme(root).colors.get('primary')).toBe('#0f766e');
   });
+
+  test('v4 ignores @media (prefers-color-scheme: dark) :root overrides while preserving @layer base vars and 0/px spacing', () => {
+    const root = project({
+      'node_modules/tailwindcss/package.json': JSON.stringify({ name: 'tailwindcss', version: '4.1.0' }),
+      'node_modules/tailwindcss/theme.css': V4_DEFAULTS,
+      'src/index.css': `@import "tailwindcss";
+@theme inline {
+  --color-primary: var(--primary);
+}
+@layer base {
+  :root { --primary: #6d28d9; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --primary: #a78bfa; }
+}`,
+    });
+    const theme = loadTailwindTheme(root);
+    expect(theme.colors.get('primary')).toBe('#6d28d9');
+    expect(theme.spacing.get('0')).toBe('0px');
+    expect(theme.spacing.get('px')).toBe('1px');
+    expect(updateClassString('p-4', 'padding', '0px', undefined, undefined, theme)).toBe('p-0');
+    expect(updateClassString('p-4', 'padding', '1px', undefined, undefined, theme)).toBe('p-px');
+  });
 });
 
 describe('Color parsing', () => {

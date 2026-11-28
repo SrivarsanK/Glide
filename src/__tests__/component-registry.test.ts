@@ -237,6 +237,37 @@ describe('buildRegistry — HTML', () => {
     expect(tags).toContain('div');
     expect(tags).toContain('h1');
   });
+
+  test('assigns unique line:column IDs with forward slashes across JSX, Vue, Svelte, Astro, and HTML', () => {
+    write('src/Win.tsx', 'export function Win() {\n  return <div><span>One</span><span>Two</span></div>;\n}\n');
+    write('src/View.vue', '<script setup>\nconst x = 1;\n</script>\n<template>\n  <div>\n    <p>One</p>\n    <p>Two</p>\n  </div>\n</template>\n');
+    write('src/View.svelte', '<script>\nlet x = 1;\n</script>\n<section>\n  <p>One</p>\n  <p>Two</p>\n</section>\n');
+    write('src/Page.astro', '---\nconst title = "Hi";\n---\n<main>\n  <h1>{title}</h1>\n  <p>Body</p>\n</main>\n');
+    write('src/plain.html', '<main>\n  <p>First</p>\n  <p>Second</p>\n</main>\n');
+
+    const registry = buildRegistry({ projectRoot: tmpDir });
+    for (const name of ['Win', 'View', 'Page', 'plain']) {
+      const matches = registry.buckets.filter(b => b.name === name);
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+      for (const b of matches) {
+        const ids = b.elements.map(e => e.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const el of b.elements) {
+          expect(el.id).not.toContain('\\');
+          expect(el.line).toBeGreaterThanOrEqual(1);
+          expect(el.column).toBeGreaterThanOrEqual(1);
+          expect(el.id).toMatch(/:\d+:\d+$/);
+        }
+      }
+    }
+    const astroBucket = registry.buckets.find(b => b.file.endsWith('Page.astro'))!;
+    expect(astroBucket.elements.find(e => e.tagName === 'main')).toMatchObject({ line: 4, column: 1 });
+    expect(astroBucket.elements.find(e => e.tagName === 'h1')).toMatchObject({ line: 5, column: 3 });
+    const vueBucket = registry.buckets.find(b => b.file.endsWith('View.vue'))!;
+    expect(vueBucket.elements.find(e => e.tagName === 'div')).toMatchObject({ line: 5, column: 3 });
+    const svelteBucket = registry.buckets.find(b => b.file.endsWith('View.svelte'))!;
+    expect(svelteBucket.elements.find(e => e.tagName === 'section')).toMatchObject({ line: 4, column: 1 });
+  });
 });
 
 describe('buildRegistry — co-located CSS', () => {
