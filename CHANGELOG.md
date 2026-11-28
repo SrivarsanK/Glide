@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] — 2026-11-28
+
+### Breaking
+- Requires **Node.js >= 22.22.0** (upgraded `chokidar` to `^6.0.0` with native watching and dropped Node 20).
+
+### Added
+- **Layout, attributes & tag editing**: Frames lay out children with display/radius rules; edit HTML attributes (`href`, `target`, `rel`, `id`, `aria-*`, `popover*`) and retag elements across JSX, Vue, Svelte, Astro, and HTML.
+- **Interactions & Pages panels**: Configure links, anchors, new tabs (`noopener noreferrer`), Popover overlays, hover/focus/pressed states, transitions/animations, and browse app routes in the Pages panel.
+- **MCP server & agent workflows**: `glide mcp` stdio bridge + HTTP endpoint (`/__glide/mcp`) with `extract_component`, `insert_markup`, live agent activity indicators, and `glide mcp install` for Claude Code, Cursor, and VS Code.
+- **Tooling**: Optional Vite 6–8 peer dependency support and TypeScript 7 (`tsgo`) declaration builds.
+
+### Fixed
+- **Security & server hardening** (`#66`, `#69`): Canonicalized Windows 8.3 paths in `ProjectPaths`; isolated app routes from the loopback-IP editor origin; escaped overlay innerHTML against Layers XSS; hardened URL/proxy/watcher lifecycle handling; fixed MCP greedy `parseReference` regex, monorepo + CRLF `finalizeEditorChanges`, history squash contiguity and `JUMP_TO_HISTORY` validation, drift self-write clearing, rollback temp cleanup, and asset upload allowlisting/encoding.
+- **Compiler, AST & adapters** (`#67`, `#69`): Replaced regex HTML stamping with a context-aware scanner; skipped Vite virtual script/style/asset queries; fixed Tailwind flex/inset/border/`!important` rewriting and v4 dark-mode `:root` + `0`/`px` spacing; fixed JSX attribute escaping, `retag` `rel` ordering, `clsx` identifier keys, custom-component detach/attach, `extract` scope/type checks, tab-indented `parseJSXElements`, component registry line:column IDs, ESM `.js` -> `.ts`/`.tsx` resolution, Babel `<Fragment>`/production guards, Vite SSR `window` + Astro `<head>` guards, and Astro/Vue/Svelte template parser edge cases.
+- **Editor UI & CLI** (`#68`, `#69`): Unified the proxy and Vite bridge scripts; fixed fill mode/gradient crash, right-click phantom drag, inline-edit listener leaks, dual resize handles, Hand/`Space` panning, Preview mode guards, `Escape` sync, numeric unit handling (`150%px`), Lucide button listeners, route-scoped navigation reset, staged-edit remapping, Before/After previews, Windows drive-letter normalization, ESM CLI `__dirname`, MCP HTTPS/stdio serialization, signal cleanup, and port validation.
+
+---
+
 ## [2.0.4] — 2026-11-21
 
 ### Documentation
