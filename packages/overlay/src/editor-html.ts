@@ -2324,10 +2324,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             container: document.getElementById('source-props'),
             selected: () => selectedElement?.source || null,
             parse: source => sourceMapping.parse(source, currentFile),
-            digest: file => fileDigests.get(normalizePathSlash(file)),
+            digest: file => getFileDigest(file),
             send: message => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); },
             edit: (source, change, digest) => {
-              if (stagingModeActive) { stageEdit(source, change); return; }
+              if (stagingModeActive) { stageEdit(source, change, selectedElement ? selectedElement.source : source); return; }
               const parsed = parseSource(source);
               if (parsed && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest: digest, change }));
             }
@@ -2469,7 +2469,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             socket.sendRaw = socket.send.bind(socket);
             if (!sourceTransport) sourceTransport = (${createMutationTransport.toString()})({
               send: data => socket.sendRaw(data),
-              digest: file => fileDigests.get(normalizePathSlash(file)),
+              digest: file => typeof getFileDigest === 'function' ? getFileDigest(file) : fileDigests.get(normalizePathSlash(file)),
               currentFile: () => currentFile,
               id: () => 'edit:' + crypto.randomUUID(),
               error: error => showToast('error', error),
@@ -2550,13 +2550,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   } : null }));
                   return;
                 }
-                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
+                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !getFileDigest(message.requestedFile);
                 if (message.file && message.digest) setFileDigest(message.file, message.digest);
                 if (message.type === 'tree' && message.file) {
                   sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
                   if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
                 }
-                if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
+                if (message.requestedFile && message.digest) setFileDigest(message.requestedFile, message.digest);
+                if (message.type === 'tree' && message.digest && (message.file || message.requestedFile) && stagedEdits.size) {
+                  const treeFile = message.file || message.requestedFile;
+                  stagedEdits.forEach(propMap => {
+                    propMap.forEach(item => {
+                      if (item.parsed && sameSourceFile(item.parsed.file, treeFile)) {
+                        item.parsed = { ...item.parsed, expectedDigest: message.digest };
+                      }
+                    });
+                  });
+                }
                 // The first selection in a file asks for its props before the file's digest arrives; ask again.
                 if (firstDigest && selectedElement) sourceProps.request();
                 if (message.type === 'tree') {
@@ -2847,7 +2857,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
           }
 
-          function stageEdit(source, change) {
+          function stageEdit(source, change, previewTarget) {
             change = mutationScope.capture(change);
             if (pendingBatch) {
               showToast('info', 'Wait for the current source changes to finish.');
@@ -2858,37 +2868,36 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               showToast('error', 'This element has no editable source mapping.');
               return;
             }
-            parsed.expectedDigest = fileDigests.get(parsed.file.replaceAll('\\\\', '/'));
+            parsed.expectedDigest = getFileDigest(parsed.file);
             if (!parsed.expectedDigest) {
               showToast('error', 'Source mapping is not ready. Select the element again.');
               return;
             }
 
+            const domTarget = previewTarget || source;
             if (!stagedEdits.has(source)) {
               stagedEdits.set(source, new Map());
             }
             const propMap = stagedEdits.get(source);
             mutationScope.entries(change).forEach(entry => {
-              propMap.set(entry.key, { change: entry.change, parsed, timestamp: Date.now() });
+              propMap.set(entry.key, { change: entry.change, parsed, previewTarget: domTarget, timestamp: Date.now() });
             });
 
             if (change.type === 'class' && change.property) {
-              previewStyleInIframe(source, { [change.property]: change.value });
+              previewStyleInIframe(domTarget, { [change.property]: change.value });
             } else if (['multi-class', 'style', 'layout'].includes(change.type) && typeof change.value === 'object') {
-              previewStyleInIframe(source, change.value);
+              previewStyleInIframe(domTarget, change.value);
             } else if (change.type === 'text') {
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({
-                  type: 'glide:optimistic-text',
-                  source: source,
+                  type: 'glide:preview-text',
+                  source: domTarget,
                   value: change.value
                 }, '*');
               }
-            } else {
-              if (change.property) {
-                previewStyleInIframe(source, { [change.property]: change.value });
-              }
+            } else if (change.property) {
+              previewStyleInIframe(domTarget, { [change.property]: change.value });
             }
 
             previewState = 'after';
@@ -2901,17 +2910,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               clearPreviewInIframe();
             } else {
               previewState = 'after';
+              const stylesByTarget = new Map();
+              const textByTarget = new Map();
               stagedEdits.forEach((propMap, source) => {
-                const styles = {};
                 propMap.forEach((item) => {
-                  if (item.change.property) {
-                    styles[item.change.property] = item.change.value;
+                  const domTarget = item.previewTarget || source;
+                  const ch = item.change;
+                  if (ch.type === 'text') {
+                    textByTarget.set(domTarget, ch.value);
+                  } else if (['multi-class', 'style', 'layout'].includes(ch.type) && ch.value && typeof ch.value === 'object') {
+                    if (!stylesByTarget.has(domTarget)) stylesByTarget.set(domTarget, {});
+                    Object.assign(stylesByTarget.get(domTarget), ch.value);
+                  } else if (ch.property) {
+                    if (!stylesByTarget.has(domTarget)) stylesByTarget.set(domTarget, {});
+                    stylesByTarget.get(domTarget)[ch.property] = ch.value;
                   }
                 });
-                if (Object.keys(styles).length > 0) {
-                  previewStyleInIframe(source, styles);
-                }
               });
+              stylesByTarget.forEach((styles, domTarget) => {
+                if (Object.keys(styles).length > 0) previewStyleInIframe(domTarget, styles);
+              });
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                textByTarget.forEach((value, domTarget) => {
+                  iframe.contentWindow.postMessage({ type: 'glide:preview-text', source: domTarget, value }, '*');
+                });
+              }
             }
             updateStagingBarUI();
           }
@@ -2998,7 +3022,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function acceptEditScopes(message) {
             if (message.type !== 'edit-scopes' || message.requestId !== editScopeRequest || !selectedElement || !message.success) return;
-            (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
+            (message.files || []).forEach(item => {
+              if (typeof setFileDigest === 'function') setFileDigest(item.file, item.digest);
+              else fileDigests.set(normalizePathSlash(item.file), item.digest);
+            });
             const owners = selectedElement.owners;
             // Inside a component, an element that does not take the component's className has no usage to choose.
             if (!owners[0].root && !message.forwards[0] && !(message.variants || []).length) return;
@@ -3066,7 +3093,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // Intercept style & class edits when Staged Mode is enabled
             if (stagingModeActive && change.type !== 'position' && change.type !== 'bake-position') {
-              stageEdit(target, change);
+              stageEdit(target, change, selectedElement.source);
               return;
             }
 
@@ -3159,11 +3186,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             pendingStampRemaps = [];
           }
 
-          /** Stores a file's digest under this spelling and every alias of it: stamps may use any of them. */
+          /** Stores a file's digest under this spelling, canonical Windows drive casing, and every alias. */
           function setFileDigest(file, digest) {
             const key = normalizePathSlash(file);
+            if (!key) return;
+            const canon = /^[a-z]:/i.test(key) ? key.charAt(0).toLowerCase() + key.slice(1) : key;
             fileDigests.set(key, digest);
-            sourceFileAliases.forEach((target, alias) => { if (sameSourceFile(alias, key)) fileDigests.set(alias, digest); });
+            if (canon !== key) fileDigests.set(canon, digest);
+            sourceFileAliases.forEach((target, alias) => {
+              if (sameSourceFile(alias, key)) {
+                fileDigests.set(alias, digest);
+                const aliasCanon = /^[a-z]:/i.test(alias) ? alias.charAt(0).toLowerCase() + alias.slice(1) : alias;
+                if (aliasCanon !== alias) fileDigests.set(aliasCanon, digest);
+              }
+            });
+          }
+
+          function getFileDigest(file) {
+            const key = normalizePathSlash(file);
+            if (!key) return undefined;
+            if (fileDigests.has(key)) return fileDigests.get(key);
+            const canon = /^[a-z]:/i.test(key) ? key.charAt(0).toLowerCase() + key.slice(1) : key;
+            if (fileDigests.has(canon)) return fileDigests.get(canon);
+            for (const [k, v] of fileDigests.entries()) {
+              if (sameSourceFile(k, key)) return v;
+            }
+            return undefined;
           }
 
           function parseSource(source) {
@@ -3172,8 +3220,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function applyTransactionMappings(message) {
             if (!message.success) return;
-            (message.changedFiles || []).forEach(file => {
-              setFileDigest(file.path, file.newDigest);
+            const changedFiles = message.changedFiles || [];
+            changedFiles.forEach(file => {
+              if (typeof setFileDigest === 'function') setFileDigest(file.path, file.newDigest);
+              else fileDigests.set(normalizePathSlash(file.path), file.newDigest);
             });
             const remaps = message.selectionRemaps || [];
             const deleted = new Set(message.deletedSourceIds || []);
@@ -3194,9 +3244,31 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               showNoSelection();
             }
             if (glideClipboard && isDeleted(glideClipboard.source)) glideClipboard = null;
+
+            const remap = source => (remaps.length ? sourceMapping.remap(source, remaps, currentFile) : source);
+            if (typeof stagedEdits !== 'undefined' && stagedEdits.size) {
+              const sameFilePath = (a, b) => (typeof sameSourceFile === 'function' ? sameSourceFile(a, b) : normalizePathSlash(a) === normalizePathSlash(b));
+              const entries = Array.from(stagedEdits.entries());
+              stagedEdits.clear();
+              entries.forEach(([sourceKey, propMap]) => {
+                if (isDeleted(sourceKey)) return;
+                const nextKey = remap(sourceKey);
+                const nextParsed = parseSource(nextKey);
+                const updatedMap = stagedEdits.get(nextKey) || new Map();
+                propMap.forEach((item, propKey) => {
+                  const baseParsed = nextParsed ? { ...item.parsed, ...nextParsed } : { ...item.parsed };
+                  const changed = changedFiles.find(f => baseParsed.file && sameFilePath(f.path, baseParsed.file));
+                  if (changed && changed.newDigest) baseParsed.expectedDigest = changed.newDigest;
+                  const nextPreview = item.previewTarget ? remap(item.previewTarget) : nextKey;
+                  updatedMap.set(propKey, { ...item, parsed: baseParsed, previewTarget: nextPreview });
+                });
+                if (updatedMap.size) stagedEdits.set(nextKey, updatedMap);
+              });
+              if (typeof updateStagingBarUI === 'function') updateStagingBarUI();
+            }
+
             if (!remaps.length) return;
             trackStaleStamps(remaps);
-            const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
             if (selectionSnapshots.size) {
               const entries = Array.from(selectionSnapshots.entries());
@@ -3212,7 +3284,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Digest aliases use the path spelling carried by the source stamp.
             remaps.forEach(item => {
               const target = parseSource(item.oldSourceId);
-              if (target && item.newDigest) fileDigests.set(target.file, item.newDigest);
+              if (target && item.newDigest) {
+                if (typeof setFileDigest === 'function') setFileDigest(target.file, item.newDigest);
+                else fileDigests.set(target.file, item.newDigest);
+              }
             });
           }
 
@@ -3751,7 +3826,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           document.addEventListener('keydown', (e) => {
             // Don't fire if typing in an input
-            if (e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open]')) return;
+            if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open]')) return;
             if (document.querySelector('#editor-zoom-menu:popover-open')) return;
 
             const key = e.key;
@@ -3796,7 +3871,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
 
             // Tool shortcuts (disabled in interaction preview mode)
-            if (!interactionPreview) {
+            if (!(typeof interactionPreview !== 'undefined' && interactionPreview)) {
               if (!ctrl && key === 'v') { setTool('select'); return; }
               if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
               if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
@@ -3951,7 +4026,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (ctrl && key === '1') { e.preventDefault(); zoomLevel = 1; panX = 0; panY = 0; applyTransform(); return; }
 
             // Editing/destructive shortcuts are disabled in Preview mode
-            if (interactionPreview) return;
+            if (typeof interactionPreview !== 'undefined' && interactionPreview) return;
 
             // Arrow nudge (needs selected element)
             if (!selectedElement) return;
@@ -3997,7 +4072,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const parsed = parseSource(source);
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
             // The server rejects edits whose digest does not match the file on disk.
-            const expectedDigest = fileDigests.get(normalizePathSlash(parsed.file));
+            const expectedDigest = typeof getFileDigest === 'function' ? getFileDigest(parsed.file) : fileDigests.get(normalizePathSlash(parsed.file));
             if (!expectedDigest) { showToast('error', 'Source mapping is not ready. Select the element again.'); return; }
             socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest, change }));
           }
@@ -4380,9 +4455,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // The editor has a digest only for a file whose tree it loaded, and every source edit needs one.
           async function ensureDigest(file) {
-            if (fileDigests.has(normalizePathSlash(file)) || !socket || socket.readyState !== WebSocket.OPEN) return;
+            if (getFileDigest(file) || !socket || socket.readyState !== WebSocket.OPEN) return;
             socket.send(JSON.stringify({ type: 'get-tree', file }));
-            for (let tries = 0; tries < 30 && !fileDigests.has(normalizePathSlash(file)); tries++) await new Promise(resolve => setTimeout(resolve, 100));
+            for (let tries = 0; tries < 30 && !getFileDigest(file); tries++) await new Promise(resolve => setTimeout(resolve, 100));
           }
 
           async function dispatchShapeInsert(tool, x, y, width, height, drawn = true) {
@@ -4457,7 +4532,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               altPressed = true;
               drawOverlay();
             }
-            if (e.code === 'Space' && !spaceHeld && !interactionPreview && !e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button')) {
+            if (e.code === 'Space' && !spaceHeld && !(typeof interactionPreview !== 'undefined' && interactionPreview) && !(e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button'))) {
               spaceHeld = true;
               canvasContainer.style.cursor = 'grab';
               const blocker = document.getElementById('iframe-blocker');
@@ -5169,7 +5244,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 socket.send(JSON.stringify({ type: 'redo' }));
                 showToast('info', 'Redoing last change...');
               } else if (data.action === 'escape') {
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                (document.body || document).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
               }
               return;
             }
@@ -5814,9 +5889,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 if (isComponent) {
                   selectedElement = { source: nodeSource };
                   selectedSources = [nodeSource];
+                  selectedRect = null;
+                  selectedRects = [];
                   selectionSnapshots.clear();
                   selectedComputedStyles = null;
                   selectedComputedSource = null;
+                  resetEditScope();
+                  clearOverlay();
+                  document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+                  item.classList.add('active');
+                  const compIframe = document.getElementById('app-iframe');
+                  if (compIframe && compIframe.contentWindow) {
+                    compIframe.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
+                  }
                   showPropsPanel(node.name || node.tagName);
                   return;
                 }
@@ -6090,10 +6175,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
             iframe.onload = function() {
-              // A new document invalidates every cached screen rectangle.
-              selectedRect = null; selectedRects = []; hoveredRect = null;
+              // A new document invalidates previous route selection, rects, and layers tree.
+              selectedElement = null;
+              selectedSources = [];
+              selectedRect = null;
+              selectedRects = [];
+              selectionSnapshots.clear();
+              selectedComputedStyles = null;
+              selectedComputedSource = null;
+              hoveredElement = null;
+              hoveredRect = null;
+              layerTree = null;
+              lastRequestedTreeFile = null;
               isPendingPositionUpdate = false;
+              resetEditScope();
               clearOverlay();
+              showNoSelection();
+              document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
               setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
                 // Request fresh DOM tree — fixes layer panel after page refresh
@@ -7210,7 +7308,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function sendStyleChange(source, property, value) {
             const scoped = scopedEdit(source, mutationScope.capture({ type: 'class', property, value }));
             if (!scoped) return;
-            if (stagingModeActive) { stageEdit(scoped.source, scoped.change); return; }
+            if (stagingModeActive) { stageEdit(scoped.source, scoped.change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(scoped.source);
             if (!parsed) return;
@@ -7429,7 +7527,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const scoped = scopedEdit(source, captured);
             if (!scoped) return;
             let change = scoped.change;
-            if (stagingModeActive) { stageEdit(scoped.source, change); return; }
+            if (stagingModeActive) { stageEdit(scoped.source, change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
@@ -7465,7 +7563,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const scoped = scopedEdit(source, mutationScope.capture({ type: 'multi-class', value: styles }));
             if (!scoped) return;
             if (stagingModeActive) {
-              stageEdit(scoped.source, scoped.change);
+              stageEdit(scoped.source, scoped.change, source);
               return;
             }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -7487,7 +7585,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function sendPositionChange(source, styles, layoutPosition) {
             const change = mutationScope.capture({ type: 'layout', value: styles,
               layoutPosition: layoutPosition || (selectedComputedStyles && selectedComputedStyles.position) || 'static' });
-            if (stagingModeActive) { stageEdit(source, change); return; }
+            if (stagingModeActive) { stageEdit(source, change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
@@ -7617,7 +7715,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const parsed = selectedElement && parseSource(selectedElement.source);
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration,
               change: { type: 'retag', tagName: event.target.value } }));
             // Show the tag the source has until the save re-renders it; a refused change leaves it as it was.
             event.target.value = event.target.dataset.current || event.target.value;
@@ -7776,7 +7874,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
             interactionDirty = false;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration,
               change: interactions.plan(choice, interactionInfo) }));
           });
 
@@ -7788,7 +7886,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Staged edits keep the positions they were made at; extraction would move them.
             if (stagedEdits.size) { showToast('info', 'Apply or discard the staged changes first, then extract.'); return; }
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration, change: { type: 'extract', name } }));
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration, change: { type: 'extract', name } }));
           });
 
           function triggerUngroup() {
@@ -8144,8 +8242,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             if (targetX === undefined || targetY === undefined) {
               if (selectedRect) {
-                targetX = selectedRect.left + selectedRect.width / 2;
-                targetY = selectedRect.top + selectedRect.height / 2;
+                const rx = selectedRect.x !== undefined ? selectedRect.x : (selectedRect.left || 0);
+                const ry = selectedRect.y !== undefined ? selectedRect.y : (selectedRect.top || 0);
+                targetX = rx + (selectedRect.width || 0) / 2;
+                targetY = ry + (selectedRect.height || 0) / 2;
               } else {
                 targetX = window.innerWidth / 2;
                 targetY = window.innerHeight / 2;
@@ -8226,8 +8326,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const menu = document.getElementById('glide-context-menu');
               if (menu) menu.style.display = 'none';
               if (selectedRect) {
-                const x = Math.round(selectedRect.left + selectedRect.width / 2);
-                const y = Math.round(selectedRect.top);
+                const rx = selectedRect.x !== undefined ? selectedRect.x : (selectedRect.left || 0);
+                const ry = selectedRect.y !== undefined ? selectedRect.y : (selectedRect.top || 0);
+                const x = Math.round(rx + (selectedRect.width || 0) / 2);
+                const y = Math.round(ry);
                 openNewCommentComposer(x, y);
               } else {
                 setTool('comment');

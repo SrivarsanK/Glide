@@ -377,3 +377,114 @@ test('border swatch binds prop-border-color, section action icons do not collaps
   expect(top + 210).toBeLessThanOrEqual(600);
   expect(left + 220).toBeLessThanOrEqual(1200);
 });
+
+test('applyTransactionMappings remaps stagedEdits keys, coordinates, and expectedDigest and drops deleted entries', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    const sourceFileAliases = new Map(), selectionSnapshots = new Map(), fileDigests = new Map();
+    const _styleTimers = new Map(), _pendingEdits = [];
+    const stagedEdits = new Map();
+    let currentFile = 'App.tsx', selectedElement = null, selectedRects = [], selectedComputedStyles = null;
+    let selectedComputedSource = null, selectedSources = [], glideClipboard = null, pendingStampRemaps = [];
+    function clearOverlay() {} function showNoSelection() {} function trackStaleStamps() {} function updateStagingBarUI() {}
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('parseSource')} ${fn('applyTransactionMappings')}
+    stagedEdits.set('App.tsx:2:1', new Map([
+      ['k1', { change: { type: 'class', property: 'color', value: 'red' }, parsed: { file: 'App.tsx', line: 2, column: 1, hash: null, expectedDigest: 'd1' }, previewTarget: 'App.tsx:2:1', timestamp: 1 }],
+    ]));
+    stagedEdits.set('App.tsx:5:1', new Map([
+      ['k2', { change: { type: 'class', property: 'padding', value: '8px' }, parsed: { file: 'App.tsx', line: 5, column: 1, hash: null, expectedDigest: 'd1' }, previewTarget: 'App.tsx:5:1', timestamp: 2 }],
+    ]));
+    applyTransactionMappings({
+      success: true,
+      changedFiles: [{ path: 'App.tsx', newDigest: 'd2' }],
+      selectionRemaps: [{ oldSourceId: 'App.tsx:2:1', oldHash: '', newHash: 'aa11', newCoordinates: { line: 3, column: 1 } }],
+      deletedSourceIds: ['App.tsx:5:1'],
+    });
+  `, context);
+  expect(vm.runInContext('stagedEdits.has("App.tsx:5:1")', context)).toBe(false);
+  expect(vm.runInContext('stagedEdits.has("App.tsx:3:1:aa11")', context)).toBe(true);
+  const remappedItem = vm.runInContext('stagedEdits.get("App.tsx:3:1:aa11").get("k1")', context);
+  expect(remappedItem.parsed).toMatchObject({ file: 'App.tsx', line: 3, column: 1, hash: 'aa11', expectedDigest: 'd2' });
+});
+
+test('staged Before/After previews style, layout, text, and call-site scope targets on the live DOM element', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    const sourceFileAliases = new Map(), fileDigests = new Map();
+    const stagedEdits = new Map();
+    const posted = [];
+    let currentFile = 'App.tsx', pendingBatch = null, previewState = 'after';
+    const iframe = { contentWindow: { postMessage(msg) { posted.push(msg); } } };
+    const document = { getElementById: (id) => (id === 'app-iframe' ? iframe : null) };
+    const mutationScope = {
+      capture: (c) => c,
+      entries: (c) => [{ key: c.type + ':' + (c.property || 'val'), change: c }],
+    };
+    function showToast() {} function updateStagingBarUI() {}
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('getFileDigest')} ${fn('parseSource')}
+    ${fn('previewStyleInIframe')} ${fn('clearPreviewInIframe')} ${fn('stageEdit')} ${fn('togglePreviewMode')}
+    setFileDigest('Parent.tsx', 'dig-p');
+    setFileDigest('App.tsx', 'dig-a');
+    stageEdit('Parent.tsx:10:5', { type: 'style', value: { color: 'red' } }, 'Button.tsx:4:3');
+    stageEdit('App.tsx:2:1', { type: 'text', value: 'Updated' }, 'App.tsx:2:1');
+    const initialPosted = posted.slice();
+    posted.length = 0;
+    togglePreviewMode(); // -> before
+    const beforePosted = posted.slice();
+    posted.length = 0;
+    togglePreviewMode(); // -> after
+    const afterPosted = posted.slice();
+  `, context);
+  expect(vm.runInContext('initialPosted', context)).toEqual([
+    { type: 'glide:preview-style', sourceId: 'Button.tsx:4:3', styles: { color: 'red' } },
+    { type: 'glide:preview-text', source: 'App.tsx:2:1', value: 'Updated' },
+  ]);
+  expect(vm.runInContext('beforePosted', context)).toEqual([{ type: 'glide:clear-preview', sourceId: undefined }]);
+  expect(vm.runInContext('afterPosted', context)).toEqual([
+    { type: 'glide:preview-style', sourceId: 'Button.tsx:4:3', styles: { color: 'red' } },
+    { type: 'glide:preview-text', source: 'App.tsx:2:1', value: 'Updated' },
+  ]);
+});
+
+test('Windows drive-letter case normalization, selectedRect x/y coordinates, iframe.onload reset, and component row clear', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const sourceFileAliases = new Map(), fileDigests = new Map();
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('getFileDigest')}
+    setFileDigest('C:\\\\project\\\\src\\\\App.tsx', 'win-digest');
+    const fetchedLower = getFileDigest('c:/project/src/App.tsx');
+    const fetchedUpper = getFileDigest('C:/project/src/App.tsx');
+  `, context);
+  expect(vm.runInContext('fetchedLower', context)).toBe('win-digest');
+  expect(vm.runInContext('fetchedUpper', context)).toBe('win-digest');
+
+  // triggerFlyingReaction and #menu-comment must read selectedRect.x/y (not undefined .left/.top)
+  const reactionCtx = vm.createContext({});
+  vm.runInContext(`
+    const spawned = [];
+    const document = {
+      body: { appendChild(el) { spawned.push(el); } },
+      createElement() { return { className: '', textContent: '', style: { setProperty() {} }, addEventListener() {} }; },
+    };
+    const window = { innerWidth: 1000, innerHeight: 800 };
+    const selectedRect = { x: 120, y: 240, width: 80, height: 40 };
+    function setTimeout(fn) { fn(); }
+    ${fn('triggerFlyingReaction')}
+    triggerFlyingReaction('🔥');
+  `, reactionCtx);
+  const spawned = vm.runInContext('spawned', reactionCtx);
+  expect(spawned.length).toBe(4);
+  expect(spawned[0].style.left).not.toContain('NaN');
+  expect(spawned[0].style.top).not.toContain('NaN');
+  expect(script).not.toContain('selectedRect.left + selectedRect.width / 2');
+
+  // _doLoadApp iframe.onload must reset selection and layerTree; component row click must clear overlay
+  const loadAppFn = fn('_doLoadApp');
+  expect(loadAppFn).toContain('selectedElement = null');
+  expect(loadAppFn).toContain('layerTree = null');
+  expect(loadAppFn).toContain('resetEditScope()');
+  const renderLayersFn = fn('renderLayersTree');
+  expect(renderLayersFn).toMatch(/if\s*\(isComponent\)\s*\{[\s\S]{0,600}clearOverlay\(\)/);
+});
