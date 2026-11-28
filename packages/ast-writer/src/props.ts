@@ -130,18 +130,22 @@ export function setAttribute(ast: any, node: t.JSXElement, name: string | undefi
       }
     });
   }
+  const needsExpression = (text: string) => /["'\r\n]|&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(text);
   const write = (key: string, next: string | true | null) => {
     const current = named(key)[0];
     if (next === null) { if (current) opening.attributes.splice(opening.attributes.indexOf(current), 1); return; }
-    const node = next === true ? null : t.stringLiteral(next);
+    // JSX string attributes do not unescape JS quotes/newlines and decode HTML entities; use an expression container when needed.
+    const node = next === true ? null : needsExpression(next) ? t.jsxExpressionContainer(t.stringLiteral(next)) : t.stringLiteral(next);
     if (current) { current.name = t.jsxIdentifier(key); current.value = node; } else opening.attributes.push(t.jsxAttribute(t.jsxIdentifier(key), node));
   };
   write(name, value as string | true | null);
   // A new tab must not get a handle on this page.
   if (name === 'target' && value === '_blank') {
     if (named('rel').length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate rel attributes are ambiguous.');
-    const rel = named('rel')[0], tokens = new Set(String(rel ? literal(rel.value) ?? '' : '').split(/\s+/).filter(Boolean));
-    if (rel && literal(rel.value) === undefined) throw new Error('UNSUPPORTED_OPERATION: rel is computed; add noopener in source.');
+    const rel = named('rel')[0];
+    const relValue = rel ? literal(rel.value) : '';
+    if (rel && relValue === undefined) throw new Error('UNSUPPORTED_OPERATION: rel is computed; add noopener in source.');
+    const tokens = new Set((typeof relValue === 'string' ? relValue : '').split(/\s+/).filter(Boolean));
     write('rel', [...new Set([...tokens, 'noopener', 'noreferrer'])].join(' '));
   }
 }

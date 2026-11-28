@@ -140,6 +140,14 @@ test('an edit a condition would override is refused with the condition named', (
     .toThrow('The padding is also set when `active`.');
   expect(() => edit(component('<div className={clsx("p-2", { "p-8": error })}>x</div>'), '<div', padding()))
     .toThrow('The padding is also set when `error`.');
+  expect(() => edit(component('<div className={clsx("block", { hidden: active })}>x</div>'), '<div', { type: 'class', property: 'display', value: '' }))
+    .toThrow('The display is also set when `active`.');
+  expect(() => edit(component('<div className={clsx("block", { flex: active })}>x</div>'), '<div', { type: 'class', property: 'display', value: 'grid' }))
+    .toThrow('The display is also set when `active`.');
+  expect(() => edit(component('<div className={cn("block", { flex })}>x</div>'), '<div', { type: 'class', property: 'display', value: 'grid' }))
+    .toThrow('The display is also set when `flex`.');
+  expect(edit(component('<div className={clsx("p-2", { hidden: active })}>x</div>'), '<div', padding()))
+    .toContain('className={clsx("p-4", { hidden: active })}');
   expect(() => edit(component('<div className={cn("w-10", active && "size-9")}>x</div>'), '<div', { type: 'class', property: 'width', value: '320px' }))
     .toThrow('The width is also set when `active`.');
 });

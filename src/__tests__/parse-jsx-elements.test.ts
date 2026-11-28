@@ -169,4 +169,12 @@ function App() {
     const article = records.find(r => r.tag === 'article')!;
     expect(section.line).toBeLessThan(article.line);
   });
+
+  test('tab-indented files preserve 1-char tab columns and deep member expressions A.B.C', () => {
+    const source = 'export default function App() {\n\treturn (\n\t\t<A.B.C>\n\t\t\t<span />\n\t\t</A.B.C>\n\t);\n}\n';
+    const records = parse(source);
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({ tag: 'a.b.c', line: 3, col: 3 });
+    expect(records[1]).toMatchObject({ tag: 'span', line: 4, col: 4 });
+  });
 });

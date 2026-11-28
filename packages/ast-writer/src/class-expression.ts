@@ -102,6 +102,22 @@ function literalPiece(node: t.StringLiteral, origin: Origin, list?: any[]): Clas
   };
 }
 
+function identifierKeyPiece(prop: t.ObjectProperty, origin: Origin, list: any[]): ClassPiece {
+  const keyName = (prop.key as t.Identifier).name;
+  return {
+    tokens: tokensOf(keyName, false, false), ...origin, canAdd: false,
+    rewrite(keep, add) {
+      if (keep(keyName)) return;
+      if (add) {
+        prop.shorthand = false;
+        prop.key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(add) ? t.identifier(add) : t.stringLiteral(add);
+      } else if (list.includes(prop)) {
+        list.splice(list.indexOf(prop), 1);
+      }
+    },
+  };
+}
+
 function quasiPiece(template: t.TemplateLiteral, index: number, origin: Origin): ClassPiece {
   const quasi = template.quasis[index];
   const first = index === 0, last = index === template.quasis.length - 1;
@@ -200,10 +216,13 @@ export function readClassExpression(expression: t.Expression, scope?: BindingSco
       visit(node.consequent, when(node.test));
       visit(node.alternate, when(node.test));
     } else if (t.isObjectExpression(node)) {
-      // clsx objects: { "bg-red-500": hasError }
+      // clsx objects: { "bg-red-500": hasError, hidden: isHidden, flex }
       for (const prop of node.properties) {
-        if (t.isObjectProperty(prop) && !prop.computed && t.isStringLiteral(prop.key)) {
+        if (!t.isObjectProperty(prop) || prop.computed) continue;
+        if (t.isStringLiteral(prop.key)) {
           result.pieces.push(literalPiece(prop.key, when(prop.value)));
+        } else if (t.isIdentifier(prop.key)) {
+          result.pieces.push(identifierKeyPiece(prop, when(prop.value), node.properties));
         }
       }
     } else if (t.isCallExpression(node) && t.isIdentifier(node.callee)) {
