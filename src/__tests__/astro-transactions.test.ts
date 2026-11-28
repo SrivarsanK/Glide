@@ -56,6 +56,15 @@ test('the positions Glide edits are the positions the stamp gives', () => {
   for (const tag of ['<main', '<button', '<span']) {
     expect(stamped).toContain(`${tag} data-gl-source="Page.astro:${line}:${column(tag)}"`);
   }
+  // Mid-file horizontal-rule dashes in Astro must not be treated as frontmatter.
+  const withDashes = '---\nconst x = 1;\n---\n<p>top</p>\n---\n<p>mid</p>\n---\n';
+  const stampedDashes = stampHTMLTemplate(withDashes, 'Page.astro');
+  expect(stampedDashes).toContain('<p data-gl-source="Page.astro:4:1">top</p>');
+  expect(stampedDashes).toContain('<p data-gl-source="Page.astro:6:1">mid</p>');
+  const noFrontmatterDashes = '<p>top</p>\n---\n<p>mid</p>\n---\n';
+  const stampedNoFm = stampHTMLTemplate(noFrontmatterDashes, 'Page.astro');
+  expect(stampedNoFm).toContain('<p data-gl-source="Page.astro:1:1">top</p>');
+  expect(stampedNoFm).toContain('<p data-gl-source="Page.astro:3:1">mid</p>');
 });
 
 test('undo restores the Astro file', async () => {

@@ -233,11 +233,23 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
         if (!isDev) return null;
 
         const cleanId = id.split('?')[0];
-        // Skip Astro virtual script/style modules — these contain extracted
-        // TypeScript/CSS, not HTML templates. Stamping them would corrupt
-        // TS generics like Omit<T> or NodeListOf<E>.
-        if (id.includes('?astro&type=script') || id.includes('?astro&type=style')) {
-          return null;
+        // Skip framework virtual script/style modules (extracted TypeScript/CSS,
+        // not HTML templates) and Vite asset-modifier queries (?raw, ?url, etc.).
+        const queryIndex = id.indexOf('?');
+        if (queryIndex !== -1) {
+          const params = new URLSearchParams(id.slice(queryIndex + 1));
+          const subModuleType = params.get('type');
+          if (
+            ((params.has('vue') || params.has('svelte') || params.has('astro')) &&
+              (subModuleType === 'script' || subModuleType === 'style')) ||
+            params.has('raw') ||
+            params.has('url') ||
+            params.has('inline') ||
+            params.has('worker') ||
+            params.has('sharedworker')
+          ) {
+            return null;
+          }
         }
         if (cleanId.includes('node_modules')) {
           return null;

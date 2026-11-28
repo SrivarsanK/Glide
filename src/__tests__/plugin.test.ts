@@ -121,6 +121,36 @@ describe('glideSourceStamping Vite Plugin', () => {
     }
   });
 
+  test('skips Vue/Svelte/Astro virtual script/style modules and Vite asset query imports', () => {
+    const plugin = glideSourceStamping({ editor: false });
+
+    if (plugin.configResolved && typeof plugin.configResolved === 'function') {
+      plugin.configResolved({ command: 'serve', root: '/project' } as any);
+    }
+
+    const handler = (plugin.transform as any).handler;
+    const tsCode = 'const list = ref<string[]>([]);\nconst ok = count<limit;\n';
+    const cssCode = 'a > b { color: red; }\n';
+    const rawHtml = '<div class="card">Hello</div>\n';
+
+    expect(handler.call({}, tsCode, '/project/src/App.vue?vue&type=script&setup=true&lang.ts')).toBeNull();
+    expect(handler.call({}, cssCode, '/project/src/App.vue?vue&type=style&index=0&scoped=1&lang.css')).toBeNull();
+    expect(handler.call({}, cssCode, '/project/src/App.svelte?svelte&type=style&lang.css')).toBeNull();
+    expect(handler.call({}, tsCode, '/project/src/Page.astro?astro&type=script&index=0&lang.ts')).toBeNull();
+    expect(handler.call({}, cssCode, '/project/src/Page.astro?astro&type=style&index=0&lang.css')).toBeNull();
+    expect(handler.call({}, rawHtml, '/project/src/App.vue?raw')).toBeNull();
+    expect(handler.call({}, rawHtml, '/project/src/App.tsx?raw')).toBeNull();
+    expect(handler.call({}, rawHtml, '/project/src/page.html?url')).toBeNull();
+    expect(handler.call({}, rawHtml, '/project/src/page.html?inline')).toBeNull();
+    expect(handler.call({}, tsCode, '/project/src/worker.tsx?worker')).toBeNull();
+    expect(handler.call({}, tsCode, '/project/src/worker.tsx?sharedworker')).toBeNull();
+
+    // Regular files and HMR cache-busted module queries still stamp.
+    const stampedVue = handler.call({}, '<template><div v-if="a<b">Hi</div></template>', '/project/src/App.vue?t=1700000000');
+    expect(stampedVue).not.toBeNull();
+    expect(stampedVue.code).toContain('<div data-gl-source="src/App.vue:1:11" v-if="a<b">Hi</div>');
+  });
+
   test('never injects legacy position sidecars into the development app', () => {
     const plugin = glideSourceStamping();
 
