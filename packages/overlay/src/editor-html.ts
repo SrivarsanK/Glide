@@ -2397,6 +2397,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let isDragging = false;
           let isPendingPositionUpdate = false;
           let resizeDir = '';
+          let resizePointerId = null;
           let startPointerX = 0;
           let startPointerY = 0;
           let startRect = null;
@@ -3677,7 +3678,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             },
             hand: {
               cursor: 'grab',
-              needsBlocker: false,
+              needsBlocker: true,
               toast: null
             },
             frame: {
@@ -3793,15 +3794,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return;
             }
 
-            // Tool shortcuts
-            if (!ctrl && key === 'v') { setTool('select'); return; }
-            if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
-            if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
-            if (!ctrl && (key === 'r' || key === 'R')) { setTool('rect'); return; }
-            if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
-            if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
-            if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
-            if (!ctrl && (key === 'e' || key === 'E')) { toggleReactionSelector(); return; }
+            // Tool shortcuts (disabled in interaction preview mode)
+            if (!interactionPreview) {
+              if (!ctrl && key === 'v') { setTool('select'); return; }
+              if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
+              if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
+              if (!ctrl && (key === 'r' || key === 'R')) { setTool('rect'); return; }
+              if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
+              if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
+              if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
+              if (!ctrl && (key === 'e' || key === 'E')) { toggleReactionSelector(); return; }
+            }
 
             // Number keys 1-8 for reaction picker
             const reactionEmojis = ['👍', '❤️', '🔥', '🎉', '🚀', '👀', '💡', '💯'];
@@ -3835,8 +3838,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               selectionSnapshots.clear();
               hoveredElement = null;
               hoveredRect = null;
+              resetEditScope();
               clearOverlay();
               showNoSelection();
+              document.querySelectorAll('.layer-item.active').forEach(item => item.classList.remove('active'));
+              if (typeof workspaceCanvas !== 'undefined' && workspaceCanvas) {
+                workspaceCanvas.clearSelection();
+                workspaceCanvas.refresh();
+              }
+              const escFrame = document.getElementById('app-iframe');
+              if (escFrame && escFrame.contentWindow) {
+                escFrame.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
+              }
               return;
             }
 
@@ -3935,6 +3948,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Ctrl+0 = fit, Ctrl+1 = 100%
             if (ctrl && key === '0') { e.preventDefault(); fitToScreen(); return; }
             if (ctrl && key === '1') { e.preventDefault(); zoomLevel = 1; panX = 0; panY = 0; applyTransform(); return; }
+
+            // Editing/destructive shortcuts are disabled in Preview mode
+            if (interactionPreview) return;
 
             // Arrow nudge (needs selected element)
             if (!selectedElement) return;
@@ -4040,17 +4056,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           canvasContainer.addEventListener('pointerdown', (e) => {
-            if (currentTool === 'hand' || e.button === 1) {
+            if (currentTool === 'hand' || spaceHeld || e.button === 1) {
               isPanning = true;
               panStart = { x: e.clientX - panX, y: e.clientY - panY };
               canvasContainer.style.cursor = 'grabbing';
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker && blocker.style.display !== 'none') blocker.style.cursor = 'grabbing';
               try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
               e.preventDefault();
               return;
             }
-            if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
+            if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool) && !isDrawingShape) {
               handleShapeDrawStart(e);
-              if (isDrawingShape) { canvasContainer.setPointerCapture(e.pointerId); e.preventDefault(); }
+              if (isDrawingShape) {
+                try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
+                e.preventDefault();
+              }
             }
           });
 
@@ -4102,6 +4123,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (isResizing && startRect && selectedElement) {
               const dx = (e.clientX - startPointerX) / zoomLevel;
               const dy = (e.clientY - startPointerY) / zoomLevel;
+              const resizesX = resizeDir.includes('l') || resizeDir.includes('r');
+              const resizesY = resizeDir.includes('t') || resizeDir.includes('b');
 
               let width = startRect.width;
               let height = startRect.height;
@@ -4111,21 +4134,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (resizeDir.includes('r')) {
                 width = Math.max(10, startRect.width + dx);
               } else if (resizeDir.includes('l')) {
-                const targetWidth = startRect.width - dx;
-                if (targetWidth >= 10) {
-                  width = targetWidth;
-                  x = startRect.x + dx;
-                }
+                width = Math.max(10, startRect.width - dx);
+                x = startRect.x + (startRect.width - width);
               }
 
               if (resizeDir.includes('b')) {
                 height = Math.max(10, startRect.height + dy);
               } else if (resizeDir.includes('t')) {
-                const targetHeight = startRect.height - dy;
-                if (targetHeight >= 10) {
-                  height = targetHeight;
-                  y = startRect.y + dy;
-                }
+                height = Math.max(10, startRect.height - dy);
+                y = startRect.y + (startRect.height - height);
               }
 
               const g = document.getElementById('selection-group');
@@ -4146,19 +4163,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               resizeFinalW = Math.round(width);
               resizeFinalH = Math.round(height);
 
-              applyOptimisticStyle(selectedElement.source, {
-                width: resizeFinalW + 'px',
-                height: resizeFinalH + 'px'
-              });
+              const previewStyles = {};
+              if (resizesX) previewStyles.width = resizeFinalW + 'px';
+              if (resizesY) previewStyles.height = resizeFinalH + 'px';
+              if (Object.keys(previewStyles).length > 0) {
+                applyOptimisticStyle(selectedElement.source, previewStyles);
+              }
 
               const propX = document.getElementById('prop-x');
               if (propX) propX.value = Math.round(x);
               const propY = document.getElementById('prop-y');
               if (propY) propY.value = Math.round(y);
               const propW = document.getElementById('prop-w');
-              if (propW) propW.value = resizeFinalW;
+              if (propW && resizesX) propW.value = resizeFinalW;
               const propH = document.getElementById('prop-h');
-              if (propH) propH.value = resizeFinalH;
+              if (propH && resizesY) propH.value = resizeFinalH;
             }
             // Update cursor coords in status bar
             const cursorPoint = framePointFromClient(e.clientX, e.clientY);
@@ -4177,24 +4196,44 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (isPanning) {
               isPanning = false;
-              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+              const nextCursor = (currentTool === 'hand' || spaceHeld) ? 'grab' : ((TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].cursor) || 'default');
+              canvasContainer.style.cursor = nextCursor;
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker && blocker.style.display !== 'none') blocker.style.cursor = nextCursor;
               try { canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
             }
             if (isResizing && startRect && selectedElement) {
               isResizing = false;
-              // Hide iframe blocker
+              const resizesX = resizeDir.includes('l') || resizeDir.includes('r');
+              const resizesY = resizeDir.includes('t') || resizeDir.includes('b');
+              // Release capture and hide iframe blocker unless active tool requires it
               const blocker = document.getElementById('iframe-blocker');
-              if (blocker) blocker.style.display = 'none';
+              if (blocker) {
+                if (resizePointerId !== null) {
+                  try {
+                    if (blocker.hasPointerCapture && blocker.hasPointerCapture(resizePointerId)) {
+                      blocker.releasePointerCapture(resizePointerId);
+                    }
+                  } catch (err) {}
+                }
+                const keepBlocker = (typeof TOOL_CONFIGS !== 'undefined' && typeof currentTool !== 'undefined' && TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].needsBlocker)
+                  || (typeof spaceHeld !== 'undefined' && spaceHeld);
+                if (!keepBlocker) blocker.style.display = 'none';
+              }
+              resizePointerId = null;
 
-              // Commit resize — use tracked final dimensions
+              // Commit resize — emit only the resized axes plus leading-edge offset
               if (resizeFinalW > 0 || resizeFinalH > 0) {
                 const movedDx = resizeDir.includes('l') ? (startRect.width - resizeFinalW) : 0;
                 const movedDy = resizeDir.includes('t') ? (startRect.height - resizeFinalH) : 0;
 
                 // Size and leading-edge offsets form one undoable source mutation.
-                const sizeChanged = Math.abs(resizeFinalW - startRect.width) > 1 || Math.abs(resizeFinalH - startRect.height) > 1;
+                const sizeChanged = (resizesX && Math.abs(resizeFinalW - startRect.width) > 1)
+                  || (resizesY && Math.abs(resizeFinalH - startRect.height) > 1);
                 if (sizeChanged) {
-                  const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
+                  const styles = {};
+                  if (resizesX) styles.width = resizeFinalW + 'px';
+                  if (resizesY) styles.height = resizeFinalH + 'px';
                   if (movedDx) styles.left = Math.round(resizeInitialLeft + movedDx) + 'px';
                   if (movedDy) styles.top = Math.round(resizeInitialTop + movedDy) + 'px';
                   sendPositionChange(selectedElement.source, styles);
@@ -4205,7 +4244,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 // a second resize from starting with stale startRect dimensions.
                 const newX = resizeDir.includes('l') ? startRect.x + (startRect.width - resizeFinalW) : startRect.x;
                 const newY = resizeDir.includes('t') ? startRect.y + (startRect.height - resizeFinalH) : startRect.y;
-                const freshRect = { x: newX, y: newY, width: resizeFinalW, height: resizeFinalH };
+                const freshRect = {
+                  x: newX,
+                  y: newY,
+                  width: resizesX ? resizeFinalW : startRect.width,
+                  height: resizesY ? resizeFinalH : startRect.height
+                };
                 selectedRect = freshRect;
                 if (selectedRects.length > 0) selectedRects[0] = freshRect;
 
@@ -4239,6 +4283,43 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               draggingGuide = null;
               drawOverlay();
               syncUserGuidesToIframe();
+            }
+          });
+
+          document.addEventListener('pointercancel', (e) => {
+            if (isDrawingShape) {
+              isDrawingShape = false;
+              const previewEl = document.getElementById('draw-preview');
+              if (previewEl) previewEl.style.display = 'none';
+              try { if (canvasContainer.hasPointerCapture(e.pointerId)) canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
+            }
+            if (isPanning) {
+              isPanning = false;
+              const nextCursor = (currentTool === 'hand' || spaceHeld) ? 'grab' : ((TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].cursor) || 'default');
+              canvasContainer.style.cursor = nextCursor;
+              try { canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
+            }
+            if (isResizing) {
+              isResizing = false;
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker) {
+                if (resizePointerId !== null) {
+                  try { if (blocker.hasPointerCapture(resizePointerId)) blocker.releasePointerCapture(resizePointerId); } catch (err) {}
+                }
+                if (!(TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].needsBlocker) && !spaceHeld) blocker.style.display = 'none';
+              }
+              resizePointerId = null;
+              if (selectedElement) {
+                const rIframe = document.getElementById('app-iframe');
+                if (rIframe && rIframe.contentWindow) {
+                  rIframe.contentWindow.postMessage({ type: 'glide:resize-end', source: selectedElement.source }, '*');
+                }
+              }
+              startRect = null;
+              resizeDir = '';
+              resizeFinalW = 0;
+              resizeFinalH = 0;
+              drawOverlay();
             }
           });
 
@@ -4354,14 +4435,35 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // Spacebar = temp hand tool
           let spaceHeld = false;
+          function releaseSpacePan() {
+            if (!spaceHeld) return;
+            spaceHeld = false;
+            const cfg = TOOL_CONFIGS[currentTool] || TOOL_CONFIGS.select;
+            canvasContainer.style.cursor = cfg.cursor;
+            const blocker = document.getElementById('iframe-blocker');
+            if (blocker) {
+              if (cfg.needsBlocker) {
+                blocker.style.display = 'block';
+                blocker.style.cursor = cfg.cursor;
+              } else if (!isResizing && !isDragging && !isDrawingShape) {
+                blocker.style.display = 'none';
+                blocker.style.cursor = 'default';
+              }
+            }
+          }
           document.addEventListener('keydown', (e) => {
             if (e.key === 'Alt') {
               altPressed = true;
               drawOverlay();
             }
-            if (e.code === 'Space' && !spaceHeld && !e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button')) {
+            if (e.code === 'Space' && !spaceHeld && !interactionPreview && !e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button')) {
               spaceHeld = true;
               canvasContainer.style.cursor = 'grab';
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker) {
+                blocker.style.display = 'block';
+                blocker.style.cursor = 'grab';
+              }
               e.preventDefault();
             }
           });
@@ -4371,9 +4473,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               drawOverlay();
             }
             if (e.code === 'Space') {
-              spaceHeld = false;
-              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+              releaseSpacePan();
             }
+          });
+          window.addEventListener('blur', () => {
+            releaseSpacePan();
           });
 
           // Click out of frame (empty canvas background) clears selection
@@ -4489,8 +4593,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   e.stopPropagation();
                   e.preventDefault();
                   isResizing = true;
-                  const handleDir = pos.dir;
-                  resizeDir = handleDir;
+                  resizeDir = pos.dir;
+                  resizePointerId = e.pointerId;
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
@@ -4502,62 +4606,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   resizeInitialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft, 10) || 0);
                   resizeInitialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop, 10) || 0);
 
-                  // Block iframe from stealing pointer events during drag
+                  // Block iframe from stealing pointer events and capture pointer on the persistent blocker
+                  // (handle h is detached on the first pointermove redraw).
                   const blocker = document.getElementById('iframe-blocker');
-                  if (blocker) blocker.style.display = 'block';
-
-                  try { h.setPointerCapture(e.pointerId); } catch(err) {}
-
-                  function onHandleMove(moveEv) {
-                    if (!isResizing || !startRect || !selectedElement) return;
-                    const scale = typeof zoomLevel !== 'undefined' && zoomLevel ? zoomLevel : 1;
-                    const dx = (moveEv.clientX - startPointerX) / scale;
-                    const dy = (moveEv.clientY - startPointerY) / scale;
-
-                    let newW = startRect.width;
-                    let newH = startRect.height;
-
-                    if (handleDir.includes('r') || handleDir === 'mr') newW = Math.max(10, startRect.width + dx);
-                    if (handleDir.includes('l') || handleDir === 'ml') newW = Math.max(10, startRect.width - dx);
-                    if (handleDir.includes('b') || handleDir === 'bc') newH = Math.max(10, startRect.height + dy);
-                    if (handleDir.includes('t') || handleDir === 'tc') newH = Math.max(10, startRect.height - dy);
-
-                    newW = Math.round(newW);
-                    newH = Math.round(newH);
-                    resizeFinalW = newW;
-                    resizeFinalH = newH;
-
-                    applyOptimisticStyle(selectedElement.source, {
-                      width: newW + 'px',
-                      height: newH + 'px'
-                    });
-
-                    const wInp = document.getElementById('prop-w');
-                    if (wInp) wInp.value = newW;
-                    const hInp = document.getElementById('prop-h');
-                    if (hInp) hInp.value = newH;
+                  if (blocker) {
+                    blocker.style.display = 'block';
+                    blocker.style.cursor = pos.cursor;
+                    try { blocker.setPointerCapture(e.pointerId); } catch(err) {}
                   }
-
-                  function onHandleUp() {
-                    if (!isResizing) return;
-                    isResizing = false;
-                    try { h.releasePointerCapture(e.pointerId); } catch(err) {}
-                    window.removeEventListener('pointermove', onHandleMove);
-                    window.removeEventListener('pointerup', onHandleUp);
-
-                    const blockerEl = document.getElementById('iframe-blocker');
-                    if (blockerEl) blockerEl.style.display = 'none';
-
-                    if (selectedElement && resizeFinalW && resizeFinalH) {
-                      const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
-                      if (handleDir.includes('l')) styles.left = Math.round(resizeInitialLeft + startRect.width - resizeFinalW) + 'px';
-                      if (handleDir.includes('t')) styles.top = Math.round(resizeInitialTop + startRect.height - resizeFinalH) + 'px';
-                      sendPositionChange(selectedElement.source, styles);
-                    }
-                  }
-
-                  window.addEventListener('pointermove', onHandleMove);
-                  window.addEventListener('pointerup', onHandleUp);
 
                   const rIframe = document.getElementById('app-iframe');
                   if (rIframe && rIframe.contentWindow && selectedElement) {
@@ -5100,6 +5156,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 rect.setAttribute('height', h);
               }
             }
+            if (data.type === 'glide:marquee-cancel') {
+              const rect = document.getElementById('marquee-select-rect');
+              if (rect) rect.remove();
+            }
+            if (data.type === 'glide:shortcut') {
+              if (data.action === 'undo' && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'undo' }));
+                showToast('info', 'Undoing last change...');
+              } else if (data.action === 'redo' && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'redo' }));
+                showToast('info', 'Redoing last change...');
+              } else if (data.action === 'escape') {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+              }
+              return;
+            }
             if (data.type === 'glide:marquee-end') {
               const rect = document.getElementById('marquee-select-rect');
               if (rect) {
@@ -5179,7 +5251,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (data.type === 'glide:overlay') {
               // Bounds are runtime observations, not source writes. Never discard
               // the final observation during a save: the bridge may not send it again.
-              if (isResizing || isDragging) return;
+              if ((typeof interactionPreview !== 'undefined' && interactionPreview) || isResizing || isDragging) return;
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
@@ -5255,7 +5327,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (data.type === 'glide:inline-text-edit' || data.type === 'glide:text-edited') {
               if (data.source && data.value !== undefined) {
-                selectedElement = { source: data.source };
+                const remapped = pendingStampRemaps.length
+                  ? sourceMapping.remap(data.source, pendingStampRemaps, currentFile)
+                  : data.source;
+                const keepExisting = selectedElement && (selectedElement.source === remapped || selectedElement.source === data.source);
+                selectedElement = keepExisting
+                  ? { ...selectedElement, source: remapped }
+                  : { source: remapped };
                 sendEdit({ type: 'text', value: data.value });
               }
             }
@@ -8058,11 +8136,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // Blocker interactions
           const blockerEl = document.getElementById('iframe-blocker');
           if (blockerEl) {
-            blockerEl.addEventListener('pointerdown', (e) => {
-              if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
-                handleShapeDrawStart(e);
-              }
-            });
             blockerEl.addEventListener('click', (e) => {
               if (currentTool === 'comment') {
                 e.preventDefault();

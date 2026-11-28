@@ -198,3 +198,98 @@ test('workspace mutations carry the file digest the server checks', () => {
     { type: 'edit', file: 'src/App.tsx', line: 4, column: 7, expectedDigest: 'abc123', change: { type: 'workspace-position' } },
   ]);
 });
+
+test('hand tool uses iframe blocker and Space+drag pans even in select tool', () => {
+  expect(script).toMatch(/hand:\s*\{[^}]*needsBlocker:\s*true/);
+  expect(script).toMatch(/currentTool === 'hand'\s*\|\|\s*spaceHeld/);
+});
+
+test('drawSelectionBox has no duplicate window resize listeners and resize emits only the dragged axis with smooth min-size clamp', () => {
+  const drawBox = fn('drawSelectionBox');
+  expect(drawBox).not.toContain('onHandleMove');
+  expect(drawBox).not.toContain('onHandleUp');
+
+  // Verify pointermove + pointerup resize math directly from the served editor script
+  const moveBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes('isResizing && startRect && selectedElement'));
+  const upBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes('isResizing && startRect && selectedElement') && script.slice(node.start, node.end).includes('sendPositionChange'));
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const optimistic = [], committed = [];
+    const blocker = { style: { display: 'block' }, hasPointerCapture: () => false, releasePointerCapture() {} };
+    const document = {
+      getElementById: (id) => (id === 'iframe-blocker' ? blocker : null),
+      createElementNS: () => ({ setAttribute() {}, appendChild() {} }),
+    };
+    const window = {};
+    function clearTimeout() {} function setTimeout() { return 1; }
+    function drawOverlay() {}
+    function applyOptimisticStyle(src, styles) { optimistic.push({ src, styles }); }
+    function sendPositionChange(src, styles) { committed.push({ src, styles }); }
+    let zoomLevel = 1, isResizing = true, isPendingPositionUpdate = false;
+    let selectedElement = { source: 'App.tsx:2:1' };
+    let selectedRect = { x: 100, y: 50, width: 120, height: 21 };
+    let selectedRects = [selectedRect];
+    let startRect = { x: 100, y: 50, width: 120, height: 21 };
+    let startPointerX = 220, startPointerY = 60, resizeInitialLeft = 0, resizeInitialTop = 0;
+    let resizeFinalW = 120, resizeFinalH = 21, resizeDir = 'mr';
+    let resizePointerId = null;
+    // 1. Horizontal-only drag on mr handle (+50px) must emit ONLY width, never height
+    let e = { clientX: 270, clientY: 65, pointerId: 1 };
+    (function() { ${moveBranch} })();
+    (function() { ${upBranch} })();
+    // 2. Left handle dragged past min width (dx = +150 on width 120 -> width clamped to 10, left shifted +110)
+    isResizing = true; startRect = { x: 100, y: 50, width: 120, height: 21 };
+    startPointerX = 100; startPointerY = 60; resizeInitialLeft = 0; resizeInitialTop = 0;
+    resizeFinalW = 120; resizeFinalH = 21; resizeDir = 'ml';
+    e = { clientX: 250, clientY: 60, pointerId: 2 };
+    (function() { ${moveBranch} })();
+    (function() { ${upBranch} })();
+  `, context);
+  const committed = vm.runInContext('committed', context);
+  expect(committed[0].styles).toEqual({ width: '170px' });
+  expect(committed[1].styles).toEqual({ width: '10px', left: '110px' });
+});
+
+test('preview mode ignores glide:overlay and blocks Escape/Delete leaks', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isResizing = false, isDragging = false, interactionPreview = true;
+    let selectedElement = null, selectedRect = null, selectedComputedStyles = null, selectedComputedSource = null;
+    let selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionSnapshots = new Map();
+    const document = { querySelectorAll() { return []; } };
+    let draws = 0;
+    function drawOverlay() { draws++; } function populatePropsFromComputed() {}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
+    const data = { type: 'glide:overlay', source: 'App.tsx:1:1', rect: { x: 40, y: 25, width: 200, height: 50 } };
+    (function() { ${branch('glide:overlay')} })();
+  `, context);
+  expect(vm.runInContext('selectedElement', context)).toBeNull();
+  expect(vm.runInContext('draws', context)).toBe(0);
+
+  // Escape handler must post glide:clear-selection to iframe and clear layer highlights
+  const escapeBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes("key === 'Escape'"));
+  expect(escapeBranch).toContain('glide:clear-selection');
+  expect(escapeBranch).toContain('workspaceCanvas.clearSelection');
+});
+
+test('inline text edit preserves selectedElement owners/tagName and remaps stale coordinates', () => {
+  const inlineBranch = branch('glide:inline-text-edit');
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx';
+    let pendingStampRemaps = [{ oldSourceId: 'App.tsx:2:1', oldHash: '', newHash: 'abcd', newCoordinates: { line: 4, column: 3 } }];
+    let selectedElement = { source: 'App.tsx:4:3:abcd', owners: [{ name: 'Card' }], tagName: 'p' };
+    const sent = [];
+    function sendEdit(change) { sent.push({ selected: selectedElement, change }); }
+    const data = { type: 'glide:inline-text-edit', source: 'App.tsx:2:1', value: 'Updated' };
+    (function() { ${inlineBranch} })();
+  `, context);
+  const sent = vm.runInContext('sent', context);
+  expect(sent).toEqual([{
+    selected: { source: 'App.tsx:4:3:abcd', owners: [{ name: 'Card' }], tagName: 'p' },
+    change: { type: 'text', value: 'Updated' },
+  }]);
+});
