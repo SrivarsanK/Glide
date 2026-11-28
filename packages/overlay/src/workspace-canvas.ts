@@ -99,7 +99,12 @@ export function createWorkspaceCanvas(options: {
           if (options.inside(drop.x, drop.y)) {
             // The page may answer through the bridge, so the destination can arrive later.
             Promise.resolve(options.destination(drop.x, drop.y)).then(target => {
-              if (!target || target.file.replace(/\\/g, '/') !== object.file.replace(/\\/g, '/')) {
+              const sameFile = (a: string, b: string) => {
+                const first = a.replace(/\\/g, '/'), second = b.replace(/\\/g, '/');
+                return /^[a-z]:/i.test(first) && /^[a-z]:/i.test(second)
+                  ? first.toLowerCase() === second.toLowerCase() : first === second;
+              };
+              if (!target || !sameFile(target.file, object.file)) {
                 options.error('Choose a container in the same source file to preserve this element’s bindings.');
                 render(); return;
               }

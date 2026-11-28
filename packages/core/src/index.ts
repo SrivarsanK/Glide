@@ -23,3 +23,5 @@ export type { ResolveComponentOptions } from './resolve.js';
 
 export { trustedWindowMessage } from './window-messages.js';
 export { createFrameQueries } from './frame-queries.js';
+export { glideBridge } from './bridge-script.js';
+export { buildBridgeScript } from './bridge.js';

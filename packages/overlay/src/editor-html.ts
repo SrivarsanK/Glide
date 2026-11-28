@@ -2106,9 +2106,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               <div class="props-section" id="section-fill">
                 <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                   <span>Fill</span>
-                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
-                    <i data-lucide="plus" id="btn-add-fill" style="width: 12px; height: 12px;"></i>
-                    <i data-lucide="minus" id="btn-remove-fill" style="width: 12px; height: 12px;"></i>
+                  <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <select class="props-select" id="fill-mode-select" style="max-width: 72px; font-size: 10px; color: #b3b3b3; border: none; background: transparent; cursor: pointer;">
+                      <option value="solid">Solid</option>
+                      <option value="gradient">Gradient</option>
+                      <option value="none">None</option>
+                    </select>
+                    <button type="button" id="btn-add-fill" title="Add Fill" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></button>
+                    <button type="button" id="btn-remove-fill" title="Remove Fill" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="minus" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div id="fill-solid-controls">
@@ -2121,11 +2126,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="text-align: center;">
                       <span style="font-size: 10px; color: #b3b3b3;">%</span>
                     </div>
-                    <select class="props-select" id="fill-mode-select" style="max-width: 60px; font-size: 10px; color: #b3b3b3; border: none; background: transparent; cursor: pointer;">
-                      <option value="solid">Solid</option>
-                      <option value="gradient">Gradient</option>
-                      <option value="none">None</option>
-                    </select>
                   </div>
                 </div>
                 <div id="fill-gradient-controls" style="display: none; margin-top: 8px;">
@@ -2217,9 +2217,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               <div class="props-section" id="section-effects">
                 <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                   <span>Effects</span>
-                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
-                    <i data-lucide="plus" id="btn-add-effect" style="width: 12px; height: 12px;"></i>
-                    <i data-lucide="minus" id="btn-remove-effect" style="width: 12px; height: 12px;"></i>
+                  <div style="display: flex; gap: 6px; color: var(--text-secondary);">
+                    <button type="button" id="btn-add-effect" title="Add Shadow" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></button>
+                    <button type="button" id="btn-remove-effect" title="Remove Shadow" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="minus" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div id="shadows-list"></div>
@@ -2324,10 +2324,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             container: document.getElementById('source-props'),
             selected: () => selectedElement?.source || null,
             parse: source => sourceMapping.parse(source, currentFile),
-            digest: file => fileDigests.get(normalizePathSlash(file)),
+            digest: file => getFileDigest(file),
             send: message => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); },
             edit: (source, change, digest) => {
-              if (stagingModeActive) { stageEdit(source, change); return; }
+              if (stagingModeActive) { stageEdit(source, change, selectedElement ? selectedElement.source : source); return; }
               const parsed = parseSource(source);
               if (parsed && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest: digest, change }));
             }
@@ -2393,10 +2393,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let lockedIds = new Set();
           let hiddenIds = new Set();
           let shadowCount = 0;
+          let gradType = 'linear';
            let isResizing = false;
           let isDragging = false;
           let isPendingPositionUpdate = false;
           let resizeDir = '';
+          let resizePointerId = null;
           let startPointerX = 0;
           let startPointerY = 0;
           let startRect = null;
@@ -2467,7 +2469,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             socket.sendRaw = socket.send.bind(socket);
             if (!sourceTransport) sourceTransport = (${createMutationTransport.toString()})({
               send: data => socket.sendRaw(data),
-              digest: file => fileDigests.get(normalizePathSlash(file)),
+              digest: file => typeof getFileDigest === 'function' ? getFileDigest(file) : fileDigests.get(normalizePathSlash(file)),
               currentFile: () => currentFile,
               id: () => 'edit:' + crypto.randomUUID(),
               error: error => showToast('error', error),
@@ -2548,13 +2550,23 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   } : null }));
                   return;
                 }
-                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !fileDigests.has(normalizePathSlash(message.requestedFile));
+                const firstDigest = message.type === 'tree' && message.digest && message.requestedFile && !getFileDigest(message.requestedFile);
                 if (message.file && message.digest) setFileDigest(message.file, message.digest);
                 if (message.type === 'tree' && message.file) {
                   sourceFileAliases.set(normalizePathSlash(message.file), normalizePathSlash(message.file));
                   if (message.requestedFile) sourceFileAliases.set(normalizePathSlash(message.requestedFile), normalizePathSlash(message.file));
                 }
-                if (message.requestedFile && message.digest) fileDigests.set(normalizePathSlash(message.requestedFile), message.digest);
+                if (message.requestedFile && message.digest) setFileDigest(message.requestedFile, message.digest);
+                if (message.type === 'tree' && message.digest && (message.file || message.requestedFile) && stagedEdits.size) {
+                  const treeFile = message.file || message.requestedFile;
+                  stagedEdits.forEach(propMap => {
+                    propMap.forEach(item => {
+                      if (item.parsed && sameSourceFile(item.parsed.file, treeFile)) {
+                        item.parsed = { ...item.parsed, expectedDigest: message.digest };
+                      }
+                    });
+                  });
+                }
                 // The first selection in a file asks for its props before the file's digest arrives; ask again.
                 if (firstDigest && selectedElement) sourceProps.request();
                 if (message.type === 'tree') {
@@ -2845,7 +2857,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
           }
 
-          function stageEdit(source, change) {
+          function stageEdit(source, change, previewTarget) {
             change = mutationScope.capture(change);
             if (pendingBatch) {
               showToast('info', 'Wait for the current source changes to finish.');
@@ -2856,37 +2868,36 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               showToast('error', 'This element has no editable source mapping.');
               return;
             }
-            parsed.expectedDigest = fileDigests.get(parsed.file.replaceAll('\\\\', '/'));
+            parsed.expectedDigest = getFileDigest(parsed.file);
             if (!parsed.expectedDigest) {
               showToast('error', 'Source mapping is not ready. Select the element again.');
               return;
             }
 
+            const domTarget = previewTarget || source;
             if (!stagedEdits.has(source)) {
               stagedEdits.set(source, new Map());
             }
             const propMap = stagedEdits.get(source);
             mutationScope.entries(change).forEach(entry => {
-              propMap.set(entry.key, { change: entry.change, parsed, timestamp: Date.now() });
+              propMap.set(entry.key, { change: entry.change, parsed, previewTarget: domTarget, timestamp: Date.now() });
             });
 
             if (change.type === 'class' && change.property) {
-              previewStyleInIframe(source, { [change.property]: change.value });
+              previewStyleInIframe(domTarget, { [change.property]: change.value });
             } else if (['multi-class', 'style', 'layout'].includes(change.type) && typeof change.value === 'object') {
-              previewStyleInIframe(source, change.value);
+              previewStyleInIframe(domTarget, change.value);
             } else if (change.type === 'text') {
               const iframe = document.getElementById('app-iframe');
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.postMessage({
-                  type: 'glide:optimistic-text',
-                  source: source,
+                  type: 'glide:preview-text',
+                  source: domTarget,
                   value: change.value
                 }, '*');
               }
-            } else {
-              if (change.property) {
-                previewStyleInIframe(source, { [change.property]: change.value });
-              }
+            } else if (change.property) {
+              previewStyleInIframe(domTarget, { [change.property]: change.value });
             }
 
             previewState = 'after';
@@ -2899,17 +2910,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               clearPreviewInIframe();
             } else {
               previewState = 'after';
+              const stylesByTarget = new Map();
+              const textByTarget = new Map();
               stagedEdits.forEach((propMap, source) => {
-                const styles = {};
                 propMap.forEach((item) => {
-                  if (item.change.property) {
-                    styles[item.change.property] = item.change.value;
+                  const domTarget = item.previewTarget || source;
+                  const ch = item.change;
+                  if (ch.type === 'text') {
+                    textByTarget.set(domTarget, ch.value);
+                  } else if (['multi-class', 'style', 'layout'].includes(ch.type) && ch.value && typeof ch.value === 'object') {
+                    if (!stylesByTarget.has(domTarget)) stylesByTarget.set(domTarget, {});
+                    Object.assign(stylesByTarget.get(domTarget), ch.value);
+                  } else if (ch.property) {
+                    if (!stylesByTarget.has(domTarget)) stylesByTarget.set(domTarget, {});
+                    stylesByTarget.get(domTarget)[ch.property] = ch.value;
                   }
                 });
-                if (Object.keys(styles).length > 0) {
-                  previewStyleInIframe(source, styles);
-                }
               });
+              stylesByTarget.forEach((styles, domTarget) => {
+                if (Object.keys(styles).length > 0) previewStyleInIframe(domTarget, styles);
+              });
+              const iframe = document.getElementById('app-iframe');
+              if (iframe && iframe.contentWindow) {
+                textByTarget.forEach((value, domTarget) => {
+                  iframe.contentWindow.postMessage({ type: 'glide:preview-text', source: domTarget, value }, '*');
+                });
+              }
             }
             updateStagingBarUI();
           }
@@ -2996,7 +3022,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function acceptEditScopes(message) {
             if (message.type !== 'edit-scopes' || message.requestId !== editScopeRequest || !selectedElement || !message.success) return;
-            (message.files || []).forEach(item => fileDigests.set(normalizePathSlash(item.file), item.digest));
+            (message.files || []).forEach(item => {
+              if (typeof setFileDigest === 'function') setFileDigest(item.file, item.digest);
+              else fileDigests.set(normalizePathSlash(item.file), item.digest);
+            });
             const owners = selectedElement.owners;
             // Inside a component, an element that does not take the component's className has no usage to choose.
             if (!owners[0].root && !message.forwards[0] && !(message.variants || []).length) return;
@@ -3064,7 +3093,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // Intercept style & class edits when Staged Mode is enabled
             if (stagingModeActive && change.type !== 'position' && change.type !== 'bake-position') {
-              stageEdit(target, change);
+              stageEdit(target, change, selectedElement.source);
               return;
             }
 
@@ -3157,11 +3186,32 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             pendingStampRemaps = [];
           }
 
-          /** Stores a file's digest under this spelling and every alias of it: stamps may use any of them. */
+          /** Stores a file's digest under this spelling, canonical Windows drive casing, and every alias. */
           function setFileDigest(file, digest) {
             const key = normalizePathSlash(file);
+            if (!key) return;
+            const canon = /^[a-z]:/i.test(key) ? key.charAt(0).toLowerCase() + key.slice(1) : key;
             fileDigests.set(key, digest);
-            sourceFileAliases.forEach((target, alias) => { if (sameSourceFile(alias, key)) fileDigests.set(alias, digest); });
+            if (canon !== key) fileDigests.set(canon, digest);
+            sourceFileAliases.forEach((target, alias) => {
+              if (sameSourceFile(alias, key)) {
+                fileDigests.set(alias, digest);
+                const aliasCanon = /^[a-z]:/i.test(alias) ? alias.charAt(0).toLowerCase() + alias.slice(1) : alias;
+                if (aliasCanon !== alias) fileDigests.set(aliasCanon, digest);
+              }
+            });
+          }
+
+          function getFileDigest(file) {
+            const key = normalizePathSlash(file);
+            if (!key) return undefined;
+            if (fileDigests.has(key)) return fileDigests.get(key);
+            const canon = /^[a-z]:/i.test(key) ? key.charAt(0).toLowerCase() + key.slice(1) : key;
+            if (fileDigests.has(canon)) return fileDigests.get(canon);
+            for (const [k, v] of fileDigests.entries()) {
+              if (sameSourceFile(k, key)) return v;
+            }
+            return undefined;
           }
 
           function parseSource(source) {
@@ -3170,8 +3220,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function applyTransactionMappings(message) {
             if (!message.success) return;
-            (message.changedFiles || []).forEach(file => {
-              setFileDigest(file.path, file.newDigest);
+            const changedFiles = message.changedFiles || [];
+            changedFiles.forEach(file => {
+              if (typeof setFileDigest === 'function') setFileDigest(file.path, file.newDigest);
+              else fileDigests.set(normalizePathSlash(file.path), file.newDigest);
             });
             const remaps = message.selectionRemaps || [];
             const deleted = new Set(message.deletedSourceIds || []);
@@ -3192,9 +3244,31 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               showNoSelection();
             }
             if (glideClipboard && isDeleted(glideClipboard.source)) glideClipboard = null;
+
+            const remap = source => (remaps.length ? sourceMapping.remap(source, remaps, currentFile) : source);
+            if (typeof stagedEdits !== 'undefined' && stagedEdits.size) {
+              const sameFilePath = (a, b) => (typeof sameSourceFile === 'function' ? sameSourceFile(a, b) : normalizePathSlash(a) === normalizePathSlash(b));
+              const entries = Array.from(stagedEdits.entries());
+              stagedEdits.clear();
+              entries.forEach(([sourceKey, propMap]) => {
+                if (isDeleted(sourceKey)) return;
+                const nextKey = remap(sourceKey);
+                const nextParsed = parseSource(nextKey);
+                const updatedMap = stagedEdits.get(nextKey) || new Map();
+                propMap.forEach((item, propKey) => {
+                  const baseParsed = nextParsed ? { ...item.parsed, ...nextParsed } : { ...item.parsed };
+                  const changed = changedFiles.find(f => baseParsed.file && sameFilePath(f.path, baseParsed.file));
+                  if (changed && changed.newDigest) baseParsed.expectedDigest = changed.newDigest;
+                  const nextPreview = item.previewTarget ? remap(item.previewTarget) : nextKey;
+                  updatedMap.set(propKey, { ...item, parsed: baseParsed, previewTarget: nextPreview });
+                });
+                if (updatedMap.size) stagedEdits.set(nextKey, updatedMap);
+              });
+              if (typeof updateStagingBarUI === 'function') updateStagingBarUI();
+            }
+
             if (!remaps.length) return;
             trackStaleStamps(remaps);
-            const remap = source => sourceMapping.remap(source, remaps, currentFile);
             selectedSources = selectedSources.map(remap);
             if (selectionSnapshots.size) {
               const entries = Array.from(selectionSnapshots.entries());
@@ -3210,7 +3284,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Digest aliases use the path spelling carried by the source stamp.
             remaps.forEach(item => {
               const target = parseSource(item.oldSourceId);
-              if (target && item.newDigest) fileDigests.set(target.file, item.newDigest);
+              if (target && item.newDigest) {
+                if (typeof setFileDigest === 'function') setFileDigest(target.file, item.newDigest);
+                else fileDigests.set(target.file, item.newDigest);
+              }
             });
           }
 
@@ -3677,7 +3754,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             },
             hand: {
               cursor: 'grab',
-              needsBlocker: false,
+              needsBlocker: true,
               toast: null
             },
             frame: {
@@ -3749,7 +3826,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // ═══════════════════════════════════════════════════════════════
           document.addEventListener('keydown', (e) => {
             // Don't fire if typing in an input
-            if (e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open]')) return;
+            if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open]')) return;
             if (document.querySelector('#editor-zoom-menu:popover-open')) return;
 
             const key = e.key;
@@ -3793,15 +3870,17 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               return;
             }
 
-            // Tool shortcuts
-            if (!ctrl && key === 'v') { setTool('select'); return; }
-            if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
-            if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
-            if (!ctrl && (key === 'r' || key === 'R')) { setTool('rect'); return; }
-            if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
-            if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
-            if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
-            if (!ctrl && (key === 'e' || key === 'E')) { toggleReactionSelector(); return; }
+            // Tool shortcuts (disabled in interaction preview mode)
+            if (!(typeof interactionPreview !== 'undefined' && interactionPreview)) {
+              if (!ctrl && key === 'v') { setTool('select'); return; }
+              if (!ctrl && (key === 'h' || key === 'H')) { setTool('hand'); return; }
+              if (!ctrl && (key === 'f' || key === 'F' || key === 'a' || key === 'A')) { setTool('frame'); return; }
+              if (!ctrl && (key === 'r' || key === 'R')) { setTool('rect'); return; }
+              if (!ctrl && (key === 'o' || key === 'O')) { setTool('ellipse'); return; }
+              if (!ctrl && (key === 't' || key === 'T')) { setTool('text'); return; }
+              if (!ctrl && (key === 'c' || key === 'C')) { setTool('comment'); return; }
+              if (!ctrl && (key === 'e' || key === 'E')) { toggleReactionSelector(); return; }
+            }
 
             // Number keys 1-8 for reaction picker
             const reactionEmojis = ['👍', '❤️', '🔥', '🎉', '🚀', '👀', '💡', '💯'];
@@ -3835,8 +3914,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               selectionSnapshots.clear();
               hoveredElement = null;
               hoveredRect = null;
+              resetEditScope();
               clearOverlay();
               showNoSelection();
+              document.querySelectorAll('.layer-item.active').forEach(item => item.classList.remove('active'));
+              if (typeof workspaceCanvas !== 'undefined' && workspaceCanvas) {
+                workspaceCanvas.clearSelection();
+                workspaceCanvas.refresh();
+              }
+              const escFrame = document.getElementById('app-iframe');
+              if (escFrame && escFrame.contentWindow) {
+                escFrame.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
+              }
               return;
             }
 
@@ -3936,6 +4025,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (ctrl && key === '0') { e.preventDefault(); fitToScreen(); return; }
             if (ctrl && key === '1') { e.preventDefault(); zoomLevel = 1; panX = 0; panY = 0; applyTransform(); return; }
 
+            // Editing/destructive shortcuts are disabled in Preview mode
+            if (typeof interactionPreview !== 'undefined' && interactionPreview) return;
+
             // Arrow nudge (needs selected element)
             if (!selectedElement) return;
             const nudge = e.shiftKey ? 10 : 1;
@@ -3980,7 +4072,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const parsed = parseSource(source);
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
             // The server rejects edits whose digest does not match the file on disk.
-            const expectedDigest = fileDigests.get(normalizePathSlash(parsed.file));
+            const expectedDigest = typeof getFileDigest === 'function' ? getFileDigest(parsed.file) : fileDigests.get(normalizePathSlash(parsed.file));
             if (!expectedDigest) { showToast('error', 'Source mapping is not ready. Select the element again.'); return; }
             socket.send(JSON.stringify({ type: 'edit', ...parsed, expectedDigest, change }));
           }
@@ -4040,17 +4132,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           canvasContainer.addEventListener('pointerdown', (e) => {
-            if (currentTool === 'hand' || e.button === 1) {
+            if (currentTool === 'hand' || spaceHeld || e.button === 1) {
               isPanning = true;
               panStart = { x: e.clientX - panX, y: e.clientY - panY };
               canvasContainer.style.cursor = 'grabbing';
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker && blocker.style.display !== 'none') blocker.style.cursor = 'grabbing';
               try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
               e.preventDefault();
               return;
             }
-            if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
+            if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool) && !isDrawingShape) {
               handleShapeDrawStart(e);
-              if (isDrawingShape) { canvasContainer.setPointerCapture(e.pointerId); e.preventDefault(); }
+              if (isDrawingShape) {
+                try { canvasContainer.setPointerCapture(e.pointerId); } catch (err) {}
+                e.preventDefault();
+              }
             }
           });
 
@@ -4102,6 +4199,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (isResizing && startRect && selectedElement) {
               const dx = (e.clientX - startPointerX) / zoomLevel;
               const dy = (e.clientY - startPointerY) / zoomLevel;
+              const resizesX = resizeDir.includes('l') || resizeDir.includes('r');
+              const resizesY = resizeDir.includes('t') || resizeDir.includes('b');
 
               let width = startRect.width;
               let height = startRect.height;
@@ -4111,21 +4210,15 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (resizeDir.includes('r')) {
                 width = Math.max(10, startRect.width + dx);
               } else if (resizeDir.includes('l')) {
-                const targetWidth = startRect.width - dx;
-                if (targetWidth >= 10) {
-                  width = targetWidth;
-                  x = startRect.x + dx;
-                }
+                width = Math.max(10, startRect.width - dx);
+                x = startRect.x + (startRect.width - width);
               }
 
               if (resizeDir.includes('b')) {
                 height = Math.max(10, startRect.height + dy);
               } else if (resizeDir.includes('t')) {
-                const targetHeight = startRect.height - dy;
-                if (targetHeight >= 10) {
-                  height = targetHeight;
-                  y = startRect.y + dy;
-                }
+                height = Math.max(10, startRect.height - dy);
+                y = startRect.y + (startRect.height - height);
               }
 
               const g = document.getElementById('selection-group');
@@ -4146,19 +4239,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               resizeFinalW = Math.round(width);
               resizeFinalH = Math.round(height);
 
-              applyOptimisticStyle(selectedElement.source, {
-                width: resizeFinalW + 'px',
-                height: resizeFinalH + 'px'
-              });
+              const previewStyles = {};
+              if (resizesX) previewStyles.width = resizeFinalW + 'px';
+              if (resizesY) previewStyles.height = resizeFinalH + 'px';
+              if (Object.keys(previewStyles).length > 0) {
+                applyOptimisticStyle(selectedElement.source, previewStyles);
+              }
 
               const propX = document.getElementById('prop-x');
               if (propX) propX.value = Math.round(x);
               const propY = document.getElementById('prop-y');
               if (propY) propY.value = Math.round(y);
               const propW = document.getElementById('prop-w');
-              if (propW) propW.value = resizeFinalW;
+              if (propW && resizesX) propW.value = resizeFinalW;
               const propH = document.getElementById('prop-h');
-              if (propH) propH.value = resizeFinalH;
+              if (propH && resizesY) propH.value = resizeFinalH;
             }
             // Update cursor coords in status bar
             const cursorPoint = framePointFromClient(e.clientX, e.clientY);
@@ -4177,24 +4272,44 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (isPanning) {
               isPanning = false;
-              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+              const nextCursor = (currentTool === 'hand' || spaceHeld) ? 'grab' : ((TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].cursor) || 'default');
+              canvasContainer.style.cursor = nextCursor;
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker && blocker.style.display !== 'none') blocker.style.cursor = nextCursor;
               try { canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
             }
             if (isResizing && startRect && selectedElement) {
               isResizing = false;
-              // Hide iframe blocker
+              const resizesX = resizeDir.includes('l') || resizeDir.includes('r');
+              const resizesY = resizeDir.includes('t') || resizeDir.includes('b');
+              // Release capture and hide iframe blocker unless active tool requires it
               const blocker = document.getElementById('iframe-blocker');
-              if (blocker) blocker.style.display = 'none';
+              if (blocker) {
+                if (resizePointerId !== null) {
+                  try {
+                    if (blocker.hasPointerCapture && blocker.hasPointerCapture(resizePointerId)) {
+                      blocker.releasePointerCapture(resizePointerId);
+                    }
+                  } catch (err) {}
+                }
+                const keepBlocker = (typeof TOOL_CONFIGS !== 'undefined' && typeof currentTool !== 'undefined' && TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].needsBlocker)
+                  || (typeof spaceHeld !== 'undefined' && spaceHeld);
+                if (!keepBlocker) blocker.style.display = 'none';
+              }
+              resizePointerId = null;
 
-              // Commit resize — use tracked final dimensions
+              // Commit resize — emit only the resized axes plus leading-edge offset
               if (resizeFinalW > 0 || resizeFinalH > 0) {
                 const movedDx = resizeDir.includes('l') ? (startRect.width - resizeFinalW) : 0;
                 const movedDy = resizeDir.includes('t') ? (startRect.height - resizeFinalH) : 0;
 
                 // Size and leading-edge offsets form one undoable source mutation.
-                const sizeChanged = Math.abs(resizeFinalW - startRect.width) > 1 || Math.abs(resizeFinalH - startRect.height) > 1;
+                const sizeChanged = (resizesX && Math.abs(resizeFinalW - startRect.width) > 1)
+                  || (resizesY && Math.abs(resizeFinalH - startRect.height) > 1);
                 if (sizeChanged) {
-                  const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
+                  const styles = {};
+                  if (resizesX) styles.width = resizeFinalW + 'px';
+                  if (resizesY) styles.height = resizeFinalH + 'px';
                   if (movedDx) styles.left = Math.round(resizeInitialLeft + movedDx) + 'px';
                   if (movedDy) styles.top = Math.round(resizeInitialTop + movedDy) + 'px';
                   sendPositionChange(selectedElement.source, styles);
@@ -4205,7 +4320,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 // a second resize from starting with stale startRect dimensions.
                 const newX = resizeDir.includes('l') ? startRect.x + (startRect.width - resizeFinalW) : startRect.x;
                 const newY = resizeDir.includes('t') ? startRect.y + (startRect.height - resizeFinalH) : startRect.y;
-                const freshRect = { x: newX, y: newY, width: resizeFinalW, height: resizeFinalH };
+                const freshRect = {
+                  x: newX,
+                  y: newY,
+                  width: resizesX ? resizeFinalW : startRect.width,
+                  height: resizesY ? resizeFinalH : startRect.height
+                };
                 selectedRect = freshRect;
                 if (selectedRects.length > 0) selectedRects[0] = freshRect;
 
@@ -4239,6 +4359,43 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               draggingGuide = null;
               drawOverlay();
               syncUserGuidesToIframe();
+            }
+          });
+
+          document.addEventListener('pointercancel', (e) => {
+            if (isDrawingShape) {
+              isDrawingShape = false;
+              const previewEl = document.getElementById('draw-preview');
+              if (previewEl) previewEl.style.display = 'none';
+              try { if (canvasContainer.hasPointerCapture(e.pointerId)) canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
+            }
+            if (isPanning) {
+              isPanning = false;
+              const nextCursor = (currentTool === 'hand' || spaceHeld) ? 'grab' : ((TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].cursor) || 'default');
+              canvasContainer.style.cursor = nextCursor;
+              try { canvasContainer.releasePointerCapture(e.pointerId); } catch (err) {}
+            }
+            if (isResizing) {
+              isResizing = false;
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker) {
+                if (resizePointerId !== null) {
+                  try { if (blocker.hasPointerCapture(resizePointerId)) blocker.releasePointerCapture(resizePointerId); } catch (err) {}
+                }
+                if (!(TOOL_CONFIGS[currentTool] && TOOL_CONFIGS[currentTool].needsBlocker) && !spaceHeld) blocker.style.display = 'none';
+              }
+              resizePointerId = null;
+              if (selectedElement) {
+                const rIframe = document.getElementById('app-iframe');
+                if (rIframe && rIframe.contentWindow) {
+                  rIframe.contentWindow.postMessage({ type: 'glide:resize-end', source: selectedElement.source }, '*');
+                }
+              }
+              startRect = null;
+              resizeDir = '';
+              resizeFinalW = 0;
+              resizeFinalH = 0;
+              drawOverlay();
             }
           });
 
@@ -4298,9 +4455,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // The editor has a digest only for a file whose tree it loaded, and every source edit needs one.
           async function ensureDigest(file) {
-            if (fileDigests.has(normalizePathSlash(file)) || !socket || socket.readyState !== WebSocket.OPEN) return;
+            if (getFileDigest(file) || !socket || socket.readyState !== WebSocket.OPEN) return;
             socket.send(JSON.stringify({ type: 'get-tree', file }));
-            for (let tries = 0; tries < 30 && !fileDigests.has(normalizePathSlash(file)); tries++) await new Promise(resolve => setTimeout(resolve, 100));
+            for (let tries = 0; tries < 30 && !getFileDigest(file); tries++) await new Promise(resolve => setTimeout(resolve, 100));
           }
 
           async function dispatchShapeInsert(tool, x, y, width, height, drawn = true) {
@@ -4354,14 +4511,35 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           // Spacebar = temp hand tool
           let spaceHeld = false;
+          function releaseSpacePan() {
+            if (!spaceHeld) return;
+            spaceHeld = false;
+            const cfg = TOOL_CONFIGS[currentTool] || TOOL_CONFIGS.select;
+            canvasContainer.style.cursor = cfg.cursor;
+            const blocker = document.getElementById('iframe-blocker');
+            if (blocker) {
+              if (cfg.needsBlocker) {
+                blocker.style.display = 'block';
+                blocker.style.cursor = cfg.cursor;
+              } else if (!isResizing && !isDragging && !isDrawingShape) {
+                blocker.style.display = 'none';
+                blocker.style.cursor = 'default';
+              }
+            }
+          }
           document.addEventListener('keydown', (e) => {
             if (e.key === 'Alt') {
               altPressed = true;
               drawOverlay();
             }
-            if (e.code === 'Space' && !spaceHeld && !e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button')) {
+            if (e.code === 'Space' && !spaceHeld && !(typeof interactionPreview !== 'undefined' && interactionPreview) && !(e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog[open], button'))) {
               spaceHeld = true;
               canvasContainer.style.cursor = 'grab';
+              const blocker = document.getElementById('iframe-blocker');
+              if (blocker) {
+                blocker.style.display = 'block';
+                blocker.style.cursor = 'grab';
+              }
               e.preventDefault();
             }
           });
@@ -4371,9 +4549,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               drawOverlay();
             }
             if (e.code === 'Space') {
-              spaceHeld = false;
-              canvasContainer.style.cursor = currentTool === 'hand' ? 'grab' : 'default';
+              releaseSpacePan();
             }
+          });
+          window.addEventListener('blur', () => {
+            releaseSpacePan();
           });
 
           // Click out of frame (empty canvas background) clears selection
@@ -4489,8 +4669,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   e.stopPropagation();
                   e.preventDefault();
                   isResizing = true;
-                  const handleDir = pos.dir;
-                  resizeDir = handleDir;
+                  resizeDir = pos.dir;
+                  resizePointerId = e.pointerId;
                   startPointerX = e.clientX;
                   startPointerY = e.clientY;
                   startRect = { ...rect };
@@ -4502,62 +4682,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   resizeInitialLeft = styleLeft === 'auto' ? 0 : (parseInt(styleLeft, 10) || 0);
                   resizeInitialTop = styleTop === 'auto' ? 0 : (parseInt(styleTop, 10) || 0);
 
-                  // Block iframe from stealing pointer events during drag
+                  // Block iframe from stealing pointer events and capture pointer on the persistent blocker
+                  // (handle h is detached on the first pointermove redraw).
                   const blocker = document.getElementById('iframe-blocker');
-                  if (blocker) blocker.style.display = 'block';
-
-                  try { h.setPointerCapture(e.pointerId); } catch(err) {}
-
-                  function onHandleMove(moveEv) {
-                    if (!isResizing || !startRect || !selectedElement) return;
-                    const scale = typeof zoomLevel !== 'undefined' && zoomLevel ? zoomLevel : 1;
-                    const dx = (moveEv.clientX - startPointerX) / scale;
-                    const dy = (moveEv.clientY - startPointerY) / scale;
-
-                    let newW = startRect.width;
-                    let newH = startRect.height;
-
-                    if (handleDir.includes('r') || handleDir === 'mr') newW = Math.max(10, startRect.width + dx);
-                    if (handleDir.includes('l') || handleDir === 'ml') newW = Math.max(10, startRect.width - dx);
-                    if (handleDir.includes('b') || handleDir === 'bc') newH = Math.max(10, startRect.height + dy);
-                    if (handleDir.includes('t') || handleDir === 'tc') newH = Math.max(10, startRect.height - dy);
-
-                    newW = Math.round(newW);
-                    newH = Math.round(newH);
-                    resizeFinalW = newW;
-                    resizeFinalH = newH;
-
-                    applyOptimisticStyle(selectedElement.source, {
-                      width: newW + 'px',
-                      height: newH + 'px'
-                    });
-
-                    const wInp = document.getElementById('prop-w');
-                    if (wInp) wInp.value = newW;
-                    const hInp = document.getElementById('prop-h');
-                    if (hInp) hInp.value = newH;
+                  if (blocker) {
+                    blocker.style.display = 'block';
+                    blocker.style.cursor = pos.cursor;
+                    try { blocker.setPointerCapture(e.pointerId); } catch(err) {}
                   }
-
-                  function onHandleUp() {
-                    if (!isResizing) return;
-                    isResizing = false;
-                    try { h.releasePointerCapture(e.pointerId); } catch(err) {}
-                    window.removeEventListener('pointermove', onHandleMove);
-                    window.removeEventListener('pointerup', onHandleUp);
-
-                    const blockerEl = document.getElementById('iframe-blocker');
-                    if (blockerEl) blockerEl.style.display = 'none';
-
-                    if (selectedElement && resizeFinalW && resizeFinalH) {
-                      const styles = { width: resizeFinalW + 'px', height: resizeFinalH + 'px' };
-                      if (handleDir.includes('l')) styles.left = Math.round(resizeInitialLeft + startRect.width - resizeFinalW) + 'px';
-                      if (handleDir.includes('t')) styles.top = Math.round(resizeInitialTop + startRect.height - resizeFinalH) + 'px';
-                      sendPositionChange(selectedElement.source, styles);
-                    }
-                  }
-
-                  window.addEventListener('pointermove', onHandleMove);
-                  window.addEventListener('pointerup', onHandleUp);
 
                   const rIframe = document.getElementById('app-iframe');
                   if (rIframe && rIframe.contentWindow && selectedElement) {
@@ -5032,6 +5164,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
 
             if (data.type === 'glide:ready') {
+              if (data.href) {
+                if (lastBridgeHref && data.href !== lastBridgeHref) {
+                  resetNavigationState();
+                }
+                lastBridgeHref = data.href;
+              }
               syncInteractionMode();
               const loadingEl = document.getElementById('canvas-loading');
               if (loadingEl) loadingEl.style.display = 'none';
@@ -5099,6 +5237,22 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 rect.setAttribute('width', w);
                 rect.setAttribute('height', h);
               }
+            }
+            if (data.type === 'glide:marquee-cancel') {
+              const rect = document.getElementById('marquee-select-rect');
+              if (rect) rect.remove();
+            }
+            if (data.type === 'glide:shortcut') {
+              if (data.action === 'undo' && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'undo' }));
+                showToast('info', 'Undoing last change...');
+              } else if (data.action === 'redo' && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'redo' }));
+                showToast('info', 'Redoing last change...');
+              } else if (data.action === 'escape') {
+                (document.body || document).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+              }
+              return;
             }
             if (data.type === 'glide:marquee-end') {
               const rect = document.getElementById('marquee-select-rect');
@@ -5179,7 +5333,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             if (data.type === 'glide:overlay') {
               // Bounds are runtime observations, not source writes. Never discard
               // the final observation during a save: the bridge may not send it again.
-              if (isResizing || isDragging) return;
+              if ((typeof interactionPreview !== 'undefined' && interactionPreview) || isResizing || isDragging) return;
               if (data.isHover) {
                 hoveredElement = { source: data.source };
                 hoveredRect = data.rect;
@@ -5255,7 +5409,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             if (data.type === 'glide:inline-text-edit' || data.type === 'glide:text-edited') {
               if (data.source && data.value !== undefined) {
-                selectedElement = { source: data.source };
+                const remapped = pendingStampRemaps.length
+                  ? sourceMapping.remap(data.source, pendingStampRemaps, currentFile)
+                  : data.source;
+                const keepExisting = selectedElement && (selectedElement.source === remapped || selectedElement.source === data.source);
+                selectedElement = keepExisting
+                  ? { ...selectedElement, source: remapped }
+                  : { source: remapped };
                 sendEdit({ type: 'text', value: data.value });
               }
             }
@@ -5735,9 +5895,19 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 if (isComponent) {
                   selectedElement = { source: nodeSource };
                   selectedSources = [nodeSource];
+                  selectedRect = null;
+                  selectedRects = [];
                   selectionSnapshots.clear();
                   selectedComputedStyles = null;
                   selectedComputedSource = null;
+                  resetEditScope();
+                  clearOverlay();
+                  document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+                  item.classList.add('active');
+                  const compIframe = document.getElementById('app-iframe');
+                  if (compIframe && compIframe.contentWindow) {
+                    compIframe.contentWindow.postMessage({ type: 'glide:clear-selection' }, '*');
+                  }
                   showPropsPanel(node.name || node.tagName);
                   return;
                 }
@@ -6007,14 +6177,48 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             });
           }
 
+          let lastLoadedAppUrl = '';
+          let lastBridgeHref = '';
+
+          function resetNavigationState() {
+            selectedElement = null;
+            selectedSources = [];
+            selectedRect = null;
+            selectedRects = [];
+            selectionSnapshots.clear();
+            selectedComputedStyles = null;
+            selectedComputedSource = null;
+            hoveredElement = null;
+            hoveredRect = null;
+            layerTree = null;
+            lastRequestedTreeFile = null;
+            isPendingPositionUpdate = false;
+            resetEditScope();
+            clearOverlay();
+            showNoSelection();
+            document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+          }
+
           function _doLoadApp(url, iframe, loading, statusEl) {
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
+            if (lastLoadedAppUrl && lastLoadedAppUrl !== url) {
+              resetNavigationState();
+            }
+            lastLoadedAppUrl = url;
             iframe.onload = function() {
-              // A new document invalidates every cached screen rectangle.
-              selectedRect = null; selectedRects = []; hoveredRect = null;
-              isPendingPositionUpdate = false;
-              clearOverlay();
+              // Same-URL HMR reload invalidates screen rects without kicking the user out of the inspector;
+              // navigating to a different route clears stale selection and layers tree.
+              let nextHref = '';
+              try { nextHref = (iframe.contentWindow && iframe.contentWindow.location && iframe.contentWindow.location.href) || ''; } catch (_) {}
+              if (nextHref && lastBridgeHref && nextHref !== lastBridgeHref) {
+                resetNavigationState();
+                lastBridgeHref = nextHref;
+              } else {
+                selectedRect = null; selectedRects = []; hoveredRect = null;
+                isPendingPositionUpdate = false;
+                clearOverlay();
+              }
               setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
                 // Request fresh DOM tree — fixes layer panel after page refresh
@@ -6232,14 +6436,28 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               setVal('prop-h', Math.round(rect.height || 0));
             }
 
-            // Width & Height Modes
-            const widthVal = styles.width || '';
+            // Width & Height Modes (inspect authored inline style & Tailwind classes before resolved computed px)
+            const inlineStr = styles.inlineStyle || '';
+            const inlineProp = (prop) => {
+              const parts = inlineStr.split(';');
+              for (let i = 0; i < parts.length; i++) {
+                const idx = parts[i].indexOf(':');
+                if (idx > 0 && parts[i].slice(0, idx).trim().toLowerCase() === prop) {
+                  return parts[i].slice(idx + 1).trim();
+                }
+              }
+              return '';
+            };
+            const classTokens = String(styles.className || '').split(/\\s+/).filter(Boolean);
+            const hasClass = (tokens) => classTokens.some(t => tokens.includes(t.replace(/^!|!$/g, '')));
+
+            const widthVal = inlineProp('width') || styles.width || '';
             const wModeSelect = document.getElementById('prop-w-mode');
             const wInput = document.getElementById('prop-w');
-            if (widthVal === 'fit-content' || widthVal === 'auto' || widthVal.includes('fit-content')) {
+            if (widthVal === 'fit-content' || widthVal === 'auto' || widthVal.includes('fit-content') || hasClass(['w-fit', 'w-auto', 'w-max', 'w-min'])) {
               if (wModeSelect) wModeSelect.value = 'hug';
               if (wInput) wInput.disabled = true;
-            } else if (widthVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+            } else if (widthVal === '100%' || hasClass(['w-full', 'flex-1', 'grow', 'self-stretch']) || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
               if (wModeSelect) wModeSelect.value = 'fill';
               if (wInput) wInput.disabled = true;
             } else {
@@ -6247,13 +6465,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (wInput) wInput.disabled = false;
             }
 
-            const heightVal = styles.height || '';
+            const heightVal = inlineProp('height') || styles.height || '';
             const hModeSelect = document.getElementById('prop-h-mode');
             const hInput = document.getElementById('prop-h');
-            if (heightVal === 'fit-content' || heightVal === 'auto' || heightVal.includes('fit-content')) {
+            if (heightVal === 'fit-content' || heightVal === 'auto' || heightVal.includes('fit-content') || hasClass(['h-fit', 'h-auto', 'h-max', 'h-min'])) {
               if (hModeSelect) hModeSelect.value = 'hug';
               if (hInput) hInput.disabled = true;
-            } else if (heightVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+            } else if (heightVal === '100%' || hasClass(['h-full', 'flex-1', 'grow', 'self-stretch']) || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
               if (hModeSelect) hModeSelect.value = 'fill';
               if (hInput) hInput.disabled = true;
             } else {
@@ -6422,6 +6640,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function updateGradientFill() {
+            if (!selectedElement) return;
             const angleEl = document.getElementById('prop-grad-angle');
             const angle = (angleEl ? angleEl.value : '90') || '90';
             const startEl = document.getElementById('prop-grad-start');
@@ -6461,8 +6680,38 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             openColorPopup(e.currentTarget, { swatchId:'color-swatch-grad-end', styleProp:null, hexInputId:'prop-grad-end-hex', isGradient:true, isGradEnd:true });
           });
           document.getElementById('color-swatch-border').addEventListener('click', (e) => {
-            openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:null, isGradient:false, isGradEnd:false });
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:'prop-border-color', isGradient:false, isGradEnd:false });
           });
+
+          const btnAddFill = document.getElementById('btn-add-fill');
+          if (btnAddFill) {
+            btnAddFill.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (!selectedElement) return;
+              const bgHexEl = document.getElementById('prop-bg-hex');
+              const val = (bgHexEl && bgHexEl.value.trim()) || '#38bdf8';
+              if (bgHexEl && !bgHexEl.value.trim()) bgHexEl.value = val;
+              const swatchBg = document.getElementById('color-swatch-bg');
+              if (swatchBg) swatchBg.style.background = val;
+              setFillMode('solid');
+              sendMultiClassChange(selectedElement.source, {
+                backgroundImage: 'none',
+                backgroundColor: val
+              });
+            });
+          }
+          const btnRemoveFill = document.getElementById('btn-remove-fill');
+          if (btnRemoveFill) {
+            btnRemoveFill.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (!selectedElement) return;
+              setFillMode('none');
+              sendMultiClassChange(selectedElement.source, {
+                backgroundImage: 'none',
+                backgroundColor: 'transparent'
+              });
+            });
+          }
 
           const fillModeSelect = document.getElementById('fill-mode-select');
           if (fillModeSelect) {
@@ -6674,6 +6923,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const tdStrike = document.getElementById('td-strike');
           if (tdStrike) tdStrike.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
 
+          /** Append px only for bare numeric input; preserve explicit CSS units and unitless line-height. */
+          function formatCssLength(raw, allowUnitless) {
+            const trimmed = String(raw == null ? '' : raw).trim();
+            if (!trimmed) return '';
+            if (/^-?\\d*\\.?\\d+$/.test(trimmed)) {
+              return allowUnitless ? trimmed : trimmed + 'px';
+            }
+            return trimmed;
+          }
+
           // Numeric inputs — typography/spacing via class, layout (w/h) via style
           const numericClassMap = {
             'prop-font-size': 'fontSize',
@@ -6689,7 +6948,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           };
           Object.entries(numericClassMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+            if (el) el.addEventListener('change', (e) => {
+              sendEdit({ type: 'class', property: prop, value: formatCssLength(e.target.value, prop === 'lineHeight') });
+            });
           });
 
           // Text content editing
@@ -6716,7 +6977,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           };
           Object.entries(spacingMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+            if (el) el.addEventListener('change', (e) => {
+              sendEdit({ type: 'class', property: prop, value: formatCssLength(e.target.value, false) });
+            });
           });
 
           // Rotation
@@ -6776,8 +7039,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function _applyColorToTarget(hex) {
             if (!_cpTarget) return;
-            const { swatchId, styleProp, hexInputId, isGradient, isGradEnd } = _cpTarget;
-            const swatch = document.getElementById(swatchId);
+            const { swatchId, swatchEl, styleProp, hexInputId, isGradient, isGradEnd, onSelect } = _cpTarget;
+            const swatch = swatchEl || (swatchId ? document.getElementById(swatchId) : null);
             if (swatch) swatch.style.background = hex;
             if (hexInputId) {
               const hexEl = document.getElementById(hexInputId);
@@ -6785,6 +7048,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             document.getElementById('color-popup-preview').style.background = hex;
             document.getElementById('color-popup-hex').value = hex;
+            if (typeof onSelect === 'function') {
+              onSelect(hex);
+              return;
+            }
             if (hexInputId === 'prop-page-bg-hex') {
               const fw = document.getElementById('frame-wrapper');
               if (fw) fw.style.backgroundColor = hex;
@@ -6822,15 +7089,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const popup  = document.getElementById('glide-color-popup');
             const hexInp = document.getElementById('color-popup-hex');
             const prev   = document.getElementById('color-popup-preview');
-            const swatch = document.getElementById(config.swatchId);
+            const swatch = config.swatchEl || (config.swatchId ? document.getElementById(config.swatchId) : null);
             const cur    = cssColorToHex(swatch ? swatch.style.background : '#000000');
             hexInp.value = cur;
             prev.style.background = cur;
             const rect = anchorEl.getBoundingClientRect();
-            const pw = 220;
-            popup.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - pw - 8)) + 'px';
-            popup.style.top  = (rect.bottom + 6) + 'px';
             popup.style.display = 'block';
+            const pw = popup.offsetWidth || 220;
+            const ph = popup.offsetHeight || 220;
+            const left = Math.max(4, Math.min(rect.left, window.innerWidth - pw - 8));
+            let top = rect.bottom + 6;
+            if (top + ph > window.innerHeight - 4) {
+              top = Math.max(4, Math.min(rect.top - ph - 6, window.innerHeight - ph - 4));
+            }
+            popup.style.left = left + 'px';
+            popup.style.top  = top + 'px';
             setTimeout(() => { hexInp.select(); hexInp.focus(); }, 30);
           }
 
@@ -6912,56 +7185,86 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           })();
 
           // Shadow management
+          function applyShadowsToElement() {
+            if (!selectedElement) return;
+            const list = document.getElementById('shadows-list');
+            if (!list) return;
+            const rows = Array.from(list.querySelectorAll('.shadow-row'));
+            const parts = rows.map(row => {
+              const inputs = row.querySelectorAll('input[type="number"]');
+              const x = (inputs[0] && inputs[0].value !== '' ? inputs[0].value : '0') + 'px';
+              const y = (inputs[1] && inputs[1].value !== '' ? inputs[1].value : '4') + 'px';
+              const blur = (inputs[2] && inputs[2].value !== '' ? inputs[2].value : '12') + 'px';
+              const spread = (inputs[3] && inputs[3].value !== '' ? inputs[3].value : '0') + 'px';
+              const color = row.dataset.shadowColor || '#000000';
+              return x + ' ' + y + ' ' + blur + ' ' + spread + ' ' + color;
+            });
+            sendStylePropsChange(selectedElement.source, { boxShadow: parts.length ? parts.join(', ') : 'none' });
+          }
+
           const addShadowBtn = document.getElementById('btn-add-effect') || document.getElementById('add-shadow-btn');
           if (addShadowBtn) {
-            addShadowBtn.addEventListener('click', () => {
+            addShadowBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
               shadowCount++;
               const row = document.createElement('div');
               row.className = 'shadow-row';
               row.dataset.shadowId = shadowCount;
+              row.dataset.shadowColor = '#000000';
               row.innerHTML =
-                '<input type="number" class="props-input" placeholder="X" style="width:36px;" title="X offset">' +
-                '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
-                '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
-                '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
-                '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;cursor:pointer;"></div>' +
-                '<input type="color" class="shadow-color-input" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">' +
+                '<input type="number" class="props-input" placeholder="X" value="0" style="width:36px;" title="X offset">' +
+                '<input type="number" class="props-input" placeholder="Y" value="4" style="width:36px;" title="Y offset">' +
+                '<input type="number" class="props-input" placeholder="Blur" value="12" style="width:40px;" title="Blur">' +
+                '<input type="number" class="props-input" placeholder="Spread" value="0" style="width:40px;" title="Spread">' +
+                '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000000;cursor:pointer;"></div>' +
                 '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
+
+              row.querySelectorAll('input[type="number"]').forEach(inp => {
+                inp.addEventListener('change', applyShadowsToElement);
+              });
+
               const swatch = row.querySelector('.shadow-swatch');
-              const colorInput = row.querySelector('.shadow-color-input');
-              if (swatch && colorInput) {
-                swatch.addEventListener('click', () => colorInput.click());
-
-                // Throttle shadow color input with rAF to prevent browser crash
-                let _shadowRaf = false;
-                let _shadowLastVal = null;
-                colorInput.addEventListener('input', (e) => {
-                  _shadowLastVal = e.target.value;
-                  if (_shadowRaf) return;
-                  _shadowRaf = true;
-                  requestAnimationFrame(() => {
-                    _shadowRaf = false;
-                    if (_shadowLastVal) swatch.style.background = _shadowLastVal;
+              if (swatch) {
+                swatch.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  openColorPopup(ev.currentTarget, {
+                    swatchEl: swatch,
+                    styleProp: null,
+                    hexInputId: null,
+                    isGradient: false,
+                    isGradEnd: false,
+                    onSelect: (hex) => {
+                      row.dataset.shadowColor = hex;
+                      applyShadowsToElement();
+                    }
                   });
-                });
-
-                // Close picker on blur (Escape / click-outside)
-                let _shadowClosed = false;
-                colorInput.addEventListener('change', () => { _shadowClosed = true; });
-                colorInput.addEventListener('blur', () => {
-                  if (_shadowClosed) { _shadowClosed = false; return; }
-                  // Force-close by blur (no change fired = Escape pressed)
-                  const clone = colorInput.cloneNode(true);
-                  colorInput.parentNode.replaceChild(clone, colorInput);
                 });
               }
 
               const deleteBtn = row.querySelector('button');
               if (deleteBtn) {
-                deleteBtn.addEventListener('click', () => row.remove());
+                deleteBtn.addEventListener('click', () => {
+                  row.remove();
+                  applyShadowsToElement();
+                });
               }
               const shadowsList = document.getElementById('shadows-list');
-              if (shadowsList) shadowsList.appendChild(row);
+              if (shadowsList) {
+                shadowsList.style.display = '';
+                shadowsList.appendChild(row);
+              }
+              applyShadowsToElement();
+            });
+          }
+          const removeShadowBtn = document.getElementById('btn-remove-effect');
+          if (removeShadowBtn) {
+            removeShadowBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const shadowsList = document.getElementById('shadows-list');
+              if (shadowsList && shadowsList.lastElementChild) {
+                shadowsList.lastElementChild.remove();
+                applyShadowsToElement();
+              }
             });
           }
 
@@ -7010,9 +7313,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
               // Set up toggle click handler
               title.addEventListener('click', (e) => {
+                // Ignore clicks on embedded action controls (+ / - / mode select / buttons)
+                if (e.target && e.target.closest && e.target.closest('button, select, input, [id^="btn-"]')) return;
                 // Find all children siblings except the title, toggle their display
                 const siblings = Array.from(section.children).filter(c => c !== title);
-                const chevron = title.querySelector('i');
+                const chevron = title.querySelector('i[data-lucide="chevron-down"]');
                 const isCollapsed = siblings[0] && siblings[0].style.display === 'none';
 
                 siblings.forEach(sib => {
@@ -7030,7 +7335,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function sendStyleChange(source, property, value) {
             const scoped = scopedEdit(source, mutationScope.capture({ type: 'class', property, value }));
             if (!scoped) return;
-            if (stagingModeActive) { stageEdit(scoped.source, scoped.change); return; }
+            if (stagingModeActive) { stageEdit(scoped.source, scoped.change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(scoped.source);
             if (!parsed) return;
@@ -7249,7 +7554,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const scoped = scopedEdit(source, captured);
             if (!scoped) return;
             let change = scoped.change;
-            if (stagingModeActive) { stageEdit(scoped.source, change); return; }
+            if (stagingModeActive) { stageEdit(scoped.source, change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
             // Apply optimistically immediately
@@ -7285,7 +7590,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const scoped = scopedEdit(source, mutationScope.capture({ type: 'multi-class', value: styles }));
             if (!scoped) return;
             if (stagingModeActive) {
-              stageEdit(scoped.source, scoped.change);
+              stageEdit(scoped.source, scoped.change, source);
               return;
             }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -7307,7 +7612,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           function sendPositionChange(source, styles, layoutPosition) {
             const change = mutationScope.capture({ type: 'layout', value: styles,
               layoutPosition: layoutPosition || (selectedComputedStyles && selectedComputedStyles.position) || 'static' });
-            if (stagingModeActive) { stageEdit(source, change); return; }
+            if (stagingModeActive) { stageEdit(source, change, source); return; }
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const parsed = parseSource(source);
             if (!parsed) return;
@@ -7437,7 +7742,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const parsed = selectedElement && parseSource(selectedElement.source);
             if (!parsed || !socket || socket.readyState !== WebSocket.OPEN) return;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration,
               change: { type: 'retag', tagName: event.target.value } }));
             // Show the tag the source has until the save re-renders it; a refused change leaves it as it was.
             event.target.value = event.target.dataset.current || event.target.value;
@@ -7596,7 +7901,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // One retag carries the tag and its link attributes, so the interaction is a single exact edit.
             interactionDirty = false;
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration,
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration,
               change: interactions.plan(choice, interactionInfo) }));
           });
 
@@ -7608,7 +7913,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             // Staged edits keep the positions they were made at; extraction would move them.
             if (stagedEdits.size) { showToast('info', 'Apply or discard the staged changes first, then extract.'); return; }
             socket.send(JSON.stringify({ type: 'edit', file: parsed.file, line: parsed.line, column: parsed.column,
-              expectedDigest: fileDigests.get(normalizePathSlash(parsed.file)), generation: currentGeneration, change: { type: 'extract', name } }));
+              expectedDigest: getFileDigest(parsed.file), generation: currentGeneration, change: { type: 'extract', name } }));
           });
 
           function triggerUngroup() {
@@ -7964,8 +8269,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             if (targetX === undefined || targetY === undefined) {
               if (selectedRect) {
-                targetX = selectedRect.left + selectedRect.width / 2;
-                targetY = selectedRect.top + selectedRect.height / 2;
+                const rx = selectedRect.x !== undefined ? selectedRect.x : (selectedRect.left || 0);
+                const ry = selectedRect.y !== undefined ? selectedRect.y : (selectedRect.top || 0);
+                targetX = rx + (selectedRect.width || 0) / 2;
+                targetY = ry + (selectedRect.height || 0) / 2;
               } else {
                 targetX = window.innerWidth / 2;
                 targetY = window.innerHeight / 2;
@@ -8046,8 +8353,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               const menu = document.getElementById('glide-context-menu');
               if (menu) menu.style.display = 'none';
               if (selectedRect) {
-                const x = Math.round(selectedRect.left + selectedRect.width / 2);
-                const y = Math.round(selectedRect.top);
+                const rx = selectedRect.x !== undefined ? selectedRect.x : (selectedRect.left || 0);
+                const ry = selectedRect.y !== undefined ? selectedRect.y : (selectedRect.top || 0);
+                const x = Math.round(rx + (selectedRect.width || 0) / 2);
+                const y = Math.round(ry);
                 openNewCommentComposer(x, y);
               } else {
                 setTool('comment');
@@ -8058,11 +8367,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           // Blocker interactions
           const blockerEl = document.getElementById('iframe-blocker');
           if (blockerEl) {
-            blockerEl.addEventListener('pointerdown', (e) => {
-              if (['frame', 'rect', 'ellipse', 'text'].includes(currentTool)) {
-                handleShapeDrawStart(e);
-              }
-            });
             blockerEl.addEventListener('click', (e) => {
               if (currentTool === 'comment') {
                 e.preventDefault();

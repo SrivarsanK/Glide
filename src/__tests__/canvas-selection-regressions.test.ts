@@ -198,3 +198,295 @@ test('workspace mutations carry the file digest the server checks', () => {
     { type: 'edit', file: 'src/App.tsx', line: 4, column: 7, expectedDigest: 'abc123', change: { type: 'workspace-position' } },
   ]);
 });
+
+test('hand tool uses iframe blocker and Space+drag pans even in select tool', () => {
+  expect(script).toMatch(/hand:\s*\{[^}]*needsBlocker:\s*true/);
+  expect(script).toMatch(/currentTool === 'hand'\s*\|\|\s*spaceHeld/);
+});
+
+test('drawSelectionBox has no duplicate window resize listeners and resize emits only the dragged axis with smooth min-size clamp', () => {
+  const drawBox = fn('drawSelectionBox');
+  expect(drawBox).not.toContain('onHandleMove');
+  expect(drawBox).not.toContain('onHandleUp');
+
+  // Verify pointermove + pointerup resize math directly from the served editor script
+  const moveBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes('isResizing && startRect && selectedElement'));
+  const upBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes('isResizing && startRect && selectedElement') && script.slice(node.start, node.end).includes('sendPositionChange'));
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const optimistic = [], committed = [];
+    const blocker = { style: { display: 'block' }, hasPointerCapture: () => false, releasePointerCapture() {} };
+    const document = {
+      getElementById: (id) => (id === 'iframe-blocker' ? blocker : null),
+      createElementNS: () => ({ setAttribute() {}, appendChild() {} }),
+    };
+    const window = {};
+    function clearTimeout() {} function setTimeout() { return 1; }
+    function drawOverlay() {}
+    function applyOptimisticStyle(src, styles) { optimistic.push({ src, styles }); }
+    function sendPositionChange(src, styles) { committed.push({ src, styles }); }
+    let zoomLevel = 1, isResizing = true, isPendingPositionUpdate = false;
+    let selectedElement = { source: 'App.tsx:2:1' };
+    let selectedRect = { x: 100, y: 50, width: 120, height: 21 };
+    let selectedRects = [selectedRect];
+    let startRect = { x: 100, y: 50, width: 120, height: 21 };
+    let startPointerX = 220, startPointerY = 60, resizeInitialLeft = 0, resizeInitialTop = 0;
+    let resizeFinalW = 120, resizeFinalH = 21, resizeDir = 'mr';
+    let resizePointerId = null;
+    // 1. Horizontal-only drag on mr handle (+50px) must emit ONLY width, never height
+    let e = { clientX: 270, clientY: 65, pointerId: 1 };
+    (function() { ${moveBranch} })();
+    (function() { ${upBranch} })();
+    // 2. Left handle dragged past min width (dx = +150 on width 120 -> width clamped to 10, left shifted +110)
+    isResizing = true; startRect = { x: 100, y: 50, width: 120, height: 21 };
+    startPointerX = 100; startPointerY = 60; resizeInitialLeft = 0; resizeInitialTop = 0;
+    resizeFinalW = 120; resizeFinalH = 21; resizeDir = 'ml';
+    e = { clientX: 250, clientY: 60, pointerId: 2 };
+    (function() { ${moveBranch} })();
+    (function() { ${upBranch} })();
+  `, context);
+  const committed = vm.runInContext('committed', context);
+  expect(committed[0].styles).toEqual({ width: '170px' });
+  expect(committed[1].styles).toEqual({ width: '10px', left: '110px' });
+});
+
+test('preview mode ignores glide:overlay and blocks Escape/Delete leaks', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isResizing = false, isDragging = false, interactionPreview = true;
+    let selectedElement = null, selectedRect = null, selectedComputedStyles = null, selectedComputedSource = null;
+    let selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionSnapshots = new Map();
+    const document = { querySelectorAll() { return []; } };
+    let draws = 0;
+    function drawOverlay() { draws++; } function populatePropsFromComputed() {}
+    ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
+    const data = { type: 'glide:overlay', source: 'App.tsx:1:1', rect: { x: 40, y: 25, width: 200, height: 50 } };
+    (function() { ${branch('glide:overlay')} })();
+  `, context);
+  expect(vm.runInContext('selectedElement', context)).toBeNull();
+  expect(vm.runInContext('draws', context)).toBe(0);
+
+  // Escape handler must post glide:clear-selection to iframe and clear layer highlights
+  const escapeBranch = extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes("key === 'Escape'"));
+  expect(escapeBranch).toContain('glide:clear-selection');
+  expect(escapeBranch).toContain('workspaceCanvas.clearSelection');
+});
+
+test('inline text edit preserves selectedElement owners/tagName and remaps stale coordinates', () => {
+  const inlineBranch = branch('glide:inline-text-edit');
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx';
+    let pendingStampRemaps = [{ oldSourceId: 'App.tsx:2:1', oldHash: '', newHash: 'abcd', newCoordinates: { line: 4, column: 3 } }];
+    let selectedElement = { source: 'App.tsx:4:3:abcd', owners: [{ name: 'Card' }], tagName: 'p' };
+    const sent = [];
+    function sendEdit(change) { sent.push({ selected: selectedElement, change }); }
+    const data = { type: 'glide:inline-text-edit', source: 'App.tsx:2:1', value: 'Updated' };
+    (function() { ${inlineBranch} })();
+  `, context);
+  const sent = vm.runInContext('sent', context);
+  expect(sent).toEqual([{
+    selected: { source: 'App.tsx:4:3:abcd', owners: [{ name: 'Card' }], tagName: 'p' },
+    change: { type: 'text', value: 'Updated' },
+  }]);
+});
+
+test('fill mode select stays outside fill-solid-controls, gradType is declared, and fill +/- buttons are wired', () => {
+  const html = getEditorHTML();
+  const solidStart = html.indexOf('id="fill-solid-controls"');
+  const gradStart = html.indexOf('id="fill-gradient-controls"');
+  expect(solidStart).toBeGreaterThan(-1);
+  expect(gradStart).toBeGreaterThan(solidStart);
+  const solidBlock = html.slice(solidStart, gradStart);
+  expect(solidBlock).not.toContain('id="fill-mode-select"');
+  expect(html).toContain('id="fill-mode-select"');
+  expect(script).toMatch(/let\s+gradType\s*=\s*'linear'/);
+  expect(script).toContain("getElementById('btn-add-fill')");
+  expect(script).toContain("getElementById('btn-remove-fill')");
+});
+
+test('formatCssLength preserves CSS units and unitless line-height without producing 150%px', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`${fn('formatCssLength')}`, context);
+  const fmt = (raw: string, unitless = false) => vm.runInContext('formatCssLength', context)(raw, unitless);
+  expect(fmt('150%', true)).toBe('150%');
+  expect(fmt('1.5', true)).toBe('1.5');
+  expect(fmt('24px', true)).toBe('24px');
+  expect(fmt('normal', true)).toBe('normal');
+  expect(fmt('16', false)).toBe('16px');
+  expect(fmt('-4.5', false)).toBe('-4.5px');
+  expect(fmt('1.5rem', false)).toBe('1.5rem');
+  expect(fmt('auto', false)).toBe('auto');
+  expect(fmt('', false)).toBe('');
+});
+
+test('W/H mode reads authored inlineStyle and Tailwind classes instead of snapping back to fixed', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const elems = new Map();
+    const el = (id) => {
+      if (!elems.has(id)) elems.set(id, { id, value: '', disabled: false, style: {}, classList: { toggle() {} }, setAttribute() {} });
+      return elems.get(id);
+    };
+    const document = { activeElement: null, getElementById: el };
+    let gradType = 'linear';
+    function showPropsPanel() {}
+    function setActiveBtn() {}
+    function setFillMode() {}
+    function rgbToHex(v) { return v || '#000000'; }
+    function rotationFromTransform() { return 0; }
+    ${fn('parsePixels')}
+    ${fn('populatePropsFromComputed')}
+    populatePropsFromComputed({ width: '240px', height: '40px', inlineStyle: 'width: fit-content; height: 100%;' }, { x: 0, y: 0, width: 240, height: 40 });
+    const inlineModes = { w: el('prop-w-mode').value, h: el('prop-h-mode').value };
+    populatePropsFromComputed({ width: '240px', height: '40px', className: 'w-full h-fit p-2' }, { x: 0, y: 0, width: 240, height: 40 });
+    const classModes = { w: el('prop-w-mode').value, h: el('prop-h-mode').value };
+  `, context);
+  expect(vm.runInContext('inlineModes', context)).toEqual({ w: 'hug', h: 'fill' });
+  expect(vm.runInContext('classModes', context)).toEqual({ w: 'fill', h: 'hug' });
+});
+
+test('border swatch binds prop-border-color, section action icons do not collapse, shadows commit boxShadow, and color popup clamps to viewport', () => {
+  expect(script).toMatch(/color-swatch-border[\s\S]{0,220}hexInputId:\s*'prop-border-color'/);
+  expect(script).toContain('applyShadowsToElement');
+  expect(script).not.toContain('shadow-color-input');
+
+  const context = vm.createContext({});
+  vm.runInContext(`
+    let _cpTarget = null;
+    const popup = { style: { display: 'none', left: '0px', top: '0px' }, offsetHeight: 210 };
+    const hexInp = { value: '', select() {}, focus() {} };
+    const prev = { style: {} };
+    const swatch = { style: { background: '#ff0000' } };
+    const document = {
+      getElementById: (id) => ({ 'glide-color-popup': popup, 'color-popup-hex': hexInp, 'color-popup-preview': prev, 'color-swatch-border': swatch }[id] || null),
+    };
+    const window = { innerWidth: 1200, innerHeight: 600 };
+    function setTimeout() { return 1; }
+    ${fn('cssColorToHex')}
+    ${fn('openColorPopup')}
+    openColorPopup({ getBoundingClientRect: () => ({ left: 1050, top: 560, bottom: 580, width: 20, height: 20 }) },
+      { swatchId: 'color-swatch-border', styleProp: 'borderColor', hexInputId: 'prop-border-color', isGradient: false, isGradEnd: false });
+  `, context);
+  const top = parseFloat(vm.runInContext('popup.style.top', context));
+  const left = parseFloat(vm.runInContext('popup.style.left', context));
+  expect(top).toBeGreaterThanOrEqual(4);
+  expect(top + 210).toBeLessThanOrEqual(600);
+  expect(left + 220).toBeLessThanOrEqual(1200);
+});
+
+test('applyTransactionMappings remaps stagedEdits keys, coordinates, and expectedDigest and drops deleted entries', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    const sourceFileAliases = new Map(), selectionSnapshots = new Map(), fileDigests = new Map();
+    const _styleTimers = new Map(), _pendingEdits = [];
+    const stagedEdits = new Map();
+    let currentFile = 'App.tsx', selectedElement = null, selectedRects = [], selectedComputedStyles = null;
+    let selectedComputedSource = null, selectedSources = [], glideClipboard = null, pendingStampRemaps = [];
+    function clearOverlay() {} function showNoSelection() {} function trackStaleStamps() {} function updateStagingBarUI() {}
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('parseSource')} ${fn('applyTransactionMappings')}
+    stagedEdits.set('App.tsx:2:1', new Map([
+      ['k1', { change: { type: 'class', property: 'color', value: 'red' }, parsed: { file: 'App.tsx', line: 2, column: 1, hash: null, expectedDigest: 'd1' }, previewTarget: 'App.tsx:2:1', timestamp: 1 }],
+    ]));
+    stagedEdits.set('App.tsx:5:1', new Map([
+      ['k2', { change: { type: 'class', property: 'padding', value: '8px' }, parsed: { file: 'App.tsx', line: 5, column: 1, hash: null, expectedDigest: 'd1' }, previewTarget: 'App.tsx:5:1', timestamp: 2 }],
+    ]));
+    applyTransactionMappings({
+      success: true,
+      changedFiles: [{ path: 'App.tsx', newDigest: 'd2' }],
+      selectionRemaps: [{ oldSourceId: 'App.tsx:2:1', oldHash: '', newHash: 'aa11', newCoordinates: { line: 3, column: 1 } }],
+      deletedSourceIds: ['App.tsx:5:1'],
+    });
+  `, context);
+  expect(vm.runInContext('stagedEdits.has("App.tsx:5:1")', context)).toBe(false);
+  expect(vm.runInContext('stagedEdits.has("App.tsx:3:1:aa11")', context)).toBe(true);
+  const remappedItem = vm.runInContext('stagedEdits.get("App.tsx:3:1:aa11").get("k1")', context);
+  expect(remappedItem.parsed).toMatchObject({ file: 'App.tsx', line: 3, column: 1, hash: 'aa11', expectedDigest: 'd2' });
+});
+
+test('staged Before/After previews style, layout, text, and call-site scope targets on the live DOM element', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    const sourceFileAliases = new Map(), fileDigests = new Map();
+    const stagedEdits = new Map();
+    const posted = [];
+    let currentFile = 'App.tsx', pendingBatch = null, previewState = 'after';
+    const iframe = { contentWindow: { postMessage(msg) { posted.push(msg); } } };
+    const document = { getElementById: (id) => (id === 'app-iframe' ? iframe : null) };
+    const mutationScope = {
+      capture: (c) => c,
+      entries: (c) => [{ key: c.type + ':' + (c.property || 'val'), change: c }],
+    };
+    function showToast() {} function updateStagingBarUI() {}
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('getFileDigest')} ${fn('parseSource')}
+    ${fn('previewStyleInIframe')} ${fn('clearPreviewInIframe')} ${fn('stageEdit')} ${fn('togglePreviewMode')}
+    setFileDigest('Parent.tsx', 'dig-p');
+    setFileDigest('App.tsx', 'dig-a');
+    stageEdit('Parent.tsx:10:5', { type: 'style', value: { color: 'red' } }, 'Button.tsx:4:3');
+    stageEdit('App.tsx:2:1', { type: 'text', value: 'Updated' }, 'App.tsx:2:1');
+    const initialPosted = posted.slice();
+    posted.length = 0;
+    togglePreviewMode(); // -> before
+    const beforePosted = posted.slice();
+    posted.length = 0;
+    togglePreviewMode(); // -> after
+    const afterPosted = posted.slice();
+  `, context);
+  expect(vm.runInContext('initialPosted', context)).toEqual([
+    { type: 'glide:preview-style', sourceId: 'Button.tsx:4:3', styles: { color: 'red' } },
+    { type: 'glide:preview-text', source: 'App.tsx:2:1', value: 'Updated' },
+  ]);
+  expect(vm.runInContext('beforePosted', context)).toEqual([{ type: 'glide:clear-preview', sourceId: undefined }]);
+  expect(vm.runInContext('afterPosted', context)).toEqual([
+    { type: 'glide:preview-style', sourceId: 'Button.tsx:4:3', styles: { color: 'red' } },
+    { type: 'glide:preview-text', source: 'App.tsx:2:1', value: 'Updated' },
+  ]);
+});
+
+test('Windows drive-letter case normalization, selectedRect x/y coordinates, iframe.onload reset, and component row clear', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const sourceFileAliases = new Map(), fileDigests = new Map();
+    ${fn('normalizePathSlash')} ${fn('sameSourceFile')} ${fn('setFileDigest')} ${fn('getFileDigest')}
+    setFileDigest('C:\\\\project\\\\src\\\\App.tsx', 'win-digest');
+    const fetchedLower = getFileDigest('c:/project/src/App.tsx');
+    const fetchedUpper = getFileDigest('C:/project/src/App.tsx');
+  `, context);
+  expect(vm.runInContext('fetchedLower', context)).toBe('win-digest');
+  expect(vm.runInContext('fetchedUpper', context)).toBe('win-digest');
+
+  // triggerFlyingReaction and #menu-comment must read selectedRect.x/y (not undefined .left/.top)
+  const reactionCtx = vm.createContext({});
+  vm.runInContext(`
+    const spawned = [];
+    const document = {
+      body: { appendChild(el) { spawned.push(el); } },
+      createElement() { return { className: '', textContent: '', style: { setProperty() {} }, addEventListener() {} }; },
+    };
+    const window = { innerWidth: 1000, innerHeight: 800 };
+    const selectedRect = { x: 120, y: 240, width: 80, height: 40 };
+    function setTimeout(fn) { fn(); }
+    ${fn('triggerFlyingReaction')}
+    triggerFlyingReaction('🔥');
+  `, reactionCtx);
+  const spawned = vm.runInContext('spawned', reactionCtx);
+  expect(spawned.length).toBe(4);
+  expect(spawned[0].style.left).not.toContain('NaN');
+  expect(spawned[0].style.top).not.toContain('NaN');
+  expect(script).not.toContain('selectedRect.left + selectedRect.width / 2');
+
+  // Route navigation resets selection and layerTree (while same-URL HMR reload preserves active inspector)
+  const resetNavFn = fn('resetNavigationState');
+  expect(resetNavFn).toContain('selectedElement = null');
+  expect(resetNavFn).toContain('layerTree = null');
+  expect(resetNavFn).toContain('resetEditScope()');
+  expect(fn('_doLoadApp')).toContain('resetNavigationState()');
+  expect(branch('glide:ready')).toContain('resetNavigationState()');
+  const renderLayersFn = fn('renderLayersTree');
+  expect(renderLayersFn).toMatch(/if\s*\(isComponent\)\s*\{[\s\S]{0,600}clearOverlay\(\)/);
+});
