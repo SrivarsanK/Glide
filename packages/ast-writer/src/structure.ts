@@ -206,25 +206,70 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     const name = change.name || '';
     if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error('INVALID_OPERATION: A component name starts with a capital letter and uses only letters and digits, like PricingCard.');
     if (attributeOf(target, 'key')) throw new Error('UNSUPPORTED_OPERATION: This element is a list item (it has a key). Extract the content inside it instead.');
+    if (workspaceAttribute(target, workspaceAttributes[0])) {
+      throw new Error('UNSUPPORTED_OPERATION: Attach the workspace object before extracting it.');
+    }
     let found = false;
     traverse(ast, { JSXElement(p: any) {
       if (p.node !== target) return;
       found = true;
+      if (p.parentPath?.isLogicalExpression({ operator: '&&' }) && dormantElement(p.parentPath.parentPath?.node) === target) {
+        throw new Error('UNSUPPORTED_OPERATION: Attach the workspace object before extracting it.');
+      }
       if (p.scope.getProgramParent().hasBinding(name) || p.scope.hasBinding(name)) throw new Error(`INVALID_OPERATION: ${name} is already used in this file.`);
+      const enclosingTypeParams = new Set<string>();
+      for (let anc = p.parentPath; anc && !anc.isProgram(); anc = anc.parentPath) {
+        const params = anc.node?.typeParameters?.params;
+        if (Array.isArray(params)) {
+          for (const param of params) {
+            if (param?.name && typeof param.name === 'string') enclosingTypeParams.add(param.name);
+          }
+        }
+      }
+      const enclosingNonArrowFn = (pathLike: any) => {
+        let owner = pathLike.getFunctionParent();
+        while (owner && owner.isArrowFunctionExpression()) owner = owner.getFunctionParent();
+        return owner;
+      };
+      const targetEnclosingFn = enclosingNonArrowFn(p);
       // The markup moves to module level, so it may only use names defined there or globally.
       p.traverse({ 'Identifier|JSXIdentifier'(inner: any) {
         const id = inner.node.name;
-        const reference = inner.isJSXIdentifier() ? inner.parentPath.isJSXOpeningElement() || inner.parentPath.isJSXClosingElement() || inner.parentPath.isJSXMemberExpression() : inner.isReferencedIdentifier();
-        if (!reference || (inner.isJSXIdentifier() && /^[a-z]/.test(id) && !inner.parentPath.isJSXMemberExpression())) return;
+        const isMemberObject = inner.isJSXIdentifier() && inner.parentPath.isJSXMemberExpression() && inner.key === 'object';
+        const isElementTag = inner.isJSXIdentifier() && (inner.parentPath.isJSXOpeningElement() || inner.parentPath.isJSXClosingElement());
+        const reference = inner.isJSXIdentifier()
+          ? isMemberObject || (isElementTag && !/^[a-z]/.test(id))
+          : inner.isReferencedIdentifier();
+        if (!reference) return;
         const binding = inner.scope.getBinding(id);
+        if (!binding && id === 'arguments' && inner.isIdentifier()) {
+          const owner = enclosingNonArrowFn(inner);
+          if (targetEnclosingFn && (!owner || !isInside(owner, p))) {
+            throw new Error('UNSUPPORTED_OPERATION: The markup uses `arguments` from the component around it. Pass the values as props in source, then extract.');
+          }
+          return;
+        }
         if (binding && binding.scope.block !== p.scope.getProgramParent().block && !isInside(binding.path, p)) {
           throw new Error(`UNSUPPORTED_OPERATION: The markup uses \`${id}\` from the component around it. Pass it as a prop in source, then extract.`);
         }
       }, ThisExpression(inner: any) {
         // An arrow function shares the `this` around it; any other function has its own.
-        let owner = inner.getFunctionParent();
-        while (owner && owner.isArrowFunctionExpression()) owner = owner.getFunctionParent();
+        const owner = enclosingNonArrowFn(inner);
         if (!owner || !isInside(owner, p)) throw new Error('UNSUPPORTED_OPERATION: The markup uses `this` from the component around it. Pass the values as props in source, then extract.');
+      }, Super(inner: any) {
+        const owner = enclosingNonArrowFn(inner);
+        if (!owner || !isInside(owner, p)) throw new Error('UNSUPPORTED_OPERATION: The markup uses `super` from the component around it. Pass the values as props in source, then extract.');
+      }, TSTypeReference(inner: any) {
+        if (!enclosingTypeParams.size) return;
+        let root: any = inner.node.typeName;
+        while (t.isTSQualifiedName(root)) root = root.left;
+        if (!t.isIdentifier(root) || !enclosingTypeParams.has(root.name)) return;
+        // Allow shadowing by a generic type parameter declared inside the extracted markup itself.
+        for (let anc = inner.parentPath; anc && anc !== p; anc = anc.parentPath) {
+          const params = anc.node?.typeParameters?.params;
+          if (Array.isArray(params) && params.some((param: any) => param?.name === root.name)) return;
+        }
+        throw new Error(`UNSUPPORTED_OPERATION: The markup uses type parameter \`${root.name}\` from the component around it. Pass concrete types in source, then extract.`);
       } });
       // Writes count too (`ref={node => { input = node; }}`): reads alone miss assignment targets.
       for (let scope = p.scope; scope && scope !== p.scope.getProgramParent(); scope = scope.parent) {
@@ -249,7 +294,20 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (!RETAG_TARGETS.has(to)) throw new Error(`UNSUPPORTED_OPERATION: <${to}> is not a tag the editor can switch to.`);
     if (target.openingElement.attributes.some(t.isJSXSpreadAttribute)) throw new Error('UNSUPPORTED_OPERATION: A spread may set attributes the new tag depends on; change the tag in source.');
     // An interaction (B1) changes the tag and its attributes together, so the attributes go first.
-    for (const [name, value] of Object.entries(change.attributes || {})) setAttribute(ast, target, name, value);
+    // Defer `target: '_blank'` after `rel` so a caller passing `{ target: '_blank', rel: ... }` cannot wipe `noopener noreferrer`.
+    const entries = Object.entries(change.attributes || {});
+    const ordered = [
+      ...entries.filter(([name, value]) => !(name.toLowerCase() === 'target' && value === '_blank')),
+      ...entries.filter(([name, value]) => name.toLowerCase() === 'target' && value === '_blank'),
+    ];
+    for (const [name, value] of ordered) setAttribute(ast, target, name, value);
+    // If `target="_blank"` was already present and `rel` changed without changing `target`, keep `noopener noreferrer`.
+    const finalTarget = attributeOf(target, 'target');
+    const targetVal = finalTarget && (t.isStringLiteral(finalTarget.value) ? finalTarget.value.value
+      : t.isJSXExpressionContainer(finalTarget.value) && t.isStringLiteral(finalTarget.value.expression) ? finalTarget.value.expression.value : null);
+    if (targetVal === '_blank' && entries.some(([name]) => name.toLowerCase() === 'rel') && !entries.some(([name, value]) => name.toLowerCase() === 'target' && value === '_blank')) {
+      setAttribute(ast, target, 'target', '_blank');
+    }
     if (from === to) return;
     const ancestors: string[] = [];
     traverse(ast, { JSXElement(p: any) { if (p.node === target) p.findParent((q: any) => { const tag = tagOf(q.node); if (tag) ancestors.push(tag); return false; }); } });
@@ -417,7 +475,7 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (destination !== parent && (!t.isJSXElement(destination) || !sameScope(target, destination))) {
       throw new Error('UNSUPPORTED_OPERATION: Attaching across lexical scopes could change authored bindings.');
     }
-    if (t.isJSXElement(destination)) openParent(destination);
+    if (destination !== parent && t.isJSXElement(destination)) openParent(destination);
     place(target);
     target.openingElement.attributes = target.openingElement.attributes.filter(item => !t.isJSXAttribute(item)
       || !t.isJSXIdentifier(item.name) || !workspaceAttributes.includes(item.name.name));

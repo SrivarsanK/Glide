@@ -66,6 +66,7 @@ export class MutationService {
   constructor(projectRoot: string, private readonly options: {
     rename?: typeof fs.renameSync;
     onPersist?: (diffs: { file: string; before: string; after: string }[], operations: MutationOperation[]) => void;
+    onRestore?: (diffs: { file: string; before: string; after: string }[]) => void;
     /** Tailwind theme for class edits; defaults to the project's own theme. */
     theme?: () => TailwindTheme;
   } = {}) {
@@ -81,6 +82,7 @@ export class MutationService {
 
   restoreHistory(transactionId: string, history: HistoryStore, action: 'undo' | 'redo' | number): Promise<MutationResult> {
     const run = this.queue.then(() => {
+      if (!transactionId) throw new Error('INVALID_TRANSACTION: A transaction needs an ID.');
       const signature = `history:${JSON.stringify(action)}`;
       const previous = this.completed.get(transactionId);
       if (previous) {
@@ -88,11 +90,30 @@ export class MutationService {
         return previous.result;
       }
       const state = history.getState();
-      const target = typeof action === 'number' ? action : action === 'undo' ? state.currentIndex - 1 : state.currentIndex + 1;
-      // Undo at the start of history, or redo at its end, is a plain no-op for the user, not a history error.
-      if (action === 'undo' && target < -1) throw new Error('NOTHING_TO_UNDO: Nothing to undo.');
-      if (action === 'redo' && target >= state.stack.length) throw new Error('NOTHING_TO_REDO: Nothing to redo.');
+      let target: number;
+      if (action === 'undo') {
+        target = state.currentIndex - 1;
+        // Undo at the start of history is a plain no-op for the user, not a history error.
+        if (target < -1) throw new Error('NOTHING_TO_UNDO: Nothing to undo.');
+      } else if (action === 'redo') {
+        target = state.currentIndex + 1;
+        // Redo at the end of history is a plain no-op for the user, not a history error.
+        if (target >= state.stack.length) throw new Error('NOTHING_TO_REDO: Nothing to redo.');
+      } else if (typeof action === 'number' && Number.isInteger(action)) {
+        target = action;
+      } else {
+        throw new Error('INVALID_HISTORY: Expected undo, redo, or an integer history index.');
+      }
       const plan = history.prepareRestore(target);
+      if (!plan.writes.length) {
+        plan.confirm();
+        const result: MutationResult = {
+          transactionId, success: true, changedFiles: [], operationResults: [], selectionRemaps: [], deletedSourceIds: [],
+        };
+        this.completed.set(transactionId, { signature, result });
+        if (this.completed.size > 200) this.completed.delete(this.completed.keys().next().value!);
+        return result;
+      }
       const operations = plan.writes.map((diff, index): MutationOperation => ({
         operationId: `${transactionId}:${index}`, filePath: diff.file, expectedDigest: contentDigest(diff.before),
         line: 1, column: 1, change: { type: 'restore' },
@@ -207,8 +228,12 @@ export class MutationService {
         buffer.temporary = undefined;
         written.push(buffer);
       }
-      if (restoration) restoration.confirm();
-      else if (written.length) this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })), operations);
+      if (restoration) {
+        restoration.confirm();
+        if (written.length) this.options.onRestore?.(written.map(({ file, before, after }) => ({ file, before, after })));
+      } else if (written.length) {
+        this.options.onPersist?.(written.map(({ file, before, after }) => ({ file, before, after })), operations);
+      }
       const result: MutationResult = {
         transactionId, success: true,
         changedFiles: written.map(buffer => ({ path: buffer.file, newDigest: contentDigest(buffer.after), revisionId: randomUUID() })),
@@ -223,21 +248,29 @@ export class MutationService {
     } catch (error) {
       let reason = error instanceof Error ? error.message : String(error);
       for (const buffer of written.reverse()) {
+        let recovery: string | undefined;
         try {
           if (fs.readFileSync(buffer.file, 'utf8') !== buffer.after) {
             throw new Error('RECOVERY_CONFLICT: An external edit prevents rollback.');
           }
-          const recovery = path.join(path.dirname(buffer.file), `.glide-${randomUUID()}.tmp`);
+          recovery = path.join(path.dirname(buffer.file), `.glide-${randomUUID()}.tmp`);
           fs.writeFileSync(recovery, buffer.before, { encoding: 'utf8', flag: 'wx', mode: buffer.mode });
-          retryBusy(fs.renameSync)(recovery, buffer.file);
+          retryBusy(this.options.rename ?? fs.renameSync)(recovery, buffer.file);
+          recovery = undefined;
         } catch (rollbackError) {
           reason += ` ${String(rollbackError)}`;
+        } finally {
+          if (recovery) {
+            try { fs.rmSync(recovery, { force: true }); } catch {}
+          }
         }
       }
       return failure(reason);
     } finally {
       for (const buffer of buffers.values()) {
-        if (buffer.temporary && fs.existsSync(buffer.temporary)) fs.unlinkSync(buffer.temporary);
+        if (buffer.temporary) {
+          try { fs.rmSync(buffer.temporary, { force: true }); } catch {}
+        }
       }
     }
   }

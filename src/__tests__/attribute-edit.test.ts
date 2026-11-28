@@ -61,3 +61,11 @@ test('typed prop edits of HTML attributes keep working: false removes disabled, 
   expect(prop(app('<div aria-expanded="true">A</div>'), '<div', 'aria-expanded', false)).toContain('aria-expanded="false"');
   expect(prop(app('<div aria-level="1">A</div>'), '<div', 'aria-level', 3)).toContain('aria-level="3"');
 });
+
+test('wraps quotes, newlines, and HTML entities in JSX expressions and ignores boolean rel', () => {
+  const withQuotes = edit(app('<div>A</div>'), '<div', 'title', 'Say "hi"\n&lt;b&gt;');
+  expect(withQuotes).toContain('title={"Say \\"hi\\"\\n&lt;b&gt;"}');
+  const fromBoolRel = edit(app('<a href="/x" rel>Go</a>'), '<a', 'target', '_blank');
+  expect(fromBoolRel).toContain('rel="noopener noreferrer"');
+  expect(fromBoolRel).not.toContain('true');
+});

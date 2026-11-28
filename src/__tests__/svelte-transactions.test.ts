@@ -80,3 +80,30 @@ test('stamping leaves namespaced tags such as <svelte:head> intact', () => {
   expect(stamped).toContain('<svelte:head><title>Demo</title></svelte:head>');
   expect(stamped).toContain(`<main data-gl-source="App.svelte:${line}:${column('<main')}"`);
 });
+
+test('Svelte adapter guards style:/class:/bind: directives, refuses void retag, tracks Components, and supports <style lang="scss">', async () => {
+  const {
+    readSvelteTagAt,
+    renameSvelteTagAt,
+    setSvelteAttributeAt,
+    setSvelteClassAt,
+    setSvelteStyleAt,
+  } = await import('../../packages/adapters/svelte/src/template.js');
+
+  const directives = '<div style:color="red" class:active={ok} bind:title={t}>Hi</div>\n';
+  expect(() => setSvelteStyleAt(directives, 1, 1, { opacity: '0.5' })).toThrow(/style directive/);
+  expect(() => setSvelteClassAt(directives, 1, 1, 'p-4')).toThrow(/class directive/);
+  expect(() => setSvelteAttributeAt(directives, 1, 1, 'title', 'New')).toThrow(/bind:title/);
+  expect(setSvelteAttributeAt(directives, 1, 1, 'id', 'hero')).toContain('id="hero"');
+
+  expect(() => renameSvelteTagAt('<img src="/a.png" />\n', 1, 1, 'div')).toThrow('UNSUPPORTED_OPERATION');
+
+  const withComponent = '<ul><ListItem><li>One</li></ListItem></ul>\n';
+  expect(readSvelteTagAt(withComponent, 1, 1).childTags).toEqual(['ListItem']);
+  expect(readSvelteTagAt(withComponent, 1, withComponent.indexOf('<li>') + 1).ancestors).toEqual(['ListItem', 'ul']);
+
+  const scss = '<script lang="ts">let x: number = 1;</script>\n<main class="p-2">Hi</main>\n<style lang="scss">\n$accent: #6d28d9;\nmain { color: $accent; }\n</style>\n';
+  const edited = setSvelteClassAt(scss, 2, 1, 'p-4');
+  expect(edited).toContain('<main class="p-4">Hi</main>');
+  expect(edited).toContain('$accent: #6d28d9;');
+});

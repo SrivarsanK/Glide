@@ -54,3 +54,20 @@ test('refuses `this` and writes that belong to the component around the markup',
   const own = 'function App() {\n  return <main><section onClick={function () { let n = 0; n = 1; this.blur(); }}>A</section></main>;\n}\n';
   expect(extract(own, '<section', 'Hero')).toContain('function Hero()');
 });
+
+test('handles JSX member properties, super, arguments, generic type params, and detached targets', () => {
+  const memberProp = "import { UI } from './ui';\nfunction App() {\n  const Header = 'local';\n  return <main><section><UI.Header /></section></main>;\n}\n";
+  expect(extract(memberProp, '<section', 'Banner')).toContain('function Banner()');
+
+  const usesSuper = 'class App extends Base {\n  render() {\n    return <main><section onClick={() => super.save()}>A</section></main>;\n  }\n}\n';
+  expect(() => extract(usesSuper, '<section', 'Hero')).toThrow(/`super`/);
+
+  const usesArgs = 'function App() {\n  return <main><section>{arguments[0]}</section></main>;\n}\n';
+  expect(() => extract(usesArgs, '<section', 'Hero')).toThrow(/`arguments`/);
+
+  const usesGeneric = 'function App<T>() {\n  return <main><section onClick={(x: T) => x}>A</section></main>;\n}\n';
+  expect(() => extract(usesGeneric, '<section', 'Hero')).toThrow(/type parameter `T`/);
+
+  const detached = 'function App() {\n  return <main>{false && <section data-gl-workspace-id="w1" data-gl-workspace-x="0" data-gl-workspace-y="0">Draft</section>}</main>;\n}\n';
+  expect(() => extract(detached, '<section', 'Hero')).toThrow(/Attach the workspace object/);
+});

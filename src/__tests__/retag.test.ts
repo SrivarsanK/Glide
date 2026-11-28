@@ -42,3 +42,17 @@ test('list items can move between list kinds', () => {
   expect(retag(app('<ul><li>A</li></ul>'), '<ul', 'ol')).toContain('<ol><li>A</li></ol>');
   expect(retag(app('<ul><div>A</div></ul>'), '<div>A', 'li')).toContain('<ul><li>A</li></ul>');
 });
+
+test('retag preserves noopener noreferrer when rel follows target: _blank', () => {
+  const run = (source: string, marker: string, tagName: string, attributes: Record<string, unknown>) => {
+    const before = source.slice(0, source.indexOf(marker)).split('\n');
+    return transformJSXBatch(source, [{ line: before.length, column: before.at(-1)!.length + 1, change: { type: 'retag', tagName, attributes } } as any]).code;
+  };
+  const withAuthor = run(app('<div>Go</div>'), '<div', 'a', { href: 'https://example.com', target: '_blank', rel: 'author' });
+  expect(withAuthor).toContain('target="_blank"');
+  expect(withAuthor).toContain('rel="author noopener noreferrer"');
+  const withNullRel = run(app('<div>Go</div>'), '<div', 'a', { href: 'https://example.com', target: '_blank', rel: null });
+  expect(withNullRel).toContain('rel="noopener noreferrer"');
+  const existingBlank = run(app('<a href="https://example.com" target="_blank">Go</a>'), '<a', 'a', { rel: 'external' });
+  expect(existingBlank).toContain('rel="external noopener noreferrer"');
+});

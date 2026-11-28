@@ -1,6 +1,8 @@
 import { parse } from '@vue/compiler-sfc';
 import { formattingWhitespace, mergeInlineStyle } from '@srivarsank/core';
 
+const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+
 // compiler-sfc 3.5 template AST locations refer to the complete authored SFC.
 function target(code: string, id: string): any {
   const parsed = parse(code);
@@ -40,7 +42,7 @@ function staticAttribute(node: any, name: string): any {
 }
 function attribute(code: string, id: string, name: string, value: string | true | null | Record<string, string>) {
   const node = target(code, id);
-  if (node === null) return code;
+  if (node === null) throw new Error('NODE_NOT_FOUND: No template element exists here.');
   const attr = staticAttribute(node, name);
   if (value === null) {
     if (!attr) return code;
@@ -66,7 +68,8 @@ export function readVueAttribute(code: string, id: string, name: string): string
 export function updateVueSFCAttribute(code: string, id: string, name: string, value: string | true | null): string {
   // tagType 0 is a plain element; components, slots and <template> decide what they render.
   const node = target(code, id);
-  if (node && node.tagType !== 0) throw new Error('UNSUPPORTED_OPERATION: Components take props they declare; set this on an HTML element, or add the prop in source.');
+  if (node === null) throw new Error('NODE_NOT_FOUND: No template element exists here.');
+  if (node.tagType !== 0) throw new Error('UNSUPPORTED_OPERATION: Components take props they declare; set this on an HTML element, or add the prop in source.');
   return attribute(code, id, name, value);
 }
 function htmlElement(code: string, id: string): any {
@@ -85,7 +88,9 @@ export function readVueTag(code: string, id: string) {
   // A <template> wrapper (v-for, v-if, slots; tagType 3) renders only its children, so it is see-through here.
   const rendered = (item: any) => item.tagType !== 3;
   const inside = all.filter(item => start(item) > start(node) && end(item) <= end(node) && rendered(item));
-  const focusable = (item: any) => item.props.some((p: any) => (p.type === 6 && p.name === 'tabindex') || (p.type === 7 && p.arg?.content === 'tabindex'));
+  const focusable = (item: any) => item.props.some((p: any) =>
+    (p.type === 6 && p.name.toLowerCase() === 'tabindex')
+    || (p.type === 7 && p.name === 'bind' && p.arg?.content?.toLowerCase() === 'tabindex'));
   const children = (item: any): string[] => item.children.filter((child: any) => child.type === 1)
     .flatMap((child: any) => rendered(child) ? [child.tag as string] : children(child));
   return { name: node.tag as string,
@@ -96,6 +101,7 @@ export function readVueTag(code: string, id: string) {
 /** Rename the element at `id`, opening and closing tag together. */
 export function renameVueTag(code: string, id: string, to: string): string {
   const node = htmlElement(code, id);
+  if (VOID.has(node.tag.toLowerCase())) throw new Error(`UNSUPPORTED_OPERATION: <${node.tag}> has no content to keep; replace it in source.`);
   const start = node.loc.start.offset, end = node.loc.end.offset, closing = `</${node.tag}>`;
   if (!node.isSelfClosing && !node.loc.source.endsWith(closing)) throw new Error(`UNSUPPORTED_OPERATION: <${node.tag}> has no closing tag Glide can find; change it in source.`);
   let next = code;
@@ -106,7 +112,7 @@ export function updateVueSFCClass(code: string, id: string, classes: string): st
 export function updateVueSFCStyle(code: string, id: string, styles: Record<string, string>): string { return attribute(code, id, 'style', styles); }
 export function updateVueSFCText(code: string, id: string, text: string): string {
   const node = target(code, id);
-  if (node === null) return code;
+  if (node === null) throw new Error('NODE_NOT_FOUND: No template element exists here.');
   if (node.props.some((p: any) => p.type === 7 && ['text', 'html', 'pre'].includes(p.name))) throw new Error('UNSUPPORTED_OPERATION: Text is controlled by a directive.');
   const literals = node.children.filter((child: any) => child.type === 2 && child.content.trim());
   if (literals.length !== 1) throw new Error('UNSUPPORTED_OPERATION: Select one literal text segment.');
@@ -120,7 +126,7 @@ export function updateVueSFCText(code: string, id: string, text: string): string
 export function readVueClass(code: string, id: string): string | null {
   const node = target(code, id);
   if (node === null) return null;
-  return node.props.find((p: any) => p.type === 6 && p.name === 'class')?.value?.content ?? '';
+  return staticAttribute(node, 'class')?.value?.content ?? '';
 }
 
 /** Every template element in document order, with the one-based position of its opening tag. */

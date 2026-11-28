@@ -169,7 +169,7 @@ describe('[Unit] HistoryStore: squash window collapses rapid edits', () => {
         description: `Width drag ${i}`,
         squashKey: 'node-1::width',
         squashWindowMs: 60_000, // 60 s window — all pushes collapse
-        diffs: [{ file: 'App.tsx', before: `${i}px`, after: `${i + 10}px` }],
+        diffs: [{ file: 'App.tsx', before: `${i * 10}px`, after: `${(i + 1) * 10}px` }],
       });
     };
 

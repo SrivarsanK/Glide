@@ -140,3 +140,19 @@ test('rejects grouping a live sibling with a detached workspace object without m
   expect(f.read()).toContain('<aside>Keep</aside>');
   expect(f.read()).not.toContain('<div></div>');
 });
+
+test('detaching inside a custom component allows re-attaching back to that same component', async () => {
+  const f = fixture('const App = () => <Card><span>Inside</span><OtherCard /></Card>;');
+  const detached = await f.run('<span', { type: 'detach', workspaceId: 'card-item', x: 50, y: 60 });
+  expect(detached.success, detached.error).toBe(true);
+  expect(f.read()).toContain('false &&');
+  // Attaching to a different custom component is still refused.
+  const wrongDest = await f.run('<span', { type: 'attach', parentId: f.ref('<OtherCard') });
+  expect(wrongDest.success).toBe(false);
+  expect(wrongDest.error).toContain('UNSUPPORTED_OPERATION');
+  // Re-attaching back to its original parent component succeeds.
+  const reattached = await f.run('<span', { type: 'attach' });
+  expect(reattached.success, reattached.error).toBe(true);
+  expect(f.read()).toContain('<Card><span>Inside</span><OtherCard /></Card>');
+  expect(f.read()).not.toContain('data-gl-workspace-id');
+});

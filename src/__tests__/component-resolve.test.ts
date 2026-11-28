@@ -307,4 +307,43 @@ describe('Component Definition Resolver', () => {
 
     expect(result).toBeNull();
   });
+
+  test('resolves TypeScript ESM .js/.jsx import specifiers to .tsx/.ts source files', () => {
+    const buttonPath = path.join(tmpDir, 'Button.tsx');
+    fs.writeFileSync(buttonPath, 'export function Button() { return <button>Hi</button>; }\n', 'utf-8');
+    const utilPath = path.join(tmpDir, 'Icon.ts');
+    fs.writeFileSync(utilPath, 'export const Icon = () => null;\n', 'utf-8');
+    const appPath = path.join(tmpDir, 'App.tsx');
+    const appCode = `
+      import { Button } from './Button.js';
+      import { Icon } from './Icon.js';
+      export function App() { return <div><Button /><Icon /></div>; }
+    `;
+    fs.writeFileSync(appPath, appCode, 'utf-8');
+
+    const btn = resolveComponentDefinition({ sourceCode: appCode, filepath: appPath, componentName: 'Button', projectRoot: tmpDir });
+    expect(btn).toMatchObject({ file: path.resolve(buttonPath), isLocal: false, exportType: 'named', line: 1 });
+    const icon = resolveComponentDefinition({ sourceCode: appCode, filepath: appPath, componentName: 'Icon', projectRoot: tmpDir });
+    expect(icon).toMatchObject({ file: path.resolve(utilPath), isLocal: false, exportType: 'named', line: 1 });
+  });
+
+  test('ignores inner-scope variable shadowing when resolving imported components', () => {
+    const buttonPath = path.join(tmpDir, 'Button.tsx');
+    fs.writeFileSync(buttonPath, 'export default function Button() { return <button>Real</button>; }\n', 'utf-8');
+    const appPath = path.join(tmpDir, 'App.tsx');
+    const appCode = `
+      import Button from './Button';
+      function unrelatedHelper() {
+        const Button = 'shadowed local';
+        return Button;
+      }
+      export function App() {
+        return <Button />;
+      }
+    `;
+    fs.writeFileSync(appPath, appCode, 'utf-8');
+
+    const res = resolveComponentDefinition({ sourceCode: appCode, filepath: appPath, componentName: 'Button', projectRoot: tmpDir });
+    expect(res).toMatchObject({ file: path.resolve(buttonPath), isLocal: false, exportType: 'default', line: 1 });
+  });
 });

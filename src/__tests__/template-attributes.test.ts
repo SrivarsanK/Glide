@@ -117,3 +117,12 @@ test('removing a tightly-adjacent attribute preserves separating whitespace in A
   expect(set('App.svelte', '<button disabled id="a"class="b">Hi</button>\n', '<button', 'id', null))
     .toBe('<button disabled class="b">Hi</button>\n');
 });
+
+test.each(Object.keys(retagFiles))('retag in %s preserves noopener noreferrer when rel follows target: _blank', file => {
+  const code = retagFiles[file];
+  const withAuthor = retag(file, code, '<div', 'a', { href: 'https://example.com', target: '_blank', rel: 'author' });
+  expect(withAuthor).toContain('target="_blank"');
+  expect(withAuthor).toContain('rel="author noopener noreferrer"');
+  const withNull = retag(file, code, '<div', 'a', { href: 'https://example.com', target: '_blank', rel: null });
+  expect(withNull).toContain('rel="noopener noreferrer"');
+});

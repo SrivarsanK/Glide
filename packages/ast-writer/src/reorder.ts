@@ -1,17 +1,5 @@
-import { parse as recastParse } from 'recast';
-import * as babelParser from 'recast/parsers/babel.js';
-import getBabelOptions from 'recast/parsers/_babel_options.js';
+import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
-
-const tsxParser = {
-  parse(source: string, options?: any) {
-    const getOpts = (getBabelOptions as any).default || getBabelOptions;
-    const babelOptions = getOpts(options);
-    babelOptions.plugins = babelOptions.plugins.filter((p: string) => p !== 'flow');
-    babelOptions.plugins.push('jsx', 'typescript', 'decoratorAutoAccessors');
-    return babelParser.parser.parse(source, babelOptions);
-  }
-};
 
 const traverse = (traverseModule as any).default || traverseModule;
 
@@ -34,7 +22,11 @@ export function parseJSXElements(
 
   let ast: any;
   try {
-    ast = recastParse(source, { parser: tsxParser });
+    // Parse with @babel/parser directly so tab columns stay 1:1 with babel-plugin and writer.ts.
+    ast = parse(source, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript', 'decoratorAutoAccessors'],
+    });
   } catch {
     // Not a valid JSX/TSX file — return empty (caller handles gracefully)
     return results;
@@ -52,7 +44,17 @@ export function parseJSXElements(
         if (!name) return 'unknown';
         if (name.type === 'JSXIdentifier') return name.name.toLowerCase();
         if (name.type === 'JSXMemberExpression') {
-          return [name.object?.name, name.property?.name].filter(Boolean).join('.').toLowerCase();
+          const parts: string[] = [];
+          let cur = name;
+          while (cur && cur.type === 'JSXMemberExpression') {
+            if (cur.property?.name) parts.unshift(cur.property.name);
+            cur = cur.object;
+          }
+          if (cur?.name) parts.unshift(cur.name);
+          return parts.length ? parts.join('.').toLowerCase() : 'unknown';
+        }
+        if (name.type === 'JSXNamespacedName') {
+          return `${name.namespace?.name}:${name.name?.name}`.toLowerCase();
         }
         return 'unknown';
       })();

@@ -18,7 +18,7 @@ function normalizePath(filePath: string, rootDir: string): string {
  */
 export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin {
   let isDev = false;
-  let configReady: Promise<unknown> = Promise.resolve();
+  let configReady: Promise<void> = Promise.resolve();
   let rootDir = process.cwd();
   let stampPages = false;
   /** Stops the attached editor once; set while one is running. */
@@ -71,8 +71,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
       // In a project with no UI framework the HTML pages are the source, so their elements get stamps.
       // With a framework, index.html is only a mount point and stays unmapped.
       try { stampPages = detectProjectMeta(rootDir).framework === 'unknown'; } catch { stampPages = false; }
-      // Load glide.config.ts from the user's project root synchronously.
-      // jiti is used under the hood by loadConfigFromDisk — no await needed at plugin init time.
+      // Return the promise so Vite awaits glide.config before running configureServer/transform hooks.
       try {
         configReady = loadConfigFromDisk(rootDir).then(cfg => {
           glideConfig = cfg;
@@ -83,7 +82,10 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
             cfg.snapThresholdPx
           );
         }).catch(() => { /* use defaults */ });
-      } catch { /* use defaults */ }
+      } catch {
+        configReady = Promise.resolve();
+      }
+      return configReady;
     },
 
     configureServer(server) {
@@ -262,7 +264,7 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
 
           // Only return the stamped code — bridge is injected via transformIndexHtml
           const hmrInjection = `
-  if (import.meta.hot && window !== window.top) {
+  if (import.meta.hot && typeof window !== 'undefined' && window !== window.top) {
     const __glideAfterUpdate = function() {
       if (window.__glide_refresh_pending__) return;
       window.__glide_refresh_pending__ = true;
@@ -299,7 +301,26 @@ export function glideSourceStamping(options: { editor?: boolean } = {}): Plugin 
           // into the page or layout that has the <head>. It is added after stamping: the stamps
           // hold positions in the file on disk. `is:inline` keeps Astro from processing the script.
           if (isAstro) {
-            stampedCode = stampedCode.replace(/<head(\s[^>]*)?>/, tag => `${tag}<script is:inline>${bridgeScript}<\/script>`);
+            const fm = /^\s*---(?:\r?\n[\s\S]*?)?\r?\n---(?=\r?\n|$)/.exec(stampedCode);
+            const bodyStart = fm ? fm[0].length : 0;
+            const template = stampedCode.slice(bodyStart);
+            let idx = 0;
+            while (idx < template.length) {
+              const lt = template.indexOf('<', idx);
+              if (lt < 0) break;
+              if (template.startsWith('<!--', lt)) {
+                const commentEnd = template.indexOf('-->', lt + 4);
+                idx = commentEnd < 0 ? template.length : commentEnd + 3;
+                continue;
+              }
+              const headMatch = /^<head(?:\s[^>]*)?>/i.exec(template.slice(lt));
+              if (headMatch) {
+                const insertAt = bodyStart + lt + headMatch[0].length;
+                stampedCode = stampedCode.slice(0, insertAt) + `<script is:inline>${bridgeScript}<\/script>` + stampedCode.slice(insertAt);
+                break;
+              }
+              idx = lt + 1;
+            }
           }
           return {
             code: stampedCode,

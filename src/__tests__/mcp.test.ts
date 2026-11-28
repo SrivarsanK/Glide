@@ -148,3 +148,9 @@ test('agents build a section from static markup', async () => {
   expect(read()).toMatch(/<h1 className="text-lg">Hi<\/h1>\s*<section className="p-8">\s*<h2>Pricing<\/h2>/);
   expect((await call(ctx, 'insert_markup', { source: main.source, markup: '<Card />' })).text).toMatch(/not an element Glide inserts/);
 });
+
+test('parseReference parses remapped references with trailing all-digit hashes and Windows drive paths', () => {
+  expect(parseReference('src/App.vue:5:3:00000000')).toEqual({ file: 'src/App.vue', line: 5, column: 3 });
+  expect(parseReference('C:/repo/src/App.tsx:12:5:deadbeef')).toEqual({ file: 'C:/repo/src/App.tsx', line: 12, column: 5 });
+  expect(() => parseReference('src/App.tsx:0:1')).toThrow(/INVALID_TARGET/);
+});

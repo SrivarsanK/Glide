@@ -275,3 +275,29 @@ test('watcher errors, failed startup, and early stop after attach do not crash o
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('JUMP_TO_HISTORY rejects missing/invalid index without redoing, handles no-op jump, and drift clears stale self-write digest', async () => {
+  const f = await startTestProject(), client = await f.connect();
+  expect((await request(client, f.edit({ type: 'text', value: 'Changed' }))).success).toBe(true);
+  expect((await request(client, { type: 'undo', transactionId: 'u1' })).success).toBe(true);
+  const beforeJump = f.read();
+
+  // Missing or non-integer index must fail without redoing the undone edit.
+  const missingIdx = await request(client, { type: 'JUMP_TO_HISTORY', transactionId: 'j-missing' });
+  expect(missingIdx.success).toBe(false);
+  expect(missingIdx.error).toContain('INVALID_HISTORY');
+  expect(f.read()).toBe(beforeJump);
+
+  // Jumping to the current index (-1) succeeds as a no-op.
+  const sameIdx = await request(client, { type: 'JUMP_TO_HISTORY', index: -1, transactionId: 'j-same' });
+  expect(sameIdx.success).toBe(true);
+  expect(f.read()).toBe(beforeJump);
+
+  // Drift on a file clears lastSelfWrites so an external revert back to a prior self-write is not suppressed.
+  const appPath = fs.realpathSync.native(path.join(f.root, 'App.tsx'));
+  const normKey = appPath.replace(/\\/g, '/').toLowerCase();
+  const selfWrites: Map<string, string> = (f.server as any).lastSelfWrites;
+  expect(selfWrites.has(normKey)).toBe(true);
+  (f.server as any).announceDrift(appPath);
+  expect(selfWrites.has(normKey)).toBe(false);
+});

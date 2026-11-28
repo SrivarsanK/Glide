@@ -113,6 +113,23 @@ function trimText(raw: string): string | undefined {
   return t.length > 25 ? t.slice(0, 22) + '...' : t;
 }
 
+function normalizeRegistryPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+function offsetToLineColumn(code: string, offset: number): { line: number; column: number } {
+  const safeOffset = Math.max(0, Math.min(offset, code.length));
+  const before = code.slice(0, safeOffset);
+  const lastNewline = before.lastIndexOf('\n');
+  const line = before.split('\n').length;
+  const column = safeOffset - lastNewline;
+  return { line, column };
+}
+
+function blankPreservingNewlines(match: string): string {
+  return match.replace(/[^\n]/g, ' ');
+}
+
 // ── Source file discovery ─────────────────────────────────────────────────────
 
 const SOURCE_EXTS = new Set(['.jsx', '.tsx', '.vue', '.svelte', '.astro', '.html', '.js', '.ts']);
@@ -275,7 +292,7 @@ function collectJsxFromFunction(
           tagName = parts.join('.');
         }
 
-        let id = `${filePath}:${line}:${column}`;
+        let id = `${normalizeRegistryPath(filePath)}:${line}:${column}`;
         const glAttr = opening.attributes?.find(
           (a: any) => a.type === 'JSXAttribute' && a.name?.name === 'data-gl-source'
         );
@@ -333,7 +350,7 @@ function scanJsxFile(filePath: string): ComponentBucket[] {
         const nameNode = opening.name;
         let tagName = 'unknown';
         if (nameNode.type === 'JSXIdentifier') tagName = nameNode.name;
-        let id = `${filePath}:${loc.start.line}:${loc.start.column + 1}`;
+        let id = `${normalizeRegistryPath(filePath)}:${loc.start.line}:${loc.start.column + 1}`;
         const glAttr = opening.attributes?.find((a: any) => a.type === 'JSXAttribute' && a.name?.name === 'data-gl-source');
         if (glAttr?.value?.type === 'StringLiteral') id = glAttr.value.value;
         elements.push({ id, tagName, line: loc.start.line, column: loc.start.column + 1, isRoot: false, classNames: [] });
@@ -359,24 +376,33 @@ function scanVueFile(filePath: string): ComponentBucket[] {
   let code: string;
   try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
   let templateContent = '';
-  try { templateContent = parseVueSFC(code).descriptor.template?.content ?? ''; } catch { return []; }
+  let baseOffset = 0;
+  try {
+    const template = parseVueSFC(code).descriptor.template;
+    templateContent = template?.content ?? '';
+    baseOffset = template?.loc?.start?.offset ?? 0;
+  } catch { return []; }
   if (!templateContent.trim()) return [];
 
-  const dom = parseDOM(templateContent);
+  const dom = parseDOM(templateContent, { withStartIndices: true });
   const elements: RegistryElement[] = [];
+  const normalizedFile = normalizeRegistryPath(filePath);
   let rootFound = false;
 
   function walk(nodes: any[], depth = 0) {
     for (const node of nodes) {
       if (node.type !== 'tag') { if (node.children) walk(node.children, depth); continue; }
       if (['script', 'style'].includes(node.name?.toLowerCase() ?? '')) continue;
-      const id = node.attribs?.['data-gl-source'] ?? `${filePath}:${node.startIndex ?? 0}:0`;
+      const pos = typeof node.startIndex === 'number'
+        ? offsetToLineColumn(code, baseOffset + node.startIndex)
+        : { line: 0, column: 0 };
+      const id = node.attribs?.['data-gl-source'] ?? `${normalizedFile}:${pos.line}:${pos.column}`;
       const className = (node.attribs?.['class'] ?? '').split(/\s+/).filter(Boolean);
       let rawText = '';
       for (const c of node.children ?? []) { if (c.type === 'text') { rawText = c.data; break; } }
       const isRoot = !rootFound && depth === 0;
       if (isRoot) rootFound = true;
-      elements.push({ id, tagName: node.name, line: 0, column: 0, isRoot, classNames: className, text: trimText(rawText) });
+      elements.push({ id, tagName: node.name, line: pos.line, column: pos.column, isRoot, classNames: className, text: trimText(rawText) });
       if (node.children) walk(node.children, depth + 1);
     }
   }
@@ -391,24 +417,28 @@ function scanSvelteFile(filePath: string): ComponentBucket[] {
   let code: string;
   try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
   const stripped = code
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '');
+    .replace(/<script[\s\S]*?<\/script>/gi, blankPreservingNewlines)
+    .replace(/<style[\s\S]*?<\/style>/gi, blankPreservingNewlines);
   if (!stripped.trim()) return [];
 
-  const dom = parseDOM(stripped);
+  const dom = parseDOM(stripped, { withStartIndices: true });
   const elements: RegistryElement[] = [];
+  const normalizedFile = normalizeRegistryPath(filePath);
   let rootFound = false;
 
   function walk(nodes: any[], depth = 0) {
     for (const node of nodes) {
       if (node.type !== 'tag') { if (node.children) walk(node.children, depth); continue; }
-      const id = node.attribs?.['data-gl-source'] ?? `${filePath}:${node.startIndex ?? 0}:0`;
+      const pos = typeof node.startIndex === 'number'
+        ? offsetToLineColumn(code, node.startIndex)
+        : { line: 0, column: 0 };
+      const id = node.attribs?.['data-gl-source'] ?? `${normalizedFile}:${pos.line}:${pos.column}`;
       const className = (node.attribs?.['class'] ?? '').split(/\s+/).filter(Boolean);
       let rawText = '';
       for (const c of node.children ?? []) { if (c.type === 'text') { rawText = c.data; break; } }
       const isRoot = !rootFound && depth === 0;
       if (isRoot) rootFound = true;
-      elements.push({ id, tagName: node.name, line: 0, column: 0, isRoot, classNames: className, text: trimText(rawText) });
+      elements.push({ id, tagName: node.name, line: pos.line, column: pos.column, isRoot, classNames: className, text: trimText(rawText) });
       if (node.children) walk(node.children, depth + 1);
     }
   }
@@ -423,27 +453,27 @@ function scanAstroFile(filePath: string): ComponentBucket[] {
   let code: string;
   try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
 
-  let templateCode = code;
-  const parts = code.split('---');
-  if (parts.length >= 3) {
-    templateCode = parts.slice(2).join('---');
-  }
+  const templateCode = code.replace(/^\s*---(?:\r?\n[\s\S]*?)?\r?\n---(?=\r?\n|$)/, blankPreservingNewlines);
 
-  const dom = parseDOM(templateCode);
+  const dom = parseDOM(templateCode, { withStartIndices: true });
   const elements: RegistryElement[] = [];
+  const normalizedFile = normalizeRegistryPath(filePath);
   let rootFound = false;
 
   function walk(nodes: any[], depth = 0) {
     for (const node of nodes) {
       if (node.type !== 'tag') { if (node.children) walk(node.children, depth); continue; }
       if (['script', 'style', 'head'].includes(node.name?.toLowerCase() ?? '')) continue;
-      const id = node.attribs?.['data-gl-source'] ?? `${filePath}:${node.startIndex ?? 0}:0`;
+      const pos = typeof node.startIndex === 'number'
+        ? offsetToLineColumn(code, node.startIndex)
+        : { line: 0, column: 0 };
+      const id = node.attribs?.['data-gl-source'] ?? `${normalizedFile}:${pos.line}:${pos.column}`;
       const className = (node.attribs?.['class'] ?? '').split(/\s+/).filter(Boolean);
       let rawText = '';
       for (const c of node.children ?? []) { if (c.type === 'text') { rawText = c.data; break; } }
       const isRoot = !rootFound && depth === 0;
       if (isRoot) rootFound = true;
-      elements.push({ id, tagName: node.name, line: 0, column: 0, isRoot, classNames: className, text: trimText(rawText) });
+      elements.push({ id, tagName: node.name, line: pos.line, column: pos.column, isRoot, classNames: className, text: trimText(rawText) });
       if (node.children) walk(node.children, depth + 1);
     }
   }
@@ -457,21 +487,25 @@ function scanAstroFile(filePath: string): ComponentBucket[] {
 function scanHtmlFile(filePath: string): ComponentBucket[] {
   let code: string;
   try { code = fs.readFileSync(filePath, 'utf-8'); } catch { return []; }
-  const dom = parseDOM(code);
+  const dom = parseDOM(code, { withStartIndices: true });
   const elements: RegistryElement[] = [];
+  const normalizedFile = normalizeRegistryPath(filePath);
   let rootFound = false;
 
   function walk(nodes: any[], depth = 0) {
     for (const node of nodes) {
       if (node.type !== 'tag') { if (node.children) walk(node.children, depth); continue; }
       if (['script', 'style', 'head'].includes(node.name?.toLowerCase() ?? '')) continue;
-      const id = node.attribs?.['data-gl-source'] ?? `${filePath}:${node.startIndex ?? 0}:0`;
+      const pos = typeof node.startIndex === 'number'
+        ? offsetToLineColumn(code, node.startIndex)
+        : { line: 0, column: 0 };
+      const id = node.attribs?.['data-gl-source'] ?? `${normalizedFile}:${pos.line}:${pos.column}`;
       const className = (node.attribs?.['class'] ?? '').split(/\s+/).filter(Boolean);
       let rawText = '';
       for (const c of node.children ?? []) { if (c.type === 'text') { rawText = c.data; break; } }
       const isRoot = !rootFound && depth === 0;
       if (isRoot) rootFound = true;
-      elements.push({ id, tagName: node.name, line: 0, column: 0, isRoot, classNames: className, text: trimText(rawText) });
+      elements.push({ id, tagName: node.name, line: pos.line, column: pos.column, isRoot, classNames: className, text: trimText(rawText) });
       if (node.children) walk(node.children, depth + 1);
     }
   }

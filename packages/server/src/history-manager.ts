@@ -17,7 +17,11 @@ export class HistoryStore {
     if (entry.squashKey && this.stack.length > 0) {
       const last = this.stack[this.stack.length - 1];
       const windowMs = entry.squashWindowMs ?? 2000;
-      if (last.squashKey === entry.squashKey && now - last.timestamp < windowMs) {
+      const contiguous = entry.diffs.every(newDiff => {
+        const existing = last.diffs.find(d => d.file === newDiff.file);
+        return !existing || existing.after === newDiff.before;
+      });
+      if (last.squashKey === entry.squashKey && now - last.timestamp < windowMs && contiguous) {
         last.description = entry.description;
         last.timestamp = now;
         for (const newDiff of entry.diffs) {

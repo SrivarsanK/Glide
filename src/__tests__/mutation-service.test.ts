@@ -124,4 +124,39 @@ describe('Mutation transactions', () => {
     expect(f.read('B.tsx')).toBe('// External edit.\n' + f.source);
     expect(f.history).toHaveLength(0);
   });
+
+  test('rejects invalid restoreHistory actions without redoing, supports no-op jump, invokes onRestore, and cleans failed rollback temps', async () => {
+    const f = fixture();
+    const store = new HistoryStore();
+    const restoredDiffs: string[] = [];
+    const service = new MutationService(f.root, {
+      onPersist: diffs => store.push({ description: 'Edit', diffs }),
+      onRestore: diffs => restoredDiffs.push(...diffs.map(d => d.file)),
+    });
+    expect((await service.execute('edit-1', [f.operation('A.tsx', 'one')])).success).toBe(true);
+    expect((await service.restoreHistory('undo-1', store, 'undo')).success).toBe(true);
+    expect(restoredDiffs).toHaveLength(1);
+
+    // Invalid action must throw INVALID_HISTORY rather than silently running redo.
+    await expect(service.restoreHistory('bad-1', store, undefined as any)).rejects.toThrow('INVALID_HISTORY');
+    await expect(service.restoreHistory('bad-2', store, 1.5 as any)).rejects.toThrow('INVALID_HISTORY');
+    expect(store.getState().currentIndex).toBe(-1);
+
+    // Jumping to the current index is a clean no-op.
+    const noop = await service.restoreHistory('noop-1', store, -1);
+    expect(noop.success).toBe(true);
+    expect(noop.changedFiles).toEqual([]);
+
+    // Failed rollback rename cleans up its recovery temp file instead of leaking `.glide-*.tmp`.
+    let calls = 0;
+    const f2 = fixture((from, to) => {
+      calls++;
+      if (calls === 2) throw new Error('Second rename failed');
+      if (calls === 3) throw new Error('Rollback rename failed');
+      fs.renameSync(from, to);
+    });
+    const failed = await f2.service.execute('rollback-leak', [f2.operation('A.tsx', 'one'), f2.operation('B.tsx', 'two')]);
+    expect(failed.success).toBe(false);
+    expect(fs.readdirSync(f2.root).filter(name => name.startsWith('.glide-'))).toEqual([]);
+  });
 });

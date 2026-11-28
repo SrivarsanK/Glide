@@ -132,7 +132,17 @@ export function transformTemplateBatch(file: string, source: string, edits: Edit
         if (!/^[a-z]/.test(from)) throw new Error('UNSUPPORTED_OPERATION: Only HTML elements can change their tag; a component decides what it renders.');
         if (!RETAG_TARGETS.has(to)) throw new Error(`UNSUPPORTED_OPERATION: <${to}> is not a tag the editor can switch to.`);
         const attributes = (change as any).attributes && typeof (change as any).attributes === 'object' ? (change as any).attributes : {};
-        for (const [name, value] of Object.entries(attributes)) code = writeAttribute(writer, code, line, column, name, value);
+        const entries = Object.entries(attributes);
+        const orderedAttrs = [
+          ...entries.filter(([name, value]) => !(name.toLowerCase() === 'target' && value === '_blank')),
+          ...entries.filter(([name, value]) => name.toLowerCase() === 'target' && value === '_blank'),
+        ];
+        for (const [name, value] of orderedAttrs) code = writeAttribute(writer, code, line, column, name, value);
+        if (entries.some(([name]) => name.toLowerCase() === 'rel')
+          && !entries.some(([name, value]) => name.toLowerCase() === 'target' && value === '_blank')
+          && writer.readAttribute(code, line, column, 'target') === '_blank') {
+          code = writeAttribute(writer, code, line, column, 'target', '_blank');
+        }
         if (from === to) break;
         checkRetag(from, to, { ...writer.readTag(code, line, column), attribute: name => writer.readAttribute(code, line, column, name) });
         // A button inside a form submits it unless it says otherwise.
