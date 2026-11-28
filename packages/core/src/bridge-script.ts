@@ -316,7 +316,7 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     var el = document.querySelector('[__GLIDE_SOURCE_ATTR__]') || (document.body && (document.body.firstElementChild || (document.body.children && document.body.children[0])));
     if (el) {
       var src = (el.getAttribute && el.getAttribute('__GLIDE_SOURCE_ATTR__')) || getElId(el);
-      window.parent.postMessage({ type: 'glide:ready', source: src }, '*');
+      window.parent.postMessage({ type: 'glide:ready', source: src, href: (window.location && window.location.href) || '' }, '*');
       sendDOMTree(true);
       readyStateSent = true;
       if (readyInterval) { clearInterval(readyInterval); readyInterval = null; }

@@ -2112,8 +2112,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       <option value="gradient">Gradient</option>
                       <option value="none">None</option>
                     </select>
-                    <i data-lucide="plus" id="btn-add-fill" title="Add Fill" style="width: 12px; height: 12px; cursor: pointer;"></i>
-                    <i data-lucide="minus" id="btn-remove-fill" title="Remove Fill" style="width: 12px; height: 12px; cursor: pointer;"></i>
+                    <button type="button" id="btn-add-fill" title="Add Fill" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></button>
+                    <button type="button" id="btn-remove-fill" title="Remove Fill" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="minus" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div id="fill-solid-controls">
@@ -2217,9 +2217,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               <div class="props-section" id="section-effects">
                 <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                   <span>Effects</span>
-                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
-                    <i data-lucide="plus" id="btn-add-effect" style="width: 12px; height: 12px;"></i>
-                    <i data-lucide="minus" id="btn-remove-effect" style="width: 12px; height: 12px;"></i>
+                  <div style="display: flex; gap: 6px; color: var(--text-secondary);">
+                    <button type="button" id="btn-add-effect" title="Add Shadow" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></button>
+                    <button type="button" id="btn-remove-effect" title="Remove Shadow" style="background:none;border:none;padding:2px;color:inherit;cursor:pointer;display:inline-flex;align-items:center;"><i data-lucide="minus" style="width: 12px; height: 12px;"></i></button>
                   </div>
                 </div>
                 <div id="shadows-list"></div>
@@ -5164,6 +5164,12 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
 
             if (data.type === 'glide:ready') {
+              if (data.href) {
+                if (lastBridgeHref && data.href !== lastBridgeHref) {
+                  resetNavigationState();
+                }
+                lastBridgeHref = data.href;
+              }
               syncInteractionMode();
               const loadingEl = document.getElementById('canvas-loading');
               if (loadingEl) loadingEl.style.display = 'none';
@@ -6171,27 +6177,48 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             });
           }
 
+          let lastLoadedAppUrl = '';
+          let lastBridgeHref = '';
+
+          function resetNavigationState() {
+            selectedElement = null;
+            selectedSources = [];
+            selectedRect = null;
+            selectedRects = [];
+            selectionSnapshots.clear();
+            selectedComputedStyles = null;
+            selectedComputedSource = null;
+            hoveredElement = null;
+            hoveredRect = null;
+            layerTree = null;
+            lastRequestedTreeFile = null;
+            isPendingPositionUpdate = false;
+            resetEditScope();
+            clearOverlay();
+            showNoSelection();
+            document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+          }
+
           function _doLoadApp(url, iframe, loading, statusEl) {
             if (loading) loading.style.display = 'flex';
             if (statusEl) statusEl.textContent = 'Loading ' + url + '...';
+            if (lastLoadedAppUrl && lastLoadedAppUrl !== url) {
+              resetNavigationState();
+            }
+            lastLoadedAppUrl = url;
             iframe.onload = function() {
-              // A new document invalidates previous route selection, rects, and layers tree.
-              selectedElement = null;
-              selectedSources = [];
-              selectedRect = null;
-              selectedRects = [];
-              selectionSnapshots.clear();
-              selectedComputedStyles = null;
-              selectedComputedSource = null;
-              hoveredElement = null;
-              hoveredRect = null;
-              layerTree = null;
-              lastRequestedTreeFile = null;
-              isPendingPositionUpdate = false;
-              resetEditScope();
-              clearOverlay();
-              showNoSelection();
-              document.querySelectorAll('.layer-item.active').forEach(el => el.classList.remove('active'));
+              // Same-URL HMR reload invalidates screen rects without kicking the user out of the inspector;
+              // navigating to a different route clears stale selection and layers tree.
+              let nextHref = '';
+              try { nextHref = (iframe.contentWindow && iframe.contentWindow.location && iframe.contentWindow.location.href) || ''; } catch (_) {}
+              if (nextHref && lastBridgeHref && nextHref !== lastBridgeHref) {
+                resetNavigationState();
+                lastBridgeHref = nextHref;
+              } else {
+                selectedRect = null; selectedRects = []; hoveredRect = null;
+                isPendingPositionUpdate = false;
+                clearOverlay();
+              }
               setTimeout(function() { if (loading) loading.style.display = 'none'; }, 300);
               if (iframe.contentWindow) {
                 // Request fresh DOM tree — fixes layer panel after page refresh

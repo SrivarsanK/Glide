@@ -480,11 +480,13 @@ test('Windows drive-letter case normalization, selectedRect x/y coordinates, ifr
   expect(spawned[0].style.top).not.toContain('NaN');
   expect(script).not.toContain('selectedRect.left + selectedRect.width / 2');
 
-  // _doLoadApp iframe.onload must reset selection and layerTree; component row click must clear overlay
-  const loadAppFn = fn('_doLoadApp');
-  expect(loadAppFn).toContain('selectedElement = null');
-  expect(loadAppFn).toContain('layerTree = null');
-  expect(loadAppFn).toContain('resetEditScope()');
+  // Route navigation resets selection and layerTree (while same-URL HMR reload preserves active inspector)
+  const resetNavFn = fn('resetNavigationState');
+  expect(resetNavFn).toContain('selectedElement = null');
+  expect(resetNavFn).toContain('layerTree = null');
+  expect(resetNavFn).toContain('resetEditScope()');
+  expect(fn('_doLoadApp')).toContain('resetNavigationState()');
+  expect(branch('glide:ready')).toContain('resetNavigationState()');
   const renderLayersFn = fn('renderLayersTree');
   expect(renderLayersFn).toMatch(/if\s*\(isComponent\)\s*\{[\s\S]{0,600}clearOverlay\(\)/);
 });
