@@ -106,3 +106,30 @@ test('the dev server puts the bridge into the Astro file that has the <head>, af
   const component: string = plugin.transform.handler('<article class="p-2">x</article>\n', '/project/src/components/Card.astro').code;
   expect(component).not.toContain('<script');
 });
+
+test('Astro double-editing quoted styles and reading HTML entities preserves values without corruption', async () => {
+  const { readAstroAttributeAt, setAstroAttributeAt, setAstroStyleAt } = await import('../../packages/adapters/astro/src/template.js');
+  const { mergeInlineStyle, parseInlineStyle } = await import('../../packages/core/src/style-utils.js');
+
+  // Double-editing quoted CSS values must decode &quot; before re-parsing inline styles.
+  const first = setAstroStyleAt('<div>Hi</div>\n', 1, 1, { fontFamily: '"Inter", sans-serif' });
+  expect(first).toBe('<div style="font-family: &quot;Inter&quot;, sans-serif">Hi</div>\n');
+  const second = setAstroStyleAt(first, 1, 1, { color: 'blue' });
+  expect(second).toBe('<div style="font-family: &quot;Inter&quot;, sans-serif; color: blue">Hi</div>\n');
+
+  // readAstroAttributeAt decodes entities cleanly without double-escaping on write-back.
+  const encoded = '<a href="/search?a=1&amp;b=2" title="Use &lt;b&gt; &amp; &quot;co&quot;">Go</a>\n';
+  expect(readAstroAttributeAt(encoded, 1, 1, 'href')).toBe('/search?a=1&b=2');
+  expect(readAstroAttributeAt(encoded, 1, 1, 'title')).toBe('Use <b> & "co"');
+  const rewritten = setAstroAttributeAt(encoded, 1, 1, 'href', readAstroAttributeAt(encoded, 1, 1, 'href') as string);
+  expect(rewritten).toBe(encoded);
+
+  // parseInlineStyle & mergeInlineStyle handle data URIs, property deletion, and CSS custom properties.
+  const dataUri = 'background-image: url(data:image/png;base64,AAAA); color: red';
+  expect(parseInlineStyle(dataUri)).toEqual({
+    'background-image': 'url(data:image/png;base64,AAAA)',
+    color: 'red',
+  });
+  expect(mergeInlineStyle(dataUri, { color: '' })).toBe('background-image: url(data:image/png;base64,AAAA)');
+  expect(mergeInlineStyle('color: red', { '--brandColor': '#ff0000' })).toBe('color: red; --brandColor: #ff0000');
+});
