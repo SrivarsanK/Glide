@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
 
 export interface AIEnvironmentInfo {
   antigravity: boolean;
@@ -43,9 +44,11 @@ const NOT_INSTALLED = new Set(['evals']);
  * Locate the bundled or repository skills directory.
  */
 export function getSkillsSourceDir(): string {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    path.join(__dirname, 'skills'),
-    path.join(__dirname, '..', 'skills'),
+    path.join(moduleDir, 'skills'),
+    path.join(moduleDir, '..', 'skills'),
+    path.join(moduleDir, '..', '..', '..', 'skills'),
     path.resolve(process.cwd(), 'skills'),
   ];
   for (const cand of candidates) {
