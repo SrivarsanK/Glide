@@ -2643,6 +2643,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   updateHistoryUI(message.stack, message.currentIndex);
                 } else if (message.type === 'status') {
                   sourceTransport.accept(message);
+                  if (sourceTransport.pending() === 0) clearOptimisticInIframe(message.success);
                   if (message.action === 'batch-edit' && pendingBatch && message.transactionId === pendingBatch.batchId) {
                     if (message.success) {
                       pendingBatch.items.forEach(({ source, key, item }) => {
@@ -2820,6 +2821,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 sourceId: sourceId,
                 styles: styles
               }, '*');
+            }
+          }
+
+          /** Ends Instant-mode previews: now for a failed save, after the page re-renders for a saved one. */
+          function clearOptimisticInIframe(saved) {
+            const iframe = document.getElementById('app-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({ type: 'glide:clear-optimistic', settle: !!saved }, '*');
             }
           }
 
@@ -7405,7 +7414,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   const iframe = document.getElementById('app-iframe');
                   if (iframe && iframe.contentWindow) {
                     iframe.contentWindow.postMessage({
-                      type: 'glide:preview-style',
+                      type: stagingModeActive ? 'glide:preview-style' : 'glide:optimistic-style',
                       source: selectedElement.source,
                       styles: { [styleProp]: val }
                     }, '*');
@@ -7496,7 +7505,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   const iframe = document.getElementById('app-iframe');
                   if (iframe && iframe.contentWindow) {
                     iframe.contentWindow.postMessage({
-                      type: 'glide:preview-style',
+                      type: stagingModeActive ? 'glide:preview-style' : 'glide:optimistic-style',
                       source: selectedElement.source,
                       styles: { backgroundImage: gradVal, backgroundColor: 'transparent' }
                     }, '*');
