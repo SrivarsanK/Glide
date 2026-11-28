@@ -140,7 +140,7 @@ async function runBuild() {
     outfile: path.join(distDir, 'index.js'),
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'esm',
     banner: {
       js: esmBanner,
@@ -156,7 +156,7 @@ async function runBuild() {
     outfile: path.join(distDir, 'cli.js'),
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'esm',
     banner: {
       js: esmBanner,
@@ -178,7 +178,7 @@ async function runBuild() {
     outfile: path.join(distDir, 'vite-plugin.js'),
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'esm',
     banner: {
       js: esmBanner,
@@ -194,7 +194,7 @@ async function runBuild() {
     outfile: path.join(distDir, 'babel-plugin.js'),
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'esm',
     banner: {
       js: esmBanner,
