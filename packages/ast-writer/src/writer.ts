@@ -87,6 +87,17 @@ const DISPLAY_NAMES = new Set(Object.values(DISPLAY_CLASSES));
 /** `transition-property` values that have a class; others are arbitrary. */
 const TRANSITIONS: Record<string, string> = { all: 'transition-all', none: 'transition-none', opacity: 'transition-opacity', transform: 'transition-transform' };
 const EASINGS: Record<string, string> = { linear: 'ease-linear', 'ease-in': 'ease-in', 'ease-out': 'ease-out', 'ease-in-out': 'ease-in-out' };
+const JUSTIFY_CONTENT: Record<string, string> = {
+  'flex-start': 'start',
+  'flex-end': 'end',
+  'space-between': 'between',
+  'space-around': 'around',
+  'space-evenly': 'evenly',
+};
+const ALIGN_ITEMS: Record<string, string> = {
+  'flex-start': 'start',
+  'flex-end': 'end',
+};
 // Tailwind v3's duration scale; v4 accepts any whole number of milliseconds.
 const DURATIONS = new Set([0, 75, 100, 150, 200, 300, 500, 700, 1000]);
 const SPACING_PREFIXES: Record<string, string> = {
@@ -103,7 +114,7 @@ const OTHER_PREFIXES: Record<string, string> = {
 /** Only classes positively identified as setting `property` match, so unknown classes survive an edit. */
 function matchesProperty(c: string, property: string, theme: TailwindTheme = DEFAULT_THEME): boolean {
   const parts = splitClassVariants(c);
-  const name = parts[parts.length - 1];
+  const name = parts[parts.length - 1].replace(/^!|!$/g, '');
   const unsigned = name.replace(/^-/, '');
 
   switch (property) {
@@ -124,7 +135,7 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'gap': return name.startsWith('gap-') && !name.startsWith('gap-y') && !name.startsWith('gap-x');
     case 'rowGap': return name.startsWith('gap-y-');
     case 'opacity': return name.startsWith('opacity-');
-    case 'display': { const shown = name.replace(/^!|!$/g, ''); return DISPLAY_NAMES.has(shown) && shown !== 'hidden'; }
+    case 'display': return DISPLAY_NAMES.has(name) && name !== 'hidden';
     // transition-discrete and transition-normal set transition-behavior, not the property.
     case 'transitionProperty': return name === 'transition' || (name.startsWith('transition-') && name !== 'transition-discrete' && name !== 'transition-normal');
     case 'transitionDuration': return name.startsWith('duration-');
@@ -151,12 +162,12 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
     case 'borderColor':
       return name.startsWith('border-') && isColorValue(name.slice(7), theme);
     case 'borderWidth':
-      return name.startsWith('border-') && (/^border-\[\d+px\]$/.test(name) || /^border-\d+$/.test(name) || name === 'border');
+      return name === 'border' || /^border-\d+$/.test(name) || /^border-\[(?:length:)?(?:0|\d*\.?\d+(?:px|rem|em))\]$/.test(name);
     case 'position': return ['static','relative','absolute','fixed','sticky'].includes(name);
-    case 'left': return name.startsWith('left-');
-    case 'top': return name.startsWith('top-');
-    case 'right': return name.startsWith('right-');
-    case 'bottom': return name.startsWith('bottom-');
+    case 'left': return unsigned.startsWith('left-');
+    case 'top': return unsigned.startsWith('top-');
+    case 'right': return unsigned.startsWith('right-');
+    case 'bottom': return unsigned.startsWith('bottom-');
     default:
       return false;
   }
@@ -165,7 +176,7 @@ function matchesProperty(c: string, property: string, theme: TailwindTheme = DEF
 /** The token part of a matching class (`bg-primary/50` → `primary`). */
 function classToken(c: string, prefix: string): string | null {
   const parts = splitClassVariants(c);
-  const name = parts[parts.length - 1].replace(/^-/, '');
+  const name = parts[parts.length - 1].replace(/^!|!$/g, '').replace(/^-/, '');
   if (!name.startsWith(prefix)) return null;
   const token = name.slice(prefix.length);
   return token.startsWith('[') ? null : token.split('/')[0];
@@ -196,9 +207,9 @@ function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAUL
     case 'flexDirection':
       return clean === 'column' ? 'flex-col' : 'flex-row';
     case 'justifyContent':
-      return `justify-${clean}`;
+      return `justify-${JUSTIFY_CONTENT[clean] ?? clean}`;
     case 'alignItems':
-      return `items-${clean}`;
+      return `items-${ALIGN_ITEMS[clean] ?? clean}`;
     case 'textAlign':
       return `text-${clean}`;
     case 'borderStyle':
@@ -208,11 +219,8 @@ function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAUL
     case 'left':
     case 'top':
     case 'right':
-    case 'bottom': {
-      let v = clean;
-      if (/^-?\d+px$/.test(v)) v = v.slice(0, -2);
-      return `${property}-[${v}px]`;
-    }
+    case 'bottom':
+      return isNumber ? `${property}-[${clean}px]` : `${property}-[${arbitraryValue}]`;
   }
 
   const colorPrefix = COLOR_PREFIXES[property];
@@ -240,9 +248,8 @@ function getNewClass(property: string, value: any, theme: TailwindTheme = DEFAUL
 
   const prefix = OTHER_PREFIXES[property];
   if (!prefix) return '';
-  const val = /^\d+px$/.test(clean) ? clean.slice(0, -2) : arbitraryValue;
-  if (property !== 'opacity' && /^\d+$/.test(val)) return `${prefix}[${val}px]`;
-  return `${prefix}[${val}]`;
+  if (property !== 'opacity' && isNumber) return `${prefix}[${clean}px]`;
+  return `${prefix}[${arbitraryValue}]`;
 }
 
 function getExistingValue(existingClasses: string, property: string, theme: TailwindTheme = DEFAULT_THEME): number {
@@ -250,9 +257,9 @@ function getExistingValue(existingClasses: string, property: string, theme: Tail
   for (const c of classes) {
     if (matchesProperty(c, property, theme)) {
       const parts = splitClassVariants(c);
-      const name = parts[parts.length - 1];
+      const name = parts[parts.length - 1].replace(/^!|!$/g, '');
 
-      const jitMatch = name.match(/-\[([-\d]+)(?:px)?\]$/);
+      const jitMatch = name.match(/-\[(-?\d*\.?\d+)(?:px)?\]$/);
       if (jitMatch) {
         return Number(jitMatch[1]);
       }
@@ -310,7 +317,7 @@ const ALSO_SETS: Record<string, RegExp> = {
 const NOT_COLOR: Record<string, RegExp> = {
   backgroundColor: /^bg-(\[(url|image|length|size|position)|(no-)?repeat|cover|contain|auto|fixed|local|scroll|center|top|bottom|left|right|clip-|origin-|blend-|gradient-|linear-|radial-|conic-|none$)/,
   color: /^text-(left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|shadow)/,
-  borderColor: /^border(-[xytrblse])?(-\d+|-\[\d+px\])?$|^border-(solid|dashed|dotted|double|hidden|none|collapse|separate|spacing)/,
+  borderColor: /^border(-[xytrblse])?(-\d+|-\[(?:length:)?(?:0|\d*\.?\d+(?:px|rem|em))\])?$|^border-(solid|dashed|dotted|double|hidden|none|collapse|separate|spacing)/,
 };
 
 /**
@@ -319,7 +326,7 @@ const NOT_COLOR: Record<string, RegExp> = {
  */
 function mayBeColor(c: string, property: string, theme: TailwindTheme): boolean {
   const prefix = COLOR_PREFIXES[property];
-  const name = splitClassVariants(c).pop()!;
+  const name = splitClassVariants(c).pop()!.replace(/^!|!$/g, '');
   if (!prefix || !name.startsWith(prefix) || NOT_COLOR[property].test(name)) return false;
   return !(property === 'color' && isFontSizeValue(name.slice(prefix.length), theme));
 }
@@ -385,7 +392,7 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
   const related = overlappingProperties(property);
   const relatedPrefixes = related.flatMap(p => SPACING_PREFIXES[p] || COLOR_PREFIXES[p] || OTHER_PREFIXES[p]
     || (p === 'fontSize' ? 'text-' : []));
-  const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(splitClassVariants(c).pop()!.replace(/^-/, ''));
+  const alsoSets = (c: string) => !!ALSO_SETS[property]?.test(bare(c).replace(/^-/, ''));
   return {
     added: newClass ? [...variants, newClass].join(':') + (upgrade ? ' ' + [...variants, hiding([newClass])].join(':') : '') : '',
     replaces: c => replaces(c) || (upgrade && hidden.includes(c)),
@@ -393,7 +400,7 @@ function planClassEdit(classes: string[], property: string, value: any, breakpoi
     overlaps: c => inScope(c) && ((toggle && valStr === '' && bare(c) === 'hidden')
       || related.some(p => matchesProperty(c, p, theme)) || alsoSets(c) || mayBeColor(c, property, theme)),
     overlapsPartial: start => {
-      const name = splitClassVariants(start).pop()!.replace(/^-/, '');
+      const name = splitClassVariants(start).pop()!.replace(/^!|!$/g, '').replace(/^-/, '');
       return inScope(start) && (relatedPrefixes.some(p => name.startsWith(p)) || alsoSets(start));
     },
   };

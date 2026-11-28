@@ -8,9 +8,11 @@
 
 /**
  * Convert camelCase CSS property to kebab-case.
+ * CSS custom properties (`--brandColor`) preserve their exact casing.
  * e.g. "backgroundColor" → "background-color"
  */
 export function camelToKebab(prop: string): string {
+  if (prop.startsWith('--')) return prop;
   return prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
 }
 
@@ -24,6 +26,8 @@ export function kebabToCamel(prop: string): string {
 
 /**
  * Parse an inline style string into a Record.
+ * Splits declarations on `;` outside quoted strings and parentheses so values
+ * like `url(data:image/png;base64,...)` and `content: "a; b"` stay intact.
  * Input:  "color: red; font-size: 16px"
  * Output: { "color": "red", "font-size": "16px" }
  */
@@ -31,7 +35,32 @@ export function parseInlineStyle(styleStr: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!styleStr || !styleStr.trim()) return result;
 
-  const parts = styleStr.split(';');
+  const parts: string[] = [];
+  let start = 0;
+  let quote: '"' | "'" | null = null;
+  let parenDepth = 0;
+
+  for (let i = 0; i < styleStr.length; i++) {
+    const ch = styleStr[i];
+    if (quote) {
+      if (ch === '\\') {
+        i++;
+      } else if (ch === quote) {
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '(') {
+      parenDepth++;
+    } else if (ch === ')') {
+      if (parenDepth > 0) parenDepth--;
+    } else if (ch === ';' && parenDepth === 0) {
+      parts.push(styleStr.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(styleStr.slice(start));
+
   for (const part of parts) {
     const trimmed = part.trim();
     if (!trimmed) continue;
@@ -47,6 +76,7 @@ export function parseInlineStyle(styleStr: string): Record<string, string> {
 /**
  * Merge new style properties into an existing inline style string.
  * Incoming keys are camelCase (from Design Panel); output is kebab-case.
+ * Empty values remove the corresponding declaration.
  *
  * @param existing - Current style="" value (kebab-case)
  * @param changes  - New properties (camelCase keys from overlay)
@@ -60,7 +90,12 @@ export function mergeInlineStyle(
 
   for (const [camelKey, value] of Object.entries(changes)) {
     const kebabKey = camelToKebab(camelKey);
-    parsed[kebabKey] = value;
+    const normalized = value === undefined || value === null ? '' : String(value).trim();
+    if (!normalized) {
+      delete parsed[kebabKey];
+    } else {
+      parsed[kebabKey] = normalized;
+    }
   }
 
   return Object.entries(parsed)

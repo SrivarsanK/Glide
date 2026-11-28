@@ -46,7 +46,9 @@ function attribute(code: string, id: string, name: string, value: string | true 
     if (!attr) return code;
     let start = attr.loc.start.offset;
     while (start > 0 && /\s/.test(code[start - 1])) start--;
-    return replace(code, start, attr.loc.end.offset, '');
+    const end = attr.loc.end.offset;
+    const sep = start < attr.loc.start.offset && code[end] && !/[\s/>]/.test(code[end]) ? ' ' : '';
+    return replace(code, start, end, sep);
   }
   const text = value === true ? name : `${name}="${escape(typeof value === 'string' ? value : mergeInlineStyle(attr?.value?.content || '', value))}"`;
   if (attr) return replace(code, attr.loc.start.offset, attr.loc.end.offset, text);

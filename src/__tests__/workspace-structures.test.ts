@@ -128,3 +128,15 @@ test('rejects duplicate workspace identity and moving live nodes with workspace-
   expect((await f.run('<aside', { type: 'workspace-position', x: -200, y: 0 })).error).toContain('detached');
   expect(f.read()).toBe(source);
 });
+
+test('rejects grouping a live sibling with a detached workspace object without mutating source', async () => {
+  const f = fixture('const App = () => <main><p>One</p><span>Draft</span><aside>Keep</aside></main>;');
+  expect((await f.run('<span', { type: 'detach', workspaceId: 'draft-1', x: -120, y: 0 })).success).toBe(true);
+  const before = f.read();
+  const result = await f.run('<p', { type: 'group', sources: [f.ref('<p'), f.ref('<span')] });
+  expect(result.success).toBe(false);
+  expect(result.error).toContain('UNSUPPORTED_OPERATION');
+  expect(f.read()).toBe(before);
+  expect(f.read()).toContain('<aside>Keep</aside>');
+  expect(f.read()).not.toContain('<div></div>');
+});

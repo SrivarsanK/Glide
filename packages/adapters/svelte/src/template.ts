@@ -120,7 +120,9 @@ export function setSvelteAttributeAt(code: string, line: number, column: number,
   if (!current) return code;
   let start = current.attribute.start;
   while (start > 0 && /\s/.test(code[start - 1])) start--;
-  return replace(code, start, current.attribute.end, '');
+  const end = current.attribute.end;
+  const sep = start < current.attribute.start && code[end] && !/[\s/>]/.test(code[end]) ? ' ' : '';
+  return replace(code, start, end, sep);
 }
 
 /** Every template element in document order, with the one-based position of its opening tag. */

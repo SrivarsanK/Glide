@@ -86,3 +86,44 @@ test('component tags get no stamp, so a component root keeps the stamp from its 
   expect(stamped).toContain('<Card.Header />');
   expect(stamped).toContain('<plan-list data-gl-source=');
 });
+
+test('stampHTMLTemplate preserves quoted comparisons, raw text, mustache expressions, non-tag prefixes, and mid-file dashes', async () => {
+  const { stampHTMLTemplate } = await import('../../packages/core/src/utils.js');
+
+  // Comparisons and tag-like text inside quoted attributes must never be stamped.
+  const vue = [
+    '<template>',
+    '  <div v-if="a<b" title="<email>">',
+    '    <input placeholder="<your-email>">',
+    '    <span>{{ a<b ? "ok" : "no" }}</span>',
+    '    <textarea><p>raw</p></textarea>',
+    '    <p>a<foo_bar</p>',
+    '---',
+    '    <section>between dashes</section>',
+    '---',
+    '  </div>',
+    '</template>',
+  ].join('\n');
+  const stampedVue = stampHTMLTemplate(vue, 'src/App.vue');
+  expect(stampedVue).toContain('<div data-gl-source="src/App.vue:2:3" v-if="a<b" title="<email>">');
+  expect(stampedVue).toContain('<input data-gl-source="src/App.vue:3:5" placeholder="<your-email>">');
+  expect(stampedVue).toContain('<span data-gl-source="src/App.vue:4:5">{{ a<b ? "ok" : "no" }}</span>');
+  expect(stampedVue).toContain('<textarea data-gl-source="src/App.vue:5:5"><p>raw</p></textarea>');
+  expect(stampedVue).toContain('<p data-gl-source="src/App.vue:6:5">a<foo_bar</p>');
+  expect(stampedVue).toContain('<section data-gl-source="src/App.vue:8:5">between dashes</section>');
+
+  // Opening tags longer than 500 chars that already have data-gl-source must not be double-stamped.
+  const longClass = 'a'.repeat(550);
+  const alreadyStamped = `<div class="${longClass}" data-gl-source="src/App.vue:1:1">Hi</div>`;
+  expect(stampHTMLTemplate(alreadyStamped, 'src/App.vue')).toBe(alreadyStamped);
+
+  // Self-closing <script /> must not swallow the rest of the template.
+  const selfClosingScript = '<script src="/a.js" />\n<main>Hi</main>';
+  expect(stampHTMLTemplate(selfClosingScript, 'index.html')).toContain('<main data-gl-source="index.html:2:1">Hi</main>');
+
+  // Svelte block expressions with `<` must not be stamped.
+  const svelte = '{#if a<b}\n  <p>ok</p>\n{/if}';
+  const stampedSvelte = stampHTMLTemplate(svelte, 'src/App.svelte');
+  expect(stampedSvelte).toContain('{#if a<b}');
+  expect(stampedSvelte).toContain('<p data-gl-source="src/App.svelte:2:3">ok</p>');
+});

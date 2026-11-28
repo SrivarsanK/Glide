@@ -107,3 +107,13 @@ test('review fixes: raw text, escaping, name case, see-through wrappers, referen
   expect(set('index.html', '<a>Go</a>\n', '<a', 'href', '/search?a=1&b=2')).toContain('href="/search?a=1&amp;b=2"');
   expect(() => set('index.html', '<div id=hero></div>\n<a>Go</a>\n', '<a', 'id', 'hero')).toThrow(/already used/);
 });
+
+test('removing a tightly-adjacent attribute preserves separating whitespace in Astro, HTML, Vue and Svelte', () => {
+  expect(set('Page.astro', '<div id="a"class="b">Hi</div>\n', '<div', 'id', null)).toBe('<div class="b">Hi</div>\n');
+  expect(set('index.html', '<button disabled id="a"class="b">Hi</button>\n', '<button', 'id', null))
+    .toBe('<button disabled class="b">Hi</button>\n');
+  expect(set('App.vue', '<template>\n  <button disabled id="a"class="b">Hi</button>\n</template>\n', '<button', 'id', null))
+    .toBe('<template>\n  <button disabled class="b">Hi</button>\n</template>\n');
+  expect(set('App.svelte', '<button disabled id="a"class="b">Hi</button>\n', '<button', 'id', null))
+    .toBe('<button disabled class="b">Hi</button>\n');
+});

@@ -49,6 +49,29 @@ function closeBrace(code: string, open: number): number {
   return invalid();
 }
 
+/** Decode HTML character references in a single pass so `&amp;quot;` becomes `&quot;`, not `"`. */
+function decodeHtmlEntities(raw: string): string {
+  if (!raw.includes('&')) return raw;
+  return raw.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g, (match, dec, hex, named) => {
+    if (dec !== undefined) {
+      const cp = Number.parseInt(dec, 10);
+      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : match;
+    }
+    if (hex !== undefined) {
+      const cp = Number.parseInt(hex, 16);
+      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : match;
+    }
+    switch (named) {
+      case 'quot': return '"';
+      case 'apos': return "'";
+      case 'lt': return '<';
+      case 'gt': return '>';
+      case 'amp': return '&';
+      default: return match;
+    }
+  });
+}
+
 function readTag(code: string, start: number, anyName = false): Tag {
   const name = /^<([a-zA-Z][a-zA-Z0-9.-]*)/.exec(code.slice(start, start + 80))?.[1] ?? invalid();
   if (!anyName && !/^[a-z][a-z0-9-]*$/.test(name)) throw new Error('UNSUPPORTED_OPERATION: Components are edited where they are defined. Select an HTML element.');
@@ -71,14 +94,14 @@ function readTag(code: string, start: number, anyName = false): Tag {
       if (quote === '"' || quote === "'") {
         const close = code.indexOf(quote, i + 1);
         if (close < 0) invalid();
-        value = code.slice(i + 1, close);
+        value = decodeHtmlEntities(code.slice(i + 1, close));
         i = close + 1;
       } else if (quote === '{') { dynamic = true; i = closeBrace(code, i); }
       else if (quote === '`') { dynamic = true; i = code.indexOf('`', i + 1) + 1 || invalid(); }
       else {
         const valueStart = i;
         while (i < code.length && !/[\s>]/.test(code[i])) i++;
-        value = code.slice(valueStart, i);
+        value = decodeHtmlEntities(code.slice(valueStart, i));
       }
     }
     attributes.push({ name: attributeName, start: attributeStart, end: i, value, dynamic });
@@ -196,7 +219,8 @@ export function setAstroAttributeAt(code: string, line: number, column: number, 
   if (!current) return code;
   let start = current.start;
   while (start > 0 && /\s/.test(code[start - 1])) start--;
-  return checked(code, code.slice(0, start) + code.slice(current.end));
+  const sep = start < current.start && code[current.end] && !/[\s/>]/.test(code[current.end]) ? ' ' : '';
+  return checked(code, code.slice(0, start) + sep + code.slice(current.end));
 }
 
 /** Every stamped template element in document order, with the one-based position of its opening tag. */
@@ -215,7 +239,8 @@ export function setAstroClassAt(code: string, line: number, column: number, clas
 }
 
 export function setAstroStyleAt(code: string, line: number, column: number, styles: Record<string, string>): string {
-  return setAttribute(code, line, column, 'style', current => mergeInlineStyle(current, styles));
+  return setAttribute(code, line, column, 'style', current => mergeInlineStyle(current, styles),
+    text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;'));
 }
 
 /** Replace the text of an element whose only content is literal text. In plain HTML, braces are literal text. */
