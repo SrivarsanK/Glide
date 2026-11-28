@@ -125,9 +125,16 @@ try {
     });
     result.socketEditorHost = await socket(`ws://127.0.0.1:${port}/__glide/ws`);
     result.socketAppHost = await socket(`ws://localhost:${port}/__glide/ws`);
+    // Embedding the app root on the editor's loopback IP must redirect back to localhost, never executing on 127.0.0.1.
+    result.nestedOrigin = await new Promise(resolve => {
+      const iframe = document.createElement('iframe');
+      iframe.src = `http://127.0.0.1:${port}/`;
+      iframe.onload = () => { try { resolve(iframe.contentWindow.location.origin); } catch { resolve('cross-origin'); } iframe.remove(); };
+      document.body.appendChild(iframe);
+    });
     return result;
   }, port);
-  assert.deepEqual(attack, { parentDocument: false, ownOrigin: null, editorOrigin: null, socketEditorHost: 'refused', socketAppHost: 'refused' });
+  assert.deepEqual(attack, { parentDocument: false, ownOrigin: null, editorOrigin: null, socketEditorHost: 'refused', socketAppHost: 'refused', nestedOrigin: `http://localhost:${port}` });
   console.log('PASS: app scripts cannot read the editor page, fetch the token, or open the editor socket');
   assert.deepEqual(errors, [], 'no browser errors');
   console.log('PASS: no browser errors');

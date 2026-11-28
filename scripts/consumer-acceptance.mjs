@@ -328,10 +328,10 @@ try {
   // The shape is in flow, so a transform (not `top`) is what moves it.
   const restingShape = await shape.boundingBox();
   await shape.evaluate(el => { el.style.transform = 'translateY(35px)'; });
-  await page.waitForFunction(() => {
-    const element = document.getElementById('app-iframe').contentDocument.querySelector('main > div');
-    return selectedRect && Math.abs(selectedRect.y - element.getBoundingClientRect().top) < 1;
-  });
+  const shapeTop = await shape.evaluate(el => el.getBoundingClientRect().top);
+  await page.waitForFunction(expectedTop => {
+    return selectedRect && Math.abs(selectedRect.y - expectedTop) < 1;
+  }, shapeTop);
   const actualShape = await shape.boundingBox();
   assert.ok(actualShape.y - restingShape.y > 10, 'The pending-save check must move the shape');
   const outlineRect = page.locator('#selection-group rect').first();

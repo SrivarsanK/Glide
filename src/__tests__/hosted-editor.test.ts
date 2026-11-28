@@ -64,15 +64,18 @@ function open(url: string, origin: string): Promise<WebSocket & { first: Promise
 }
 
 test('attached to a dev server, Glide serves only its own paths and leaves the app to the server', async () => {
-  const { origin } = await devServer();
+  const { origin, app, port } = await devServer();
   const editor = await get(origin + '/__glide/');
   expect(editor.status).toBe(200);
   expect(editor.body).toContain("window.location.host + \"/__glide/ws\"");
   expect(editor.body).toContain('var appBase = "";');
   expect((await get(origin + '/__glide')).status).toBe(200);
   expect((await get(origin + '/__glide_assets__/lucide.js')).status).toBe(200);
-  expect(await get(origin + '/')).toMatchObject({ status: 200, body: 'app' });
-  expect(await get(origin + '/src/App.tsx')).toMatchObject({ status: 200, body: 'app' });
+  // App routes live on the app's "localhost" origin; requesting them on the loopback-IP editor origin redirects away.
+  expect(await get(app + '/')).toMatchObject({ status: 200, body: 'app' });
+  expect(await get(app + '/src/App.tsx')).toMatchObject({ status: 200, body: 'app' });
+  expect(await get(origin + '/')).toMatchObject({ status: 302, location: `http://localhost:${port}/` });
+  expect(await get(origin + '/src/App.tsx')).toMatchObject({ status: 302, location: `http://localhost:${port}/src/App.tsx` });
   expect((await get(origin + '/__glide/unknown')).status).toBe(404);
   expect((await get(origin + '/__glide/', { Host: 'evil.test' })).status).toBe(403);
 });
@@ -193,7 +196,55 @@ test('attached to a dev server with CORS middleware, Glide strips Access-Control
   expect(asset.status).toBe(200);
   expect(asset.headers['access-control-allow-origin']).toBeUndefined();
 
-  const appRoute = await get(origin + '/App.tsx', { Origin: appOrigin });
+  const appRoute = await get(appOrigin + '/App.tsx', { Origin: appOrigin });
   expect(appRoute.status).toBe(200);
   expect(appRoute.headers['access-control-allow-origin']).toBe(appOrigin);
+
+  // App route on the editor's loopback-IP origin redirects to localhost and strips CORS headers.
+  const editorHostAppRoute = await get(origin + '/App.tsx', { Origin: appOrigin });
+  expect(editorHostAppRoute.status).toBe(302);
+  expect(editorHostAppRoute.location).toBe(`${appOrigin}/App.tsx`);
+  expect(editorHostAppRoute.headers['access-control-allow-origin']).toBeUndefined();
+});
+
+test('standalone Glide isolates the editor shell on loopback IP from proxied app routes on localhost', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-standalone-iso-'));
+  fs.writeFileSync(path.join(root, 'App.tsx'), 'export const App = () => <main>A</main>;\n');
+  const upstream = createServer((_req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<html><body>app</body></html>'); });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const targetPort = (upstream.address() as any).port as number;
+  const glide = new GlideServer(0, targetPort, DEFAULT_CONFIG, root);
+  await glide.start();
+  const port = ((glide as any).server.address() as any).port as number;
+  cleanups.push(() => { fs.rmSync(root, { recursive: true, force: true }); });
+  cleanups.push(() => new Promise<void>(resolve => { upstream.closeAllConnections(); upstream.close(() => resolve()); }));
+  cleanups.push(() => glide.stop());
+
+  const origin = `http://127.0.0.1:${port}`;
+  const app = `http://localhost:${port}`;
+
+  // Editor shell asked for on "localhost" redirects to loopback IP without exposing the session token.
+  const byName = await get(app + '/');
+  expect(byName.status).toBe(302);
+  expect(byName.location).toBe(`${origin}/`);
+  expect(byName.body).not.toContain('token');
+
+  // Editor shell on loopback IP serves the editor pointing its preview iframe to localhost.
+  const shell = await get(origin + '/');
+  expect(shell.status).toBe(200);
+  expect(shell.body).toContain("appBase = window.location.protocol + '//localhost'");
+
+  // Proxied app routes requested on loopback IP redirect to localhost so app scripts cannot share the editor origin.
+  const proxyOnIp = await get(origin + '/__glide_proxy__/');
+  expect(proxyOnIp.status).toBe(302);
+  expect(proxyOnIp.location).toBe(`${app}/__glide_proxy__/`);
+
+  // Proxied app routes on localhost work normally.
+  const proxyOnLocalhost = await get(app + '/__glide_proxy__/');
+  expect(proxyOnLocalhost.status).toBe(200);
+  expect(proxyOnLocalhost.body).toContain('app');
+
+  // Editor WebSocket on localhost (app origin) is refused even with valid origin.
+  await expect(open(app.replace('http', 'ws') + '/', app)).rejects.toThrow();
+  await expect(open(origin.replace('http', 'ws') + '/', app)).rejects.toThrow();
 });

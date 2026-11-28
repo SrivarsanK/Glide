@@ -6056,9 +6056,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // Hosted by the dev server, the app is on this origin and needs no proxy prefix.
             var appBase = ${JSON.stringify(appBase)};
-            // Hosted on a loopback address, the app runs on "localhost": another origin, so its scripts cannot reach the editor.
-            if (${JSON.stringify(!!options.hosted)} && /^(127\\.0\\.0\\.1|\\[::1\\])$/.test(window.location.hostname)) {
-              appBase = window.location.protocol + '//localhost' + (window.location.port ? ':' + window.location.port : '');
+            // Served on a loopback IP, the app runs on "localhost": another origin, so its scripts cannot reach the editor.
+            if (/^(127\\.0\\.0\\.1|\\[::1\\])$/.test(window.location.hostname)) {
+              appBase = window.location.protocol + '//localhost' + (window.location.port ? ':' + window.location.port : '') + appBase;
             }
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -6068,9 +6068,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 proxyUrl = appBase + (parsed.pathname || '/');
                 if (parsed.search) proxyUrl += parsed.search;
               } catch(e) { proxyUrl = appBase + '/'; }
-            } else if (!appBase || !url.startsWith(appBase)) {
-              // Relative path — prefix with proxy base
-              proxyUrl = appBase + '/' + (url.startsWith('/') ? url.slice(1) : url);
+            } else {
+              var relPath = (!${JSON.stringify(!!options.hosted)} && url.startsWith('/__glide_proxy__'))
+                ? (url.slice('/__glide_proxy__'.length) || '/')
+                : url;
+              if (!appBase || !relPath.startsWith(appBase)) {
+                // Relative path — prefix with proxy base
+                proxyUrl = appBase + '/' + (relPath.startsWith('/') ? relPath.slice(1) : relPath);
+              } else {
+                proxyUrl = relPath;
+              }
             }
 
             // Sync text input to normalized URL if user typed pure port or full URL

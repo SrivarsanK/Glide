@@ -396,7 +396,7 @@ export function buildGlideBridgeInlineScript(cfg: GlideConfig): string {
 
   // Parent can also request a fresh tree at any time (e.g. after iframe reload)
   window.addEventListener('message', function(e) {
-    if (!(${trustedWindowMessage.toString()})(e, window.parent, document.referrer)) return;
+    if (!(${trustedWindowMessage.toString()})(e, window.parent, (window.location.ancestorOrigins && window.location.ancestorOrigins[0]) || document.referrer || window.location.origin)) return;
     if (!e.data || !e.data.type) return;
     if (e.data.type === 'glide:set-interaction-mode') {
       interactionMode = !!e.data.enabled;
@@ -1008,18 +1008,17 @@ export class GlideServer {
     await this.start();
     // The glide command writes the component registry itself; attached, nothing else would.
     this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
-    return (req, res, next) => this.requestHandler!(req, res, next);
+    return (req, res, next) => this.requestHandler ? this.requestHandler(req, res, next) : next();
   }
 
-  /** The port browsers reach Glide on: its own server's, or the dev server's when attached. */
   /**
-   * Attached to a dev server, the editor answers only on the loopback IP (127.0.0.1 or [::1])
-   * and the preview loads the app from "localhost". The two are different origins, so scripts
-   * in the app cannot read the editor page or its session token. A remoteAccess configuration
-   * names its own hosts and keeps one origin.
+   * Without remoteAccess, the editor answers only on the loopback IP (127.0.0.1 or [::1])
+   * and the preview loads the app from "localhost" in both hosted and standalone modes.
+   * The two are different origins, so scripts in the app cannot read the editor page or
+   * its session token. A remoteAccess configuration names its own hosts and keeps one origin.
    */
   private isolated(): boolean {
-    return !!this.hosted && !this.config.remoteAccess;
+    return !this.config.remoteAccess;
   }
 
   private mcpRunFile(): string {
@@ -1139,23 +1138,41 @@ export class GlideServer {
       try {
         this.history.setLimit(this.config.historyLimit);
 
+        const stripCorsHeaders = (res: ServerResponse) => {
+          res.removeHeader('Access-Control-Allow-Origin');
+          res.removeHeader('Access-Control-Allow-Credentials');
+          res.removeHeader('Access-Control-Allow-Headers');
+          res.removeHeader('Access-Control-Allow-Methods');
+          res.removeHeader('Access-Control-Expose-Headers');
+        };
+        const redirectAppToLocalhost = (req: IncomingMessage, res: ServerResponse, rawUrl: string, port: number) => {
+          const scheme = (req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http';
+          const safeUrl = rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? rawUrl : '/';
+          stripCorsHeaders(res);
+          res.writeHead(302, { Location: `${scheme}://localhost:${port}${safeUrl}`, 'Cache-Control': 'no-store' });
+          res.end();
+        };
+
         this.requestHandler = (req, res, next) => {
           const url = req.url || '/';
           const pathname = new URL(url, 'http://localhost').pathname;
-          // Attached, Glide answers only its own paths; the dev server handles the rest.
+          const port = this.servedPort();
+          // Attached, Glide answers only its own paths; the dev server handles the rest —
+          // except on the loopback-IP editor origin, where app routes redirect to "localhost"
+          // so app scripts can never execute inside the editor's origin and read sessionToken.
           if (this.hosted && next && !pathname.startsWith('/__glide/') && pathname !== '/__glide'
             && !pathname.startsWith('/__glide_assets__/')) {
+            if (this.isolated() && loopbackLiteral(req.headers.host)) {
+              redirectAppToLocalhost(req, res, url, port);
+              return;
+            }
             next();
             return;
           }
           if (this.hosted) {
             // Never inherit host dev-server CORS headers (Vite 8 runs corsMiddleware before
             // configureServer hooks) on Glide's editor, MCP, or asset routes.
-            res.removeHeader('Access-Control-Allow-Origin');
-            res.removeHeader('Access-Control-Allow-Credentials');
-            res.removeHeader('Access-Control-Allow-Headers');
-            res.removeHeader('Access-Control-Allow-Methods');
-            res.removeHeader('Access-Control-Expose-Headers');
+            stripCorsHeaders(res);
           }
           // The MCP route checks for itself: no Origin (so no browser) and the run file's token. The bridge
           // uses the run file's loopback address, which a remoteAccess host list may not include.
@@ -1167,7 +1184,6 @@ export class GlideServer {
             });
             return;
           }
-          const port = this.servedPort();
           if (!trustedRequest(req, port, this.config.remoteAccess)) {
             res.writeHead(403);
             res.end('Request origin or host is not allowed.');
@@ -1196,7 +1212,8 @@ export class GlideServer {
               const local = (req.socket.localAddress || '127.0.0.1').replace(/^::ffff:/, '');
               const address = local.includes(':') ? '[::1]' : '127.0.0.1';
               const scheme = (req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http';
-              res.writeHead(302, { Location: `${scheme}://${address}:${port}/__glide/`, 'Cache-Control': 'no-store' });
+              const targetPath = this.hosted ? '/__glide/' : '/';
+              res.writeHead(302, { Location: `${scheme}://${address}:${port}${targetPath}`, 'Cache-Control': 'no-store' });
               res.end();
               return;
             }
@@ -1208,6 +1225,12 @@ export class GlideServer {
           if (this.hosted) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end('Not found.');
+            return;
+          }
+
+          // Standalone mode: never serve proxied app content on the loopback-IP editor origin.
+          if (this.isolated() && loopbackLiteral(req.headers.host)) {
+            redirectAppToLocalhost(req, res, url, port);
             return;
           }
 
@@ -1267,6 +1290,8 @@ export class GlideServer {
           // ── WebSocket routing: the editor's socket, or the dev server's (HMR) ──
           this.server!.on('upgrade', (req, socket, head) => {
             if (!isDevServerUpgrade(req)) {
+              // The app's origin ("localhost") gets no editor socket, even with a token.
+              if (this.isolated() && !loopbackLiteral(req.headers.host)) { socket.destroy(); return; }
               this.wss?.handleUpgrade(req, socket, head, ws => this.wss?.emit('connection', ws, req));
               return;
             }
@@ -1713,6 +1738,7 @@ export class GlideServer {
   }
 
   public async stop(): Promise<void> {
+    this.requestHandler = null;
     try { fs.rmSync(this.mcpRunFile(), { force: true }); } catch {}
     // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
     if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
