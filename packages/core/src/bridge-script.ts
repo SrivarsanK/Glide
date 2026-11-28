@@ -1577,8 +1577,10 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
       }
     });
   }
-  function holdsOnly(el, node) {
-    return node ? el.childNodes.length === 1 && el.firstChild === node : el.childNodes.length === 0;
+  /** The element still shows only the preview: the page has neither replaced its node nor written new text into it. */
+  function showsPreview(el, entry) {
+    var node = entry.node;
+    return node ? el.childNodes.length === 1 && el.firstChild === node && node.nodeValue === entry.value : el.childNodes.length === 0;
   }
   /** Drops the previews made up to `upTo`; a newer preview waits for its own save. */
   function clearOptimistic(upTo, saved) {
@@ -1590,10 +1592,10 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     optimisticTexts.forEach(function(entry, el) {
       if (entry.seq > upTo) return;
       optimisticTexts.delete(el);
-      // Put the page's own text nodes back unless it already replaced the preview. After a save, only several
+      // Put the page's own text nodes back unless it already replaced or rewrote the preview. After a save, only several
       // nodes need it: a framework keeps writing to those even while detached, but writes a lone text into
       // whatever single text node is there, which already holds the saved text.
-      if (holdsOnly(el, entry.node) && (!saved || entry.nodes.length > 1)) {
+      if (showsPreview(el, entry) && (!saved || entry.nodes.length > 1)) {
         el.textContent = '';
         entry.nodes.forEach(function(n) { el.appendChild(n); });
       }
@@ -1660,11 +1662,12 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
           var textEntry = null;
           if (e.data.type === 'glide:optimistic-text') {
             textEntry = optimisticTexts.get(el);
-            if (!textEntry || !holdsOnly(el, textEntry.node)) textEntry = { nodes: Array.prototype.slice.call(el.childNodes) };
+            if (!textEntry || !showsPreview(el, textEntry)) textEntry = { nodes: Array.prototype.slice.call(el.childNodes) };
           }
           el.textContent = e.data.value;
           if (textEntry) {
             textEntry.node = el.firstChild;
+            textEntry.value = el.firstChild ? el.firstChild.nodeValue : '';
             textEntry.seq = ++optimisticSeq;
             optimisticTexts.set(el, textEntry);
           }

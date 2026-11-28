@@ -599,5 +599,11 @@ describe('Bridge Script Syntax & Integrity', () => {
     send({ type: 'glide:clear-optimistic', settle: false });
     expect(nodes[0]).toBe(pageNode);
     expect(el.textContent).toBe('New title');
+
+    // Text the page writes into the preview's own node survives a refused save.
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'Draft' });
+    nodes[0].nodeValue = 'Current';
+    send({ type: 'glide:clear-optimistic', settle: false });
+    expect(el.textContent).toBe('Current');
   });
 });
