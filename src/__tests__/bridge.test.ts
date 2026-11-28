@@ -498,4 +498,112 @@ describe('Bridge Script Syntax & Integrity', () => {
       (winListeners.message || []).forEach(fn => fn({ source: parentWindow, origin: 'http://localhost:5173', data }));
     }
   });
+
+  test('Instant previews never touch the page-owned style attribute and end with their save', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    const winListeners: Record<string, Function[]> = {};
+    const attrs = new Map<string, string>([['data-gl-source', 'src/App.tsx:1:1']]);
+    const pageNodes = [{ nodeType: 3, nodeValue: 'You clicked ' }, { nodeType: 3, nodeValue: '0' }, { nodeType: 3, nodeValue: ' times' }];
+    let nodes: any[] = pageNodes.slice();
+    const el: any = {
+      nodeType: 1, tagName: 'P', className: 'copy', isConnected: true, children: [], parentNode: null,
+      style: { color: '' },
+      get childNodes() { return nodes; },
+      get firstChild() { return nodes[0] || null; },
+      get textContent() { return nodes.map(n => n.nodeValue).join(''); },
+      set textContent(value: string) { nodes = value ? [{ nodeType: 3, nodeValue: value }] : []; },
+      appendChild(node: any) { nodes.push(node); return node; },
+      addEventListener() {}, removeEventListener() {},
+      getAttribute: (a: string) => attrs.get(a) ?? null, hasAttribute: (a: string) => attrs.has(a),
+      setAttribute: (a: string, v: string) => attrs.set(a, v), removeAttribute: (a: string) => attrs.delete(a),
+      closest: () => el,
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }),
+    };
+    const rules: any[] = [];
+    const sheet = {
+      cssRules: rules,
+      insertRule(text: string, index: number) { const decls: Record<string, string> = {}; rules.splice(index, 0, { text, decls, style: { setProperty: (n: string, v: string, p: string) => { decls[n] = v + ' !' + p; } } }); return index; },
+      deleteRule(index: number) { rules.splice(index, 1); },
+    };
+    let styleNode: any = null;
+    const timers: Function[] = [];
+    const parentWindow = { postMessage: () => {} };
+    const sandbox: any = {
+      window: {
+        __glide_initialized__: false, get top() { return {}; }, parent: parentWindow,
+        location: { href: 'http://localhost:5173/', ancestorOrigins: ['http://localhost:5173'] },
+        addEventListener: (ev: string, fn: Function) => { (winListeners[ev] ||= []).push(fn); },
+        removeEventListener: () => {},
+        getComputedStyle: () => ({ position: 'static', transform: 'none' }),
+        getSelection: () => null,
+      },
+      document: {
+        head: { appendChild: (node: any) => { styleNode = node; } }, referrer: 'http://localhost:5173/',
+        createElement: () => ({ id: '', textContent: '', appendChild: () => {}, sheet }),
+        getElementById: (id: string) => (styleNode && styleNode.id === id ? styleNode : null),
+        addEventListener: () => {},
+        readyState: 'complete',
+        body: { tagName: 'BODY', children: [el], querySelectorAll: () => [el] },
+        documentElement: { tagName: 'HTML', setAttribute: () => {}, removeAttribute: () => {} },
+        querySelectorAll: () => [el], querySelector: () => el,
+      },
+      URL, Set, Map, setTimeout: (fn: Function) => timers.push(fn), clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {},
+      requestAnimationFrame: () => 1, cancelAnimationFrame: () => {}, Math, String, Number, Boolean, Array, Object, parseInt, isFinite, console,
+    };
+    el.parentNode = sandbox.document.body;
+    sandbox.window.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
+    new vm.Script(scriptCode).runInContext(vm.createContext(sandbox));
+    timers.length = 0;
+    const send = (data: any) => (winListeners.message || []).forEach(fn => fn({ source: parentWindow, origin: 'http://localhost:5173', data }));
+
+    // The preview is a stylesheet rule; the element's own style is left to the page.
+    send({ type: 'glide:optimistic-style', id: 'src/App.tsx:1:1', styles: { paddingTop: '12px' } });
+    expect(el.style).toEqual({ color: '' });
+    const id = attrs.get('data-glide-optimistic');
+    expect(rules).toHaveLength(1);
+    expect(rules[0].text).toBe('[data-glide-optimistic="' + id + '"]{}');
+    expect(rules[0].decls).toEqual({ 'padding-top': '12px !important' });
+
+    // A refused save drops the preview at once.
+    send({ type: 'glide:clear-optimistic', settle: false });
+    expect(attrs.has('data-glide-optimistic')).toBe(false);
+    expect(rules).toHaveLength(0);
+
+    // A saved text preview ends after the page re-renders, and puts back the page's own text nodes.
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'Edited' });
+    expect(el.textContent).toBe('Edited');
+    send({ type: 'glide:clear-optimistic', settle: true });
+    expect(el.textContent).toBe('Edited');
+    timers.forEach(fn => fn());
+    expect(nodes).toEqual(pageNodes);
+    expect(nodes[1]).toBe(pageNodes[1]);
+
+    // Text the page already re-rendered over the preview stays.
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'Draft' });
+    el.textContent = 'Saved by the page';
+    send({ type: 'glide:clear-optimistic', settle: false });
+    expect(el.textContent).toBe('Saved by the page');
+
+    // A lone text node: React writes the saved text into the preview's node in place, and it must stay.
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'New title' });
+    nodes[0].nodeValue = 'New title';
+    timers.length = 0;
+    send({ type: 'glide:clear-optimistic', settle: true });
+    timers.forEach(fn => fn());
+    expect(el.textContent).toBe('New title');
+
+    // A refused edit of a lone text node puts the page's node back.
+    const pageNode = nodes[0];
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'Refused' });
+    send({ type: 'glide:clear-optimistic', settle: false });
+    expect(nodes[0]).toBe(pageNode);
+    expect(el.textContent).toBe('New title');
+
+    // Text the page writes into the preview's own node survives a refused save.
+    send({ type: 'glide:optimistic-text', source: 'src/App.tsx:1:1', value: 'Draft' });
+    nodes[0].nodeValue = 'Current';
+    send({ type: 'glide:clear-optimistic', settle: false });
+    expect(el.textContent).toBe('Current');
+  });
 });

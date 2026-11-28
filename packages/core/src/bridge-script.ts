@@ -1552,6 +1552,64 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     return null;
   }
 
+  // Instant-mode previews live in a stylesheet, not in the element's style attribute: the page owns that
+  // attribute, and once a save re-renders it, restoring an old inline value would overwrite the saved one.
+  var optimisticStyles = new Map();
+  var optimisticTexts = new Map();
+  var optimisticSeq = 0;
+  var optimisticSettle = null;
+  function renderOptimisticStyles() {
+    var node = document.getElementById('__glide_optimistic__');
+    if (!node) {
+      if (!optimisticStyles.size) return;
+      node = document.createElement('style');
+      node.id = '__glide_optimistic__';
+      (document.head || document.documentElement).appendChild(node);
+    }
+    var sheet = node.sheet;
+    if (!sheet) return;
+    while (sheet.cssRules.length) sheet.deleteRule(0);
+    optimisticStyles.forEach(function(entry) {
+      var rule = sheet.cssRules[sheet.insertRule('[data-glide-optimistic="' + entry.id + '"]{}', sheet.cssRules.length)];
+      for (var prop in entry.styles) {
+        var name = prop.indexOf('-') === -1 ? prop.replace(/[A-Z]/g, function(c) { return '-' + c.toLowerCase(); }) : prop;
+        rule.style.setProperty(name, entry.styles[prop], 'important');
+      }
+    });
+  }
+  /** The element still shows only the preview: the page has neither replaced its node nor written new text into it. */
+  function showsPreview(el, entry) {
+    var node = entry.node;
+    return node ? el.childNodes.length === 1 && el.firstChild === node && node.nodeValue === entry.value : el.childNodes.length === 0;
+  }
+  /** Drops the previews made up to `upTo`; a newer preview waits for its own save. */
+  function clearOptimistic(upTo, saved) {
+    optimisticStyles.forEach(function(entry, el) {
+      if (entry.seq > upTo) return;
+      optimisticStyles.delete(el);
+      el.removeAttribute('data-glide-optimistic');
+    });
+    optimisticTexts.forEach(function(entry, el) {
+      if (entry.seq > upTo) return;
+      optimisticTexts.delete(el);
+      // Put the page's own text nodes back unless it already replaced or rewrote the preview. After a save, only several
+      // nodes need it: a framework keeps writing to those even while detached, but writes a lone text into
+      // whatever single text node is there, which already holds the saved text.
+      if (showsPreview(el, entry) && (!saved || entry.nodes.length > 1)) {
+        el.textContent = '';
+        entry.nodes.forEach(function(n) { el.appendChild(n); });
+      }
+    });
+    renderOptimisticStyles();
+  }
+  function settleOptimistic() {
+    if (!optimisticSettle) return;
+    clearTimeout(optimisticSettle.timer);
+    var settled = optimisticSettle;
+    optimisticSettle = null;
+    clearOptimistic(settled.upTo, settled.saved);
+  }
+
   window.addEventListener('message', function(e) {
     // The editor may have another origin than this page. The referrer names it only until
     // the page navigates; ancestorOrigins names the embedding page for the whole session.
@@ -1601,20 +1659,42 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
         if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
           el.value = e.data.value;
         } else if (!el.children || el.children.length === 0) {
+          var textEntry = null;
+          if (e.data.type === 'glide:optimistic-text') {
+            textEntry = optimisticTexts.get(el);
+            if (!textEntry || !showsPreview(el, textEntry)) textEntry = { nodes: Array.prototype.slice.call(el.childNodes) };
+          }
           el.textContent = e.data.value;
+          if (textEntry) {
+            textEntry.node = el.firstChild;
+            textEntry.value = el.firstChild ? el.firstChild.nodeValue : '';
+            textEntry.seq = ++optimisticSeq;
+            optimisticTexts.set(el, textEntry);
+          }
         }
       }
     }
     if (e.data.type === 'glide:optimistic-style') {
       var el = resolveElementById(e.data.id || e.data.sourceId || e.data.source);
       if (el) {
+        var entry = optimisticStyles.get(el) || { id: String(++optimisticSeq), styles: {} };
         var styles = e.data.styles || {};
         for (var prop in styles) {
-          if (styles.hasOwnProperty(prop)) {
-            el.style[prop] = styles[prop];
-          }
+          if (styles.hasOwnProperty(prop)) entry.styles[prop] = styles[prop];
         }
+        entry.seq = ++optimisticSeq;
+        optimisticStyles.set(el, entry);
+        el.setAttribute('data-glide-optimistic', entry.id);
+        renderOptimisticStyles();
       }
+    }
+    // A failed save drops its previews now. A saved one waits for the page to re-render from source, which
+    // can not be told apart from other page updates: the next one, or a second, whichever comes first.
+    if (e.data.type === 'glide:clear-optimistic') {
+      if (optimisticSettle) clearTimeout(optimisticSettle.timer);
+      optimisticSettle = { upTo: optimisticSeq, saved: !!e.data.settle, timer: null };
+      if (e.data.settle) optimisticSettle.timer = setTimeout(settleOptimistic, 1000);
+      else settleOptimistic();
     }
     if (e.data.type === 'glide:preview-style') {
       var pid = e.data.sourceId || e.data.source || e.data.id;
@@ -1910,13 +1990,14 @@ export function glideBridge(snapThresholdPx, trustedWindowMessage, createFrameQu
     var observer = new MutationObserver(function(records) {
       var relevant = false;
       records.forEach(function(record) {
-        if (record.type === 'attributes' && (record.attributeName === '__GLIDE_HOVER_ATTR__' || record.attributeName === '__GLIDE_SELECTED_ATTR__' || record.attributeName === 'data-glide-design-mode')) return;
+        if (record.type === 'attributes' && (record.attributeName === '__GLIDE_HOVER_ATTR__' || record.attributeName === '__GLIDE_SELECTED_ATTR__' || record.attributeName === 'data-glide-design-mode' || record.attributeName === 'data-glide-optimistic')) return;
         var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
         if (target && ((target.id || '').indexOf('__glide_') === 0 || (target.closest && target.closest('[data-glide-bridge]')))) return;
         relevant = true;
         if (record.type !== 'attributes' || record.attributeName === '__GLIDE_SOURCE_ATTR__' || record.attributeName === 'class' || record.attributeName === 'data-gl-name') treeDirty = true;
         if (rendersSource(record)) stampsDirty = true;
       });
+      if (relevant && optimisticSettle) settleOptimistic();
       if (!relevant || mutationFrame !== null) return;
       mutationFrame = requestAnimationFrame(function() {
         mutationFrame = null;
