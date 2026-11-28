@@ -743,20 +743,23 @@ function proxyToDevServer(
       // Buffer HTML so we can inject
       const chunks: Buffer[] = [];
       proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+      proxyRes.on('error', () => { if (!res.writableEnded) res.destroy(); });
+      proxyRes.on('aborted', () => { if (!res.writableEnded) res.destroy(); });
       proxyRes.on('end', () => {
+        if (res.headersSent || res.writableEnded || res.destroyed) return;
         let html = Buffer.concat(chunks).toString('utf-8');
         // Replace absolute target server URLs with proxy base
         const absTargetPattern = new RegExp(`http://(?:localhost|127\\.0\\.0\\.1):${targetPort}/`, 'g');
         html = html.replace(absTargetPattern, '/__glide_proxy__/');
 
-        // Fix relative asset paths → prefix with proxy base
+        // Fix relative asset paths → prefix with proxy base (without double-prefixing)
         html = html
-          .replace(/(src|href|action)="(?!\/\/)\//g, '$1="/__glide_proxy__/')
-          .replace(/(src|href|action)='\/(?!\/)/g, "$1='/__glide_proxy__/");
-        // Rewrite Vite/Astro HMR WebSocket to point at actual dev server port
+          .replace(/(src|href|action)="(?!\/\/|\/__glide_proxy__\/)\//g, '$1="/__glide_proxy__/')
+          .replace(/(src|href|action)='(?!\/\/|\/__glide_proxy__\/)\//g, "$1='/__glide_proxy__/");
+        // Rewrite Vite/Astro HMR WebSocket to point at actual dev server port, preserving quote style
         html = html.replace(
-          /new WebSocket\(['"]ws:\/\/(?:localhost|127\.0\.0\.1):\d+/g,
-          `new WebSocket('ws://localhost:${targetPort}`
+          /new WebSocket\((['"])ws:\/\/(?:localhost|127\.0\.0\.1):\d+/g,
+          `new WebSocket($1ws://localhost:${targetPort}`
         );
         // Inject bridge before </head> (or at top of <body> as fallback)
         // Replacer functions insert the script literally; a replacement string would expand `$&` and `$'`.
@@ -772,13 +775,24 @@ function proxyToDevServer(
         res.end(html, 'utf-8');
       });
     } else {
+      proxyRes.on('error', () => { if (!res.writableEnded) res.destroy(); });
+      proxyRes.on('aborted', () => { if (!res.writableEnded) res.destroy(); });
       res.writeHead(proxyRes.statusCode || 200, outHeaders);
       proxyRes.pipe(res);
     }
   });
 
+  res.on('close', () => {
+    if (!res.writableEnded) proxyReq.destroy();
+  });
+
   proxyReq.on('error', (err: any) => {
-    if (!useFallback && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) {
+    if (res.headersSent || res.writableEnded || res.destroyed) {
+      res.destroy();
+      return;
+    }
+    const bodyless = !req.method || ['GET', 'HEAD', 'OPTIONS'].includes(req.method.toUpperCase());
+    if (!useFallback && bodyless && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) {
       console.log(`[Glide Proxy] Retrying connection to dev server via 127.0.0.1:${targetPort}...`);
       return proxyToDevServer(targetPort, proxyPath, req, res, bridgeScript, true);
     }
@@ -790,6 +804,23 @@ function proxyToDevServer(
   if (req.readable) req.pipe(proxyReq); else proxyReq.end();
 }
 
+function parsePathname(rawUrl: string | undefined): string | null {
+  const url = rawUrl || '/';
+  if (!url.startsWith('/') || url.startsWith('//')) return null;
+  try {
+    return new URL(url, 'http://localhost').pathname;
+  } catch {
+    return null;
+  }
+}
+
+function stripProxyPrefix(rawUrl: string, pathname: string): string {
+  if (pathname !== '/__glide_proxy__' && !pathname.startsWith('/__glide_proxy__/')) return rawUrl;
+  const sliced = rawUrl.slice('/__glide_proxy__'.length);
+  if (!sliced) return '/';
+  return sliced.startsWith('/') ? sliced : `/${sliced}`;
+}
+
 /**
  * Glide's own socket is the editor's: path `/` with no subprotocol. Vite's HMR
  * client also connects to the page's host (the editor port) at its HMR base,
@@ -797,7 +828,8 @@ function proxyToDevServer(
  * any other path belong to the dev server.
  */
 export function isDevServerUpgrade(req: IncomingMessage): boolean {
-  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  const pathname = parsePathname(req.url);
+  if (pathname === null) return false;
   if (pathname !== '/') return true;
   const protocols = String(req.headers['sec-websocket-protocol'] || '').split(',').map(p => p.trim());
   return protocols.includes('vite-hmr') || protocols.includes('vite-ping');
@@ -824,7 +856,10 @@ function proxyUpgradeToDevServer(
 ): void {
   let proxyReq: ClientRequest | undefined;
   let upstream: Duplex | undefined;
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     openSockets.delete(socket);
     proxyReq?.destroy();
     upstream?.destroy();
@@ -835,6 +870,7 @@ function proxyUpgradeToDevServer(
   socket.on('close', close);
 
   const connect = (hostname: string) => {
+    if (closed) return;
     proxyReq = httpRequest({
       hostname,
       port: targetPort,
@@ -843,6 +879,7 @@ function proxyUpgradeToDevServer(
       headers: { ...req.headers, host: `${hostname}:${targetPort}` },
     });
     proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      if (closed) { proxySocket.destroy(); return; }
       upstream = proxySocket;
       proxySocket.on('error', close);
       proxySocket.on('close', close);
@@ -851,13 +888,38 @@ function proxyUpgradeToDevServer(
       if (head.length) proxySocket.write(head);
       proxySocket.pipe(socket).pipe(proxySocket);
     });
-    // The dev server refused the upgrade (bad token, unknown path): relay its answer.
+    // The dev server refused the upgrade (bad token, unknown path): relay its answer
+    // with explicit Content-Length (never forward Transfer-Encoding: chunked over de-chunked bytes).
     proxyReq.on('response', (proxyRes) => {
-      socket.write(rawResponseHead(`HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}`, proxyRes.rawHeaders));
-      proxyRes.pipe(socket);
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      const maxRefusalBytes = 256 * 1024;
+      proxyRes.on('error', close);
+      proxyRes.on('aborted', close);
+      proxyRes.on('data', (chunk: Buffer) => {
+        if (totalBytes < maxRefusalBytes) {
+          const remaining = maxRefusalBytes - totalBytes;
+          chunks.push(chunk.length > remaining ? chunk.subarray(0, remaining) : chunk);
+          totalBytes += chunk.length;
+        }
+      });
+      proxyRes.on('end', () => {
+        if (closed || socket.destroyed) return;
+        const body = Buffer.concat(chunks);
+        const filteredHeaders: string[] = [];
+        for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
+          const name = proxyRes.rawHeaders[i];
+          if (['transfer-encoding', 'content-length', 'connection'].includes(name.toLowerCase())) continue;
+          filteredHeaders.push(name, proxyRes.rawHeaders[i + 1]);
+        }
+        filteredHeaders.push('Content-Length', String(body.length), 'Connection', 'close');
+        socket.write(rawResponseHead(`HTTP/1.1 ${proxyRes.statusCode || 502} ${proxyRes.statusMessage || ''}`, filteredHeaders));
+        if (body.length) socket.write(body);
+        socket.end();
+      });
     });
     proxyReq.on('error', (err: any) => {
-      if (hostname === 'localhost' && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) connect('127.0.0.1');
+      if (!closed && hostname === 'localhost' && (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND')) connect('127.0.0.1');
       else close();
     });
     proxyReq.end();
@@ -1155,7 +1217,12 @@ export class GlideServer {
 
         this.requestHandler = (req, res, next) => {
           const url = req.url || '/';
-          const pathname = new URL(url, 'http://localhost').pathname;
+          const pathname = parsePathname(url);
+          if (pathname === null) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Bad Request');
+            return;
+          }
           const port = this.servedPort();
           // Attached, Glide answers only its own paths; the dev server handles the rest —
           // except on the loopback-IP editor origin, where app routes redirect to "localhost"
@@ -1235,8 +1302,8 @@ export class GlideServer {
           }
 
           // ── Proxy route: forward to user's dev server + inject bridge for HTML ──
-          if (url.startsWith('/__glide_proxy__')) {
-            const proxyPath = url.slice('/__glide_proxy__'.length) || '/';
+          if (pathname === '/__glide_proxy__' || pathname.startsWith('/__glide_proxy__/')) {
+            const proxyPath = stripProxyPrefix(url, pathname);
             const bridgeScript = buildGlideBridgeInlineScript(this.config);
             proxyToDevServer(this.targetPort, proxyPath, req, res, bridgeScript);
             return;
@@ -1275,7 +1342,9 @@ export class GlideServer {
           // Share the dev server: take upgrades on /__glide/ws only, leaving its HMR socket alone.
           const wss = this.wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
           this.hosted.onUpgrade = (req, socket, head) => {
-            if (new URL(req.url || '/', 'http://localhost').pathname !== '/__glide/ws') return;
+            const pathname = parsePathname(req.url);
+            if (pathname === null) { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); return; }
+            if (pathname !== '/__glide/ws') return;
             if (!trustedRequest(req, this.servedPort(), this.config.remoteAccess)) { socket.destroy(); return; }
             // The app's origin ("localhost") gets no editor socket, even with a token.
             if (this.isolated() && !loopbackLiteral(req.headers.host)) { socket.destroy(); return; }
@@ -1289,6 +1358,11 @@ export class GlideServer {
           });
           // ── WebSocket routing: the editor's socket, or the dev server's (HMR) ──
           this.server!.on('upgrade', (req, socket, head) => {
+            const pathname = parsePathname(req.url);
+            if (pathname === null) {
+              socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+              return;
+            }
             if (!isDevServerUpgrade(req)) {
               // The app's origin ("localhost") gets no editor socket, even with a token.
               if (this.isolated() && !loopbackLiteral(req.headers.host)) { socket.destroy(); return; }
@@ -1300,7 +1374,7 @@ export class GlideServer {
               return;
             }
             const url = req.url || '/';
-            const proxyPath = url.startsWith('/__glide_proxy__') ? url.slice('/__glide_proxy__'.length) || '/' : url;
+            const proxyPath = stripProxyPrefix(url, pathname);
             proxyUpgradeToDevServer(this.targetPort, proxyPath, req, socket, head, this.proxiedSockets);
           });
         }
@@ -1782,6 +1856,7 @@ export class GlideServer {
 
   private closeHttpServer(resolve: () => void, reject: (err: Error) => void) {
     if (this.server) {
+      this.server.closeAllConnections?.();
       this.server.close((err) => {
         if (err) {
           reject(err);
