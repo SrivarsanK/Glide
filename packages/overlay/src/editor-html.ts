@@ -2106,9 +2106,14 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               <div class="props-section" id="section-fill">
                 <div class="props-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                   <span>Fill</span>
-                  <div style="display: flex; gap: 8px; color: var(--text-secondary); cursor: pointer;">
-                    <i data-lucide="plus" id="btn-add-fill" style="width: 12px; height: 12px;"></i>
-                    <i data-lucide="minus" id="btn-remove-fill" style="width: 12px; height: 12px;"></i>
+                  <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <select class="props-select" id="fill-mode-select" style="max-width: 72px; font-size: 10px; color: #b3b3b3; border: none; background: transparent; cursor: pointer;">
+                      <option value="solid">Solid</option>
+                      <option value="gradient">Gradient</option>
+                      <option value="none">None</option>
+                    </select>
+                    <i data-lucide="plus" id="btn-add-fill" title="Add Fill" style="width: 12px; height: 12px; cursor: pointer;"></i>
+                    <i data-lucide="minus" id="btn-remove-fill" title="Remove Fill" style="width: 12px; height: 12px; cursor: pointer;"></i>
                   </div>
                 </div>
                 <div id="fill-solid-controls">
@@ -2121,11 +2126,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                       <input class="props-input" id="prop-bg-opacity" type="number" min="0" max="100" placeholder="100" style="text-align: center;">
                       <span style="font-size: 10px; color: #b3b3b3;">%</span>
                     </div>
-                    <select class="props-select" id="fill-mode-select" style="max-width: 60px; font-size: 10px; color: #b3b3b3; border: none; background: transparent; cursor: pointer;">
-                      <option value="solid">Solid</option>
-                      <option value="gradient">Gradient</option>
-                      <option value="none">None</option>
-                    </select>
                   </div>
                 </div>
                 <div id="fill-gradient-controls" style="display: none; margin-top: 8px;">
@@ -2393,6 +2393,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           let lockedIds = new Set();
           let hiddenIds = new Set();
           let shadowCount = 0;
+          let gradType = 'linear';
            let isResizing = false;
           let isDragging = false;
           let isPendingPositionUpdate = false;
@@ -6310,14 +6311,28 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               setVal('prop-h', Math.round(rect.height || 0));
             }
 
-            // Width & Height Modes
-            const widthVal = styles.width || '';
+            // Width & Height Modes (inspect authored inline style & Tailwind classes before resolved computed px)
+            const inlineStr = styles.inlineStyle || '';
+            const inlineProp = (prop) => {
+              const parts = inlineStr.split(';');
+              for (let i = 0; i < parts.length; i++) {
+                const idx = parts[i].indexOf(':');
+                if (idx > 0 && parts[i].slice(0, idx).trim().toLowerCase() === prop) {
+                  return parts[i].slice(idx + 1).trim();
+                }
+              }
+              return '';
+            };
+            const classTokens = String(styles.className || '').split(/\\s+/).filter(Boolean);
+            const hasClass = (tokens) => classTokens.some(t => tokens.includes(t.replace(/^!|!$/g, '')));
+
+            const widthVal = inlineProp('width') || styles.width || '';
             const wModeSelect = document.getElementById('prop-w-mode');
             const wInput = document.getElementById('prop-w');
-            if (widthVal === 'fit-content' || widthVal === 'auto' || widthVal.includes('fit-content')) {
+            if (widthVal === 'fit-content' || widthVal === 'auto' || widthVal.includes('fit-content') || hasClass(['w-fit', 'w-auto', 'w-max', 'w-min'])) {
               if (wModeSelect) wModeSelect.value = 'hug';
               if (wInput) wInput.disabled = true;
-            } else if (widthVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+            } else if (widthVal === '100%' || hasClass(['w-full', 'flex-1', 'grow', 'self-stretch']) || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
               if (wModeSelect) wModeSelect.value = 'fill';
               if (wInput) wInput.disabled = true;
             } else {
@@ -6325,13 +6340,13 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (wInput) wInput.disabled = false;
             }
 
-            const heightVal = styles.height || '';
+            const heightVal = inlineProp('height') || styles.height || '';
             const hModeSelect = document.getElementById('prop-h-mode');
             const hInput = document.getElementById('prop-h');
-            if (heightVal === 'fit-content' || heightVal === 'auto' || heightVal.includes('fit-content')) {
+            if (heightVal === 'fit-content' || heightVal === 'auto' || heightVal.includes('fit-content') || hasClass(['h-fit', 'h-auto', 'h-max', 'h-min'])) {
               if (hModeSelect) hModeSelect.value = 'hug';
               if (hInput) hInput.disabled = true;
-            } else if (heightVal === '100%' || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
+            } else if (heightVal === '100%' || hasClass(['h-full', 'flex-1', 'grow', 'self-stretch']) || styles.flexGrow === '1' || styles.flex === '1' || styles.alignSelf === 'stretch') {
               if (hModeSelect) hModeSelect.value = 'fill';
               if (hInput) hInput.disabled = true;
             } else {
@@ -6500,6 +6515,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           }
 
           function updateGradientFill() {
+            if (!selectedElement) return;
             const angleEl = document.getElementById('prop-grad-angle');
             const angle = (angleEl ? angleEl.value : '90') || '90';
             const startEl = document.getElementById('prop-grad-start');
@@ -6539,8 +6555,38 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             openColorPopup(e.currentTarget, { swatchId:'color-swatch-grad-end', styleProp:null, hexInputId:'prop-grad-end-hex', isGradient:true, isGradEnd:true });
           });
           document.getElementById('color-swatch-border').addEventListener('click', (e) => {
-            openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:null, isGradient:false, isGradEnd:false });
+            openColorPopup(e.currentTarget, { swatchId:'color-swatch-border', styleProp:'borderColor', hexInputId:'prop-border-color', isGradient:false, isGradEnd:false });
           });
+
+          const btnAddFill = document.getElementById('btn-add-fill');
+          if (btnAddFill) {
+            btnAddFill.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (!selectedElement) return;
+              const bgHexEl = document.getElementById('prop-bg-hex');
+              const val = (bgHexEl && bgHexEl.value.trim()) || '#38bdf8';
+              if (bgHexEl && !bgHexEl.value.trim()) bgHexEl.value = val;
+              const swatchBg = document.getElementById('color-swatch-bg');
+              if (swatchBg) swatchBg.style.background = val;
+              setFillMode('solid');
+              sendMultiClassChange(selectedElement.source, {
+                backgroundImage: 'none',
+                backgroundColor: val
+              });
+            });
+          }
+          const btnRemoveFill = document.getElementById('btn-remove-fill');
+          if (btnRemoveFill) {
+            btnRemoveFill.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (!selectedElement) return;
+              setFillMode('none');
+              sendMultiClassChange(selectedElement.source, {
+                backgroundImage: 'none',
+                backgroundColor: 'transparent'
+              });
+            });
+          }
 
           const fillModeSelect = document.getElementById('fill-mode-select');
           if (fillModeSelect) {
@@ -6752,6 +6798,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           const tdStrike = document.getElementById('td-strike');
           if (tdStrike) tdStrike.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); });
 
+          /** Append px only for bare numeric input; preserve explicit CSS units and unitless line-height. */
+          function formatCssLength(raw, allowUnitless) {
+            const trimmed = String(raw == null ? '' : raw).trim();
+            if (!trimmed) return '';
+            if (/^-?\\d*\\.?\\d+$/.test(trimmed)) {
+              return allowUnitless ? trimmed : trimmed + 'px';
+            }
+            return trimmed;
+          }
+
           // Numeric inputs — typography/spacing via class, layout (w/h) via style
           const numericClassMap = {
             'prop-font-size': 'fontSize',
@@ -6767,7 +6823,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           };
           Object.entries(numericClassMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+            if (el) el.addEventListener('change', (e) => {
+              sendEdit({ type: 'class', property: prop, value: formatCssLength(e.target.value, prop === 'lineHeight') });
+            });
           });
 
           // Text content editing
@@ -6794,7 +6852,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           };
           Object.entries(spacingMap).forEach(([id, prop]) => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => { sendEdit({type:'class',property:prop,value:e.target.value+'px'}); });
+            if (el) el.addEventListener('change', (e) => {
+              sendEdit({ type: 'class', property: prop, value: formatCssLength(e.target.value, false) });
+            });
           });
 
           // Rotation
@@ -6854,8 +6914,8 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           function _applyColorToTarget(hex) {
             if (!_cpTarget) return;
-            const { swatchId, styleProp, hexInputId, isGradient, isGradEnd } = _cpTarget;
-            const swatch = document.getElementById(swatchId);
+            const { swatchId, swatchEl, styleProp, hexInputId, isGradient, isGradEnd, onSelect } = _cpTarget;
+            const swatch = swatchEl || (swatchId ? document.getElementById(swatchId) : null);
             if (swatch) swatch.style.background = hex;
             if (hexInputId) {
               const hexEl = document.getElementById(hexInputId);
@@ -6863,6 +6923,10 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             }
             document.getElementById('color-popup-preview').style.background = hex;
             document.getElementById('color-popup-hex').value = hex;
+            if (typeof onSelect === 'function') {
+              onSelect(hex);
+              return;
+            }
             if (hexInputId === 'prop-page-bg-hex') {
               const fw = document.getElementById('frame-wrapper');
               if (fw) fw.style.backgroundColor = hex;
@@ -6900,15 +6964,21 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             const popup  = document.getElementById('glide-color-popup');
             const hexInp = document.getElementById('color-popup-hex');
             const prev   = document.getElementById('color-popup-preview');
-            const swatch = document.getElementById(config.swatchId);
+            const swatch = config.swatchEl || (config.swatchId ? document.getElementById(config.swatchId) : null);
             const cur    = cssColorToHex(swatch ? swatch.style.background : '#000000');
             hexInp.value = cur;
             prev.style.background = cur;
             const rect = anchorEl.getBoundingClientRect();
-            const pw = 220;
-            popup.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - pw - 8)) + 'px';
-            popup.style.top  = (rect.bottom + 6) + 'px';
             popup.style.display = 'block';
+            const pw = popup.offsetWidth || 220;
+            const ph = popup.offsetHeight || 220;
+            const left = Math.max(4, Math.min(rect.left, window.innerWidth - pw - 8));
+            let top = rect.bottom + 6;
+            if (top + ph > window.innerHeight - 4) {
+              top = Math.max(4, Math.min(rect.top - ph - 6, window.innerHeight - ph - 4));
+            }
+            popup.style.left = left + 'px';
+            popup.style.top  = top + 'px';
             setTimeout(() => { hexInp.select(); hexInp.focus(); }, 30);
           }
 
@@ -6990,56 +7060,86 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
           })();
 
           // Shadow management
+          function applyShadowsToElement() {
+            if (!selectedElement) return;
+            const list = document.getElementById('shadows-list');
+            if (!list) return;
+            const rows = Array.from(list.querySelectorAll('.shadow-row'));
+            const parts = rows.map(row => {
+              const inputs = row.querySelectorAll('input[type="number"]');
+              const x = (inputs[0] && inputs[0].value !== '' ? inputs[0].value : '0') + 'px';
+              const y = (inputs[1] && inputs[1].value !== '' ? inputs[1].value : '4') + 'px';
+              const blur = (inputs[2] && inputs[2].value !== '' ? inputs[2].value : '12') + 'px';
+              const spread = (inputs[3] && inputs[3].value !== '' ? inputs[3].value : '0') + 'px';
+              const color = row.dataset.shadowColor || '#000000';
+              return x + ' ' + y + ' ' + blur + ' ' + spread + ' ' + color;
+            });
+            sendStylePropsChange(selectedElement.source, { boxShadow: parts.length ? parts.join(', ') : 'none' });
+          }
+
           const addShadowBtn = document.getElementById('btn-add-effect') || document.getElementById('add-shadow-btn');
           if (addShadowBtn) {
-            addShadowBtn.addEventListener('click', () => {
+            addShadowBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
               shadowCount++;
               const row = document.createElement('div');
               row.className = 'shadow-row';
               row.dataset.shadowId = shadowCount;
+              row.dataset.shadowColor = '#000000';
               row.innerHTML =
-                '<input type="number" class="props-input" placeholder="X" style="width:36px;" title="X offset">' +
-                '<input type="number" class="props-input" placeholder="Y" style="width:36px;" title="Y offset">' +
-                '<input type="number" class="props-input" placeholder="Blur" style="width:40px;" title="Blur">' +
-                '<input type="number" class="props-input" placeholder="Spread" style="width:40px;" title="Spread">' +
-                '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000;cursor:pointer;"></div>' +
-                '<input type="color" class="shadow-color-input" value="#000000" style="opacity: 0; position: absolute; pointer-events: none; width: 1px; height: 1px; overflow: hidden; z-index: -1;">' +
+                '<input type="number" class="props-input" placeholder="X" value="0" style="width:36px;" title="X offset">' +
+                '<input type="number" class="props-input" placeholder="Y" value="4" style="width:36px;" title="Y offset">' +
+                '<input type="number" class="props-input" placeholder="Blur" value="12" style="width:40px;" title="Blur">' +
+                '<input type="number" class="props-input" placeholder="Spread" value="0" style="width:40px;" title="Spread">' +
+                '<div class="color-swatch shadow-swatch" style="width:22px;height:22px;flex-shrink:0;background:#000000;cursor:pointer;"></div>' +
                 '<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;" title="Delete">✕</button>';
+
+              row.querySelectorAll('input[type="number"]').forEach(inp => {
+                inp.addEventListener('change', applyShadowsToElement);
+              });
+
               const swatch = row.querySelector('.shadow-swatch');
-              const colorInput = row.querySelector('.shadow-color-input');
-              if (swatch && colorInput) {
-                swatch.addEventListener('click', () => colorInput.click());
-
-                // Throttle shadow color input with rAF to prevent browser crash
-                let _shadowRaf = false;
-                let _shadowLastVal = null;
-                colorInput.addEventListener('input', (e) => {
-                  _shadowLastVal = e.target.value;
-                  if (_shadowRaf) return;
-                  _shadowRaf = true;
-                  requestAnimationFrame(() => {
-                    _shadowRaf = false;
-                    if (_shadowLastVal) swatch.style.background = _shadowLastVal;
+              if (swatch) {
+                swatch.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  openColorPopup(ev.currentTarget, {
+                    swatchEl: swatch,
+                    styleProp: null,
+                    hexInputId: null,
+                    isGradient: false,
+                    isGradEnd: false,
+                    onSelect: (hex) => {
+                      row.dataset.shadowColor = hex;
+                      applyShadowsToElement();
+                    }
                   });
-                });
-
-                // Close picker on blur (Escape / click-outside)
-                let _shadowClosed = false;
-                colorInput.addEventListener('change', () => { _shadowClosed = true; });
-                colorInput.addEventListener('blur', () => {
-                  if (_shadowClosed) { _shadowClosed = false; return; }
-                  // Force-close by blur (no change fired = Escape pressed)
-                  const clone = colorInput.cloneNode(true);
-                  colorInput.parentNode.replaceChild(clone, colorInput);
                 });
               }
 
               const deleteBtn = row.querySelector('button');
               if (deleteBtn) {
-                deleteBtn.addEventListener('click', () => row.remove());
+                deleteBtn.addEventListener('click', () => {
+                  row.remove();
+                  applyShadowsToElement();
+                });
               }
               const shadowsList = document.getElementById('shadows-list');
-              if (shadowsList) shadowsList.appendChild(row);
+              if (shadowsList) {
+                shadowsList.style.display = '';
+                shadowsList.appendChild(row);
+              }
+              applyShadowsToElement();
+            });
+          }
+          const removeShadowBtn = document.getElementById('btn-remove-effect');
+          if (removeShadowBtn) {
+            removeShadowBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const shadowsList = document.getElementById('shadows-list');
+              if (shadowsList && shadowsList.lastElementChild) {
+                shadowsList.lastElementChild.remove();
+                applyShadowsToElement();
+              }
             });
           }
 
@@ -7088,9 +7188,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
               // Set up toggle click handler
               title.addEventListener('click', (e) => {
+                // Ignore clicks on embedded action controls (+ / - / mode select / buttons)
+                if (e.target && e.target.closest && e.target.closest('button, select, input, [id^="btn-"]')) return;
                 // Find all children siblings except the title, toggle their display
                 const siblings = Array.from(section.children).filter(c => c !== title);
-                const chevron = title.querySelector('i');
+                const chevron = title.querySelector('i[data-lucide="chevron-down"]');
                 const isCollapsed = siblings[0] && siblings[0].style.display === 'none';
 
                 siblings.forEach(sib => {

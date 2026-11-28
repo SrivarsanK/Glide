@@ -293,3 +293,87 @@ test('inline text edit preserves selectedElement owners/tagName and remaps stale
     change: { type: 'text', value: 'Updated' },
   }]);
 });
+
+test('fill mode select stays outside fill-solid-controls, gradType is declared, and fill +/- buttons are wired', () => {
+  const html = getEditorHTML();
+  const solidStart = html.indexOf('id="fill-solid-controls"');
+  const gradStart = html.indexOf('id="fill-gradient-controls"');
+  expect(solidStart).toBeGreaterThan(-1);
+  expect(gradStart).toBeGreaterThan(solidStart);
+  const solidBlock = html.slice(solidStart, gradStart);
+  expect(solidBlock).not.toContain('id="fill-mode-select"');
+  expect(html).toContain('id="fill-mode-select"');
+  expect(script).toMatch(/let\s+gradType\s*=\s*'linear'/);
+  expect(script).toContain("getElementById('btn-add-fill')");
+  expect(script).toContain("getElementById('btn-remove-fill')");
+});
+
+test('formatCssLength preserves CSS units and unitless line-height without producing 150%px', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`${fn('formatCssLength')}`, context);
+  const fmt = (raw: string, unitless = false) => vm.runInContext('formatCssLength', context)(raw, unitless);
+  expect(fmt('150%', true)).toBe('150%');
+  expect(fmt('1.5', true)).toBe('1.5');
+  expect(fmt('24px', true)).toBe('24px');
+  expect(fmt('normal', true)).toBe('normal');
+  expect(fmt('16', false)).toBe('16px');
+  expect(fmt('-4.5', false)).toBe('-4.5px');
+  expect(fmt('1.5rem', false)).toBe('1.5rem');
+  expect(fmt('auto', false)).toBe('auto');
+  expect(fmt('', false)).toBe('');
+});
+
+test('W/H mode reads authored inlineStyle and Tailwind classes instead of snapping back to fixed', () => {
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const elems = new Map();
+    const el = (id) => {
+      if (!elems.has(id)) elems.set(id, { id, value: '', disabled: false, style: {}, classList: { toggle() {} }, setAttribute() {} });
+      return elems.get(id);
+    };
+    const document = { activeElement: null, getElementById: el };
+    let gradType = 'linear';
+    function showPropsPanel() {}
+    function setActiveBtn() {}
+    function setFillMode() {}
+    function rgbToHex(v) { return v || '#000000'; }
+    function rotationFromTransform() { return 0; }
+    ${fn('parsePixels')}
+    ${fn('populatePropsFromComputed')}
+    populatePropsFromComputed({ width: '240px', height: '40px', inlineStyle: 'width: fit-content; height: 100%;' }, { x: 0, y: 0, width: 240, height: 40 });
+    const inlineModes = { w: el('prop-w-mode').value, h: el('prop-h-mode').value };
+    populatePropsFromComputed({ width: '240px', height: '40px', className: 'w-full h-fit p-2' }, { x: 0, y: 0, width: 240, height: 40 });
+    const classModes = { w: el('prop-w-mode').value, h: el('prop-h-mode').value };
+  `, context);
+  expect(vm.runInContext('inlineModes', context)).toEqual({ w: 'hug', h: 'fill' });
+  expect(vm.runInContext('classModes', context)).toEqual({ w: 'fill', h: 'hug' });
+});
+
+test('border swatch binds prop-border-color, section action icons do not collapse, shadows commit boxShadow, and color popup clamps to viewport', () => {
+  expect(script).toMatch(/color-swatch-border[\s\S]{0,220}hexInputId:\s*'prop-border-color'/);
+  expect(script).toContain('applyShadowsToElement');
+  expect(script).not.toContain('shadow-color-input');
+
+  const context = vm.createContext({});
+  vm.runInContext(`
+    let _cpTarget = null;
+    const popup = { style: { display: 'none', left: '0px', top: '0px' }, offsetHeight: 210 };
+    const hexInp = { value: '', select() {}, focus() {} };
+    const prev = { style: {} };
+    const swatch = { style: { background: '#ff0000' } };
+    const document = {
+      getElementById: (id) => ({ 'glide-color-popup': popup, 'color-popup-hex': hexInp, 'color-popup-preview': prev, 'color-swatch-border': swatch }[id] || null),
+    };
+    const window = { innerWidth: 1200, innerHeight: 600 };
+    function setTimeout() { return 1; }
+    ${fn('cssColorToHex')}
+    ${fn('openColorPopup')}
+    openColorPopup({ getBoundingClientRect: () => ({ left: 1050, top: 560, bottom: 580, width: 20, height: 20 }) },
+      { swatchId: 'color-swatch-border', styleProp: 'borderColor', hexInputId: 'prop-border-color', isGradient: false, isGradEnd: false });
+  `, context);
+  const top = parseFloat(vm.runInContext('popup.style.top', context));
+  const left = parseFloat(vm.runInContext('popup.style.left', context));
+  expect(top).toBeGreaterThanOrEqual(4);
+  expect(top + 210).toBeLessThanOrEqual(600);
+  expect(left + 220).toBeLessThanOrEqual(1200);
+});
