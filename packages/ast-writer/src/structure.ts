@@ -438,8 +438,12 @@ export function mutateStructure(ast: any, target: t.JSXElement, change: Structur
     if (!change.sources || change.sources.length < 2) throw new Error('INVALID_OPERATION: Group needs at least two source children.');
     const selected = change.sources.map(resolve);
     if (!selected.includes(target)) throw new Error('INVALID_TARGET: The group must include the selected target.');
+    if (selected.some(node => slotOf(node).child !== node)) {
+      throw new Error('UNSUPPORTED_OPERATION: Attach workspace objects before grouping.');
+    }
     if (new Set(selected).size !== selected.length || selected.some(node => parentOf(node) !== parent)) throw new Error('INVALID_TARGET: Group targets must be distinct siblings.');
     const indices = selected.map(node => parent.children.indexOf(node)).sort((a, b) => a - b);
+    if (indices.some(i => i < 0)) throw new Error('INVALID_TARGET: Group targets must be direct children.');
     const first = indices[0], last = indices[indices.length - 1];
     const children = parent.children.slice(first, last + 1);
     if (children.some(node => !selected.includes(node as t.JSXElement) && !(t.isJSXText(node) && !node.value.trim()))) {
