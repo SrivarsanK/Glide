@@ -529,9 +529,13 @@ export function watchRegistry(
   const WATCH_EXTS = /\.(jsx|tsx|js|ts|vue|svelte|astro|html)$/i;
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let closed = false;
   function scheduleRebuild() {
+    if (closed) return;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      if (closed) return;
       try { onUpdate(buildRegistry({ projectRoot })); } catch (e) {
         console.warn('[Glide registry] Rebuild failed:', e);
       }
@@ -549,6 +553,17 @@ export function watchRegistry(
   watcher.on('add',    (p: string) => { if (WATCH_EXTS.test(p)) scheduleRebuild(); });
   watcher.on('change', (p: string) => { if (WATCH_EXTS.test(p)) scheduleRebuild(); });
   watcher.on('unlink', (p: string) => { if (WATCH_EXTS.test(p)) scheduleRebuild(); });
+  watcher.on('error',  (err: unknown) => { console.error('[Glide registry] Watcher error:', err); });
+
+  const originalClose = watcher.close.bind(watcher);
+  watcher.close = () => {
+    closed = true;
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    return originalClose();
+  };
 
   return watcher;
 }

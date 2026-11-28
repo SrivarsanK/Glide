@@ -1022,7 +1022,7 @@ export class GlideServer {
   private lastSelfWrites = new Map<string, string>();
   private proxiedSockets = new Set<Duplex>();
   /** Set by attach(): a dev server that serves Glide alongside the app, with no proxy. */
-  private hosted: { httpServer: Server; onUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => void } | null = null;
+  private hosted: { httpServer: Server; onUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => void; onListening?: () => void } | null = null;
   private requestHandler: ((req: IncomingMessage, res: ServerResponse, next?: () => void) => void) | null = null;
   private stopRegistry: (() => Promise<void>) | null = null;
 
@@ -1066,7 +1066,13 @@ export class GlideServer {
    */
   public async attach(httpServer: Server): Promise<(req: IncomingMessage, res: ServerResponse, next: () => void) => void> {
     this.hosted = { httpServer };
-    if (httpServer.listening) this.writeMcpRunFile(); else httpServer.once('listening', () => this.writeMcpRunFile());
+    if (httpServer.listening) {
+      this.writeMcpRunFile();
+    } else {
+      const onListening = () => { this.writeMcpRunFile(); };
+      this.hosted.onListening = onListening;
+      httpServer.once('listening', onListening);
+    }
     await this.start();
     // The glide command writes the component registry itself; attached, nothing else would.
     this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
@@ -1328,9 +1334,16 @@ export class GlideServer {
         this.watcher.on('change', (filePath: string) => {
           const normPath = normalizePathKey(filePath);
           const lastWrite = this.lastSelfWrites.get(normPath);
-          if (lastWrite && fs.existsSync(filePath) && contentDigest(fs.readFileSync(filePath, 'utf8')) === lastWrite) {
-            console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
-            return;
+          if (lastWrite) {
+            try {
+              if (fs.existsSync(filePath) && contentDigest(fs.readFileSync(filePath, 'utf8')) === lastWrite) {
+                console.log(`[Glide] Ignoring self-write change event on ${normPath}`);
+                return;
+              }
+            } catch {
+              // File may be transiently locked (EBUSY/EPERM) or deleted between event and read.
+              return;
+            }
           }
           this.announceDrift(filePath);
         });
@@ -1787,8 +1800,24 @@ export class GlideServer {
           });
         });
 
-        this.wss.on('error', (err) => {
+        const cleanupFailedStart = async (err: unknown) => {
+          this.requestHandler = null;
+          if (this.watcher) {
+            const w = this.watcher;
+            this.watcher = null;
+            try { await w.close(); } catch {}
+          }
+          if (this.wss) {
+            const wss = this.wss;
+            this.wss = null;
+            await new Promise<void>(done => wss.close(() => done()));
+          }
+          this.server = null;
           reject(err);
+        };
+
+        this.wss.on('error', (err) => {
+          void cleanupFailedStart(err);
         });
 
         if (this.hosted) {
@@ -1797,8 +1826,8 @@ export class GlideServer {
         }
         this.server!.on('error', (err) => {
           console.error('[Glide HTTP] Server error:', err);
-          // A listen failure such as EADDRINUSE; the WebSocket server no longer relays it.
-          reject(err);
+          // A listen failure such as EADDRINUSE; close watcher and WS server before rejecting.
+          void cleanupFailedStart(err);
         });
 
         this.server!.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
@@ -1814,8 +1843,9 @@ export class GlideServer {
   public async stop(): Promise<void> {
     this.requestHandler = null;
     try { fs.rmSync(this.mcpRunFile(), { force: true }); } catch {}
-    // An attached dev server belongs to its owner; only stop listening for Glide's socket on it.
+    // An attached dev server belongs to its owner; only stop listening for Glide's events on it.
     if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
+    if (this.hosted?.onListening) this.hosted.httpServer.off('listening', this.hosted.onListening);
     if (this.stopRegistry) {
       try { await this.stopRegistry(); } catch (err) { console.error('[Glide] Error closing registry watcher:', err); }
       this.stopRegistry = null;
