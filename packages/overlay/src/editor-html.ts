@@ -5548,10 +5548,6 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
           let layerTree = null;
 
-          function escapeHtml(s) {
-            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-          }
-
           function renderLayersTree(tree) {
             layerTree = tree;
             const list = document.getElementById('layers-list');
@@ -5697,9 +5693,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 '</span>' +
                 '<div class="layer-actions">' +
                   jumpActionHTML +
-                  '<button class="layer-action-btn edit-btn" data-node-id="' + node.id + '" title="Edit text directly">' + editSVG + '</button>' +
-                  '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + node.id + '" title="Toggle lock">' + lockSVG + '</button>' +
-                  '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + node.id + '" title="Toggle visibility">' + eyeSVG + '</button>' +
+                  '<button class="layer-action-btn edit-btn" data-node-id="' + escapeHtml(node.id) + '" title="Edit text directly">' + editSVG + '</button>' +
+                  '<button class="layer-action-btn lock-btn' + (isLocked ? ' locked-state' : '') + '" data-node-id="' + escapeHtml(node.id) + '" title="Toggle lock">' + lockSVG + '</button>' +
+                  '<button class="layer-action-btn eye-btn' + (isHidden ? ' hidden-state' : '') + '" data-node-id="' + escapeHtml(node.id) + '" title="Toggle visibility">' + eyeSVG + '</button>' +
                 '</div>';
 
               if (isComponent) {
@@ -6056,9 +6052,9 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
 
             // Hosted by the dev server, the app is on this origin and needs no proxy prefix.
             var appBase = ${JSON.stringify(appBase)};
-            // Hosted on a loopback address, the app runs on "localhost": another origin, so its scripts cannot reach the editor.
-            if (${JSON.stringify(!!options.hosted)} && /^(127\\.0\\.0\\.1|\\[::1\\])$/.test(window.location.hostname)) {
-              appBase = window.location.protocol + '//localhost' + (window.location.port ? ':' + window.location.port : '');
+            // Served on a loopback IP, the app runs on "localhost": another origin, so its scripts cannot reach the editor.
+            if (/^(127\\.0\\.0\\.1|\\[::1\\])$/.test(window.location.hostname)) {
+              appBase = window.location.protocol + '//localhost' + (window.location.port ? ':' + window.location.port : '') + appBase;
             }
             var proxyUrl = url;
             if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -6068,9 +6064,16 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                 proxyUrl = appBase + (parsed.pathname || '/');
                 if (parsed.search) proxyUrl += parsed.search;
               } catch(e) { proxyUrl = appBase + '/'; }
-            } else if (!appBase || !url.startsWith(appBase)) {
-              // Relative path — prefix with proxy base
-              proxyUrl = appBase + '/' + (url.startsWith('/') ? url.slice(1) : url);
+            } else {
+              var relPath = (!${JSON.stringify(!!options.hosted)} && url.startsWith('/__glide_proxy__'))
+                ? (url.slice('/__glide_proxy__'.length) || '/')
+                : url;
+              if (!appBase || !relPath.startsWith(appBase)) {
+                // Relative path — prefix with proxy base
+                proxyUrl = appBase + '/' + (relPath.startsWith('/') ? relPath.slice(1) : relPath);
+              } else {
+                proxyUrl = relPath;
+              }
             }
 
             // Sync text input to normalized URL if user typed pure port or full URL
@@ -7807,7 +7810,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
                   '</div>' +
                   '<div class="comment-card-text">' + escapeHtml(c.text) + '</div>' +
                   '<div class="comment-card-actions">' +
-                    '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + c.id + '">✓ Resolve</button>' +
+                    '<button class="comment-btn-secondary comment-resolve-btn" data-id="' + escapeHtml(c.id) + '">✓ Resolve</button>' +
                     '<button class="comment-btn-primary comment-close-btn">Close</button>' +
                   '</div>';
 

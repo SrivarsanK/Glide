@@ -338,4 +338,21 @@ describe('watchRegistry', () => {
       fs.rmSync(outer, { recursive: true, force: true });
     }
   });
+
+  test('closing watchRegistry cancels any pending debounced rebuild', async () => {
+    write('src/App.tsx', `export function App() { return <div>One</div>; }`);
+    let calls = 0;
+    const watcher = watchRegistry(tmpDir, () => { calls++; });
+    await Promise.race([
+      new Promise<void>(resolve => watcher.once('ready', () => resolve())),
+      new Promise<void>(resolve => setTimeout(resolve, 300)),
+    ]);
+    // Watcher must handle error events without throwing uncaught exceptions.
+    expect(() => watcher.emit('error', new Error('EPERM'))).not.toThrow();
+    // Trigger change handler directly and close immediately before the 300ms debounce expires.
+    watcher.emit('change', path.join(tmpDir, 'src', 'App.tsx'));
+    await watcher.close();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(calls).toBe(0);
+  });
 });

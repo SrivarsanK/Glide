@@ -5,7 +5,7 @@ const writable = new Set(['.tsx', '.jsx', '.ts', '.js', '.vue', '.svelte', '.ast
 
 export class ProjectPaths {
   readonly root: string;
-  constructor(root: string) { this.root = fs.realpathSync(root); }
+  constructor(root: string) { this.root = fs.realpathSync.native(root); }
 
   private check(candidate: string): void {
     const relative = path.relative(this.root, candidate);
@@ -38,7 +38,7 @@ export class ProjectPaths {
       if (mustExist) throw new Error('INVALID_PATH: The parent directory does not exist.');
       parent = path.dirname(parent);
     }
-    const canonicalParent = fs.realpathSync(parent);
+    const canonicalParent = fs.realpathSync.native(parent);
     this.check(canonicalParent);
     if (!fs.existsSync(absolute)) {
       if (fs.lstatSync(absolute, { throwIfNoEntry: false })?.isSymbolicLink()) {
@@ -47,7 +47,7 @@ export class ProjectPaths {
       if (mustExist) throw new Error('INVALID_PATH: The file does not exist.');
       return path.resolve(canonicalParent, path.relative(parent, absolute));
     }
-    const canonical = fs.realpathSync(absolute);
+    const canonical = fs.realpathSync.native(absolute);
     this.check(canonical);
     return canonical;
   }

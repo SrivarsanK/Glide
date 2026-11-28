@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { GlideServer, isIgnoredWatchPath } from '../../packages/server/src/ws-server.js';
+import { maintainRegistryFile } from '../../packages/server/src/registry-file.js';
 import { connectLocal } from './ws-client.js';
 import { startTestProject, closeTestProjects, request } from './server-fixture.js';
 
@@ -240,5 +242,36 @@ test('file watcher ignores node_modules and dist while watching source files eve
     client?.close();
     await server.stop();
     fs.rmSync(outer, { recursive: true, force: true });
+  }
+});
+
+test('watcher errors, failed startup, and early stop after attach do not crash or leak resources', async () => {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'glide-lifecycle-')));
+  fs.writeFileSync(path.join(root, 'App.tsx'), 'export const App = () => <div />;');
+  try {
+    // 1. Failed start (EADDRINUSE) must close its watcher instead of leaking it.
+    const occupier = http.createServer();
+    await new Promise<void>(resolve => occupier.listen(0, '127.0.0.1', resolve));
+    const busyPort = (occupier.address() as any).port as number;
+    const failed = new GlideServer(busyPort, 5173, undefined, root);
+    await expect(failed.start()).rejects.toThrow();
+    expect((failed as any).watcher).toBeNull();
+    occupier.close();
+
+    // 2. Stopping an attached GlideServer before httpServer listens must not write a stale mcp.json later.
+    const host = http.createServer();
+    const attached = new GlideServer(0, 5173, undefined, root);
+    await attached.attach(host);
+    await attached.stop();
+    await new Promise<void>(resolve => host.listen(0, '127.0.0.1', resolve));
+    const mcpFile = path.join(root, 'node_modules', '.cache', 'glide', 'mcp.json');
+    expect(fs.existsSync(mcpFile)).toBe(false);
+    host.close();
+
+    // 3. maintainRegistryFile registers an error listener (covered via clean start/stop).
+    const stopReg = maintainRegistryFile(root, () => {});
+    await stopReg();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

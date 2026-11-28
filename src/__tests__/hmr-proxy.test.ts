@@ -3,7 +3,8 @@ import WebSocket from 'ws';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { IncomingMessage } from 'node:http';
+import * as net from 'node:net';
+import { createServer as createHttpServer, request as httpRequest, type IncomingMessage } from 'node:http';
 import { createServer, type ViteDevServer } from 'vite';
 import { GlideServer, isDevServerUpgrade } from '../../packages/server/src/ws-server.js';
 import { connectLocal } from './ws-client.js';
@@ -108,4 +109,110 @@ test('stop closes open proxied sockets instead of waiting on them', async () => 
   await server!.stop();
   server = undefined;
   await closed;
+});
+
+test('malformed scheme-relative request URLs return 400 instead of throwing ERR_INVALID_URL', async () => {
+  expect(() => isDevServerUpgrade({ url: '//[::1', headers: {} } as IncomingMessage)).not.toThrow();
+  const { port } = await startPair();
+  const rawResponse = await new Promise<string>((resolve, reject) => {
+    const sock = net.connect(port, '127.0.0.1', () => {
+      sock.write(`GET //[::1 HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`);
+    });
+    let data = '';
+    sock.on('data', chunk => { data += chunk.toString('utf8'); });
+    sock.on('end', () => resolve(data));
+    sock.on('error', reject);
+  });
+  expect(rawResponse).toContain('HTTP/1.1 400');
+  // Server remains healthy after the malformed request.
+  const editor = await connectLocal(port);
+  editor.close();
+});
+
+test('HTML proxy avoids double-prefixing /__glide_proxy__/ and preserves double quotes in WebSocket rewrites', async () => {
+  const upstream = createHttpServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    const upstreamPort = (upstream.address() as any).port;
+    res.end(`<html><head><script src="http://localhost:${upstreamPort}/src/main.tsx"></script><script>new WebSocket("ws://localhost:${upstreamPort}/hmr")</script></head><body>ok</body></html>`);
+  });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamPort = (upstream.address() as any).port as number;
+  try {
+    server = new GlideServer(0, upstreamPort);
+    await server.start();
+    const port = ((server as any).server.address() as { port: number }).port;
+    const html = await new Promise<string>((resolve, reject) => {
+      httpRequest(`http://localhost:${port}/__glide_proxy__/`, { headers: { Connection: 'close' } }, res => {
+        let body = '';
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => resolve(body));
+      }).on('error', reject).end();
+    });
+    expect(html).toContain('src="/__glide_proxy__/src/main.tsx"');
+    expect(html).not.toContain('/__glide_proxy__/__glide_proxy__/');
+    expect(html).toContain(`new WebSocket("ws://localhost:${upstreamPort}/hmr")`);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  }
+});
+
+test('proxy survives mid-body upstream reset without ERR_HTTP_HEADERS_SENT and frames refused chunked WS upgrades cleanly', async () => {
+  const upstream = createHttpServer((req, res) => {
+    if (req.url === '/reset') {
+      res.writeHead(200, { 'Content-Type': 'application/javascript', 'Content-Length': '5000' });
+      res.write('console.log(1);');
+      // Forcibly reset the TCP socket after headers have been flushed.
+      setTimeout(() => req.socket.resetAndDestroy(), 20);
+      return;
+    }
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.write('denied');
+    res.end();
+  });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamPort = (upstream.address() as any).port as number;
+  try {
+    server = new GlideServer(0, upstreamPort);
+    await server.start();
+    const port = ((server as any).server.address() as { port: number }).port;
+
+    // 1. Mid-body upstream TCP RST must not crash the GlideServer process.
+    await new Promise<void>(resolve => {
+      const req = httpRequest(`http://localhost:${port}/reset`, { headers: { Connection: 'close' } }, res => {
+        res.on('data', () => {});
+        res.on('end', () => resolve());
+        res.on('error', () => resolve());
+        res.on('close', () => resolve());
+      });
+      req.on('error', () => resolve());
+      req.end();
+    });
+
+    // 2. Refused chunked WS upgrade must NOT advertise Transfer-Encoding: chunked over unchunked body bytes.
+    const rawRefusal = await new Promise<string>((resolve, reject) => {
+      const sock = net.connect(port, '127.0.0.1', () => {
+        sock.write(
+          `GET /?token=bad HTTP/1.1\r\n` +
+          `Host: localhost:${port}\r\n` +
+          `Origin: http://localhost:${port}\r\n` +
+          `Upgrade: websocket\r\n` +
+          `Connection: Upgrade\r\n` +
+          `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
+          `Sec-WebSocket-Version: 13\r\n` +
+          `Sec-WebSocket-Protocol: vite-hmr\r\n\r\n`
+        );
+      });
+      let out = '';
+      sock.on('data', chunk => { out += chunk.toString('utf8'); });
+      sock.on('end', () => resolve(out));
+      sock.on('error', reject);
+    });
+    expect(rawRefusal).toContain('HTTP/1.1 403');
+    expect(rawRefusal.toLowerCase()).not.toContain('transfer-encoding: chunked');
+    expect(rawRefusal).toContain('denied');
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  }
 });
