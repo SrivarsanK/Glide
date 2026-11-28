@@ -867,20 +867,25 @@ function proxyUpgradeToDevServer(
 
 /**
  * Walk up from a file path to find the nearest directory containing a .git folder.
- * Returns the directory if found, otherwise falls back to process.cwd().
+ * Throws if no Git repository exists for the project instead of falling back to process.cwd().
  */
 function findGitRoot(startPath: string): string {
   let dir = fs.statSync(startPath).isDirectory() ? startPath : path.dirname(startPath);
   const root = path.parse(dir).root;
-  while (dir !== root) {
+  while (true) {
     if (fs.existsSync(path.join(dir, '.git'))) {
       return dir;
     }
+    if (dir === root) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return process.cwd();
+  throw new Error('GIT_NOT_FOUND: No Git repository found for this project.');
+}
+
+function positiveCoord(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1;
 }
 
 
@@ -1408,11 +1413,12 @@ export class GlideServer {
                 if (!file) {
                   file = findProjectEntryFile(this.projectPaths.root);
                 }
-                const targetFile = file && fs.existsSync(file)
-                  ? file
-                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
+                let targetFile: string | null = null;
+                if (typeof file === 'string' && file) {
+                  try { targetFile = this.projectPaths.resolve(file); } catch { targetFile = null; }
+                }
 
-                if (targetFile && this.projectPaths.contains(targetFile)) {
+                if (targetFile) {
                   try {
                     const def = resolveComponentDefinition({
                       filepath: targetFile,
@@ -1421,14 +1427,28 @@ export class GlideServer {
                     });
 
                     if (def) {
+                      let safeDefFile: string;
+                      try {
+                        safeDefFile = this.projectPaths.resolve(def.file);
+                      } catch {
+                        ws.send(JSON.stringify({
+                          type: 'resolved_component',
+                          success: false,
+                          componentName,
+                          error: `Resolved definition for <${componentName}> is outside the project`
+                        }));
+                        return;
+                      }
+                      const defLine = positiveCoord(def.line);
+                      const defColumn = positiveCoord(def.column);
                       let opened = false;
                       if (shouldOpen) {
                         try {
-                          await execFileAsync('code', ['-g', `${def.file}:${def.line}:${def.column}`], { timeout: 3000 });
+                          await execFileAsync('code', ['-g', `${safeDefFile}:${defLine}:${defColumn}`], { timeout: 3000 });
                           opened = true;
                         } catch {
                           try {
-                            await execFileAsync('cursor', ['-g', `${def.file}:${def.line}:${def.column}`], { timeout: 3000 });
+                            await execFileAsync('cursor', ['-g', `${safeDefFile}:${defLine}:${defColumn}`], { timeout: 3000 });
                             opened = true;
                           } catch {}
                         }
@@ -1438,9 +1458,9 @@ export class GlideServer {
                         type: 'resolved_component',
                         success: true,
                         componentName,
-                        file: def.file,
-                        line: def.line,
-                        column: def.column,
+                        file: safeDefFile,
+                        line: defLine,
+                        column: defColumn,
                         isLocal: def.isLocal,
                         exportType: def.exportType,
                         opened
@@ -1462,22 +1482,24 @@ export class GlideServer {
                     }));
                   }
                 } else {
-                  // Fallback without targetFile: try resolving in default src/App.tsx with this.projectPaths.root
+                  // Fallback without targetFile: try resolving in default entry file inside this.projectPaths.root
                   try {
                     const candidateEntry = findProjectEntryFile(this.projectPaths.root) || path.join(this.projectPaths.root, 'src', 'App.tsx');
+                    const safeEntry = this.projectPaths.resolve(candidateEntry);
                     const def = resolveComponentDefinition({
-                      filepath: candidateEntry,
+                      filepath: safeEntry,
                       componentName,
                       projectRoot: this.projectPaths.root
                     });
                     if (def) {
+                      const safeDefFile = this.projectPaths.resolve(def.file);
                       ws.send(JSON.stringify({
                         type: 'resolved_component',
                         success: true,
                         componentName,
-                        file: def.file,
-                        line: def.line,
-                        column: def.column,
+                        file: safeDefFile,
+                        line: positiveCoord(def.line),
+                        column: positiveCoord(def.column),
                         isLocal: def.isLocal,
                         exportType: def.exportType,
                         opened: false
@@ -1498,18 +1520,21 @@ export class GlideServer {
 
               if (message.type === 'open_component') {
                 const { file, line, column } = message;
-                const targetFile = file && fs.existsSync(file)
-                  ? file
-                  : (file && fs.existsSync(path.resolve(this.projectPaths.root, file)) ? path.resolve(this.projectPaths.root, file) : null);
+                let targetFile: string | null = null;
+                if (typeof file === 'string' && file) {
+                  try { targetFile = this.projectPaths.resolve(file); } catch { targetFile = null; }
+                }
 
-                if (targetFile && this.projectPaths.contains(targetFile)) {
+                if (targetFile) {
+                  const safeLine = positiveCoord(line);
+                  const safeColumn = positiveCoord(column);
                   let opened = false;
                   try {
-                    await execFileAsync('code', ['-g', `${targetFile}:${line || 1}:${column || 1}`], { timeout: 3000 });
+                    await execFileAsync('code', ['-g', `${targetFile}:${safeLine}:${safeColumn}`], { timeout: 3000 });
                     opened = true;
                   } catch {
                     try {
-                      await execFileAsync('cursor', ['-g', `${targetFile}:${line || 1}:${column || 1}`], { timeout: 3000 });
+                      await execFileAsync('cursor', ['-g', `${targetFile}:${safeLine}:${safeColumn}`], { timeout: 3000 });
                       opened = true;
                     } catch {}
                   }
@@ -1518,8 +1543,8 @@ export class GlideServer {
                     type: 'open_component_status',
                     success: true,
                     file: targetFile,
-                    line: line || 1,
-                    column: column || 1,
+                    line: safeLine,
+                    column: safeColumn,
                     opened
                   }));
                 } else {
@@ -1543,11 +1568,12 @@ export class GlideServer {
                   }));
                   return;
                 }
-                const cwd = (projectDir && this.projectPaths.contains(projectDir))
-                  ? findGitRoot(projectDir)
-                  : findGitRoot(this.projectPaths.root);
-                console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                 try {
+                  const startDir = typeof projectDir === 'string' && projectDir
+                    ? this.projectPaths.resolve(projectDir)
+                    : this.projectPaths.root;
+                  const cwd = findGitRoot(startDir);
+                  console.log(`[Glide] Creating and checking out git branch: ${branchName} in ${cwd}`);
                   await execFileAsync('git', ['checkout', '-b', branchName], { cwd });
                   ws.send(JSON.stringify({
                     type: 'git-status',
@@ -1568,7 +1594,7 @@ export class GlideServer {
               }
 
               if (message.type === 'git-branch-finalize') {
-                const { commitMessage, projectDir } = message;
+                const { commitMessage } = message;
                 if (!commitMessage || typeof commitMessage !== 'string') {
                   ws.send(JSON.stringify({
                     type: 'git-status',
@@ -1578,10 +1604,7 @@ export class GlideServer {
                   }));
                   return;
                 }
-                const cwd = (projectDir && this.projectPaths.contains(projectDir))
-                  ? findGitRoot(projectDir)
-                  : findGitRoot(this.projectPaths.root);
-                console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${cwd}`);
+                console.log(`[Glide] Finalizing git branch with commit: "${commitMessage}" in ${this.projectPaths.root}`);
                 try {
                   const state = this.history.getState();
                   finalizeEditorChanges(this.projectPaths.root,

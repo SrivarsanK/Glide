@@ -18,7 +18,7 @@ function fixture() {
 
 test('rejects traversal, sibling prefixes, alternate paths, and unsupported extensions', () => {
   const f = fixture();
-  expect(f.paths.resolve('.')).toBe(fs.realpathSync(f.project));
+  expect(f.paths.resolve('.')).toBe(fs.realpathSync.native(f.project));
   for (const target of ['../project-other/App.tsx', '../project-other', 'App.tsx:secret', 'App.tsx.', '\\\\server\\file']) {
     expect(() => f.paths.resolve(target)).toThrow('INVALID_PATH');
   }
@@ -39,8 +39,8 @@ test('canonicalizes internal directory aliases, including paths to new metadata'
   fs.mkdirSync(source);
   fs.writeFileSync(path.join(source, 'App.tsx'), '<div />');
   fs.symlinkSync(source, path.join(f.project, 'alias'), process.platform === 'win32' ? 'junction' : 'dir');
-  expect(f.paths.sourceFile('alias/App.tsx')).toBe(fs.realpathSync(path.join(source, 'App.tsx')));
-  expect(f.paths.metadataFile('alias/glide-positions.json')).toBe(path.join(fs.realpathSync(source), 'glide-positions.json'));
+  expect(f.paths.sourceFile('alias/App.tsx')).toBe(fs.realpathSync.native(path.join(source, 'App.tsx')));
+  expect(f.paths.metadataFile('alias/glide-positions.json')).toBe(path.join(fs.realpathSync.native(source), 'glide-positions.json'));
 });
 
 test.each(['.git', 'node_modules'])('rejects protected %s directories and aliases to them', directory => {
@@ -70,4 +70,19 @@ test('rejects metadata behind escaping and dangling directory links', () => {
   fs.unlinkSync(path.join(f.outside, 'App.tsx'));
   fs.rmdirSync(f.outside);
   expect(() => f.paths.resolve('escape/new/file.tsx', false)).toThrow('INVALID_PATH');
+});
+
+test('canonicalizes case and rejects Windows 8.3 short-name aliases into protected directories', () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.project, 'App.tsx'), 'export const A = <div />;');
+  if (process.platform === 'win32') {
+    expect(f.paths.sourceFile('app.tsx')).toBe(f.paths.sourceFile('APP.TSX'));
+    const nm = path.join(f.project, 'node_modules', 'pkg');
+    fs.mkdirSync(nm, { recursive: true });
+    fs.writeFileSync(path.join(nm, 'index.js'), 'export const x = 1;');
+    // On NTFS volumes with 8.3 names enabled, NODE_M~1 resolves to node_modules and must be rejected.
+    if (fs.existsSync(path.join(f.project, 'NODE_M~1', 'pkg', 'index.js'))) {
+      expect(() => f.paths.sourceFile('NODE_M~1/pkg/index.js')).toThrow('INVALID_PATH');
+    }
+  }
 });

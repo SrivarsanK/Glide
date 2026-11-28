@@ -108,3 +108,35 @@ test('a dev server over TLS accepts its own https origin and still refuses other
   expect(trustedRequest(req('https://localhost:5173', false), 5173)).toBe(false);
   expect(trustedRequest(req('https://evil.test', true), 5173)).toBe(false);
 });
+
+test('resolve_component and open_component stay contained inside projectRoot and ignore process.cwd()', async () => {
+  const outer = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'glide-contain-')));
+  const project = path.join(outer, 'project');
+  fs.mkdirSync(project, { recursive: true });
+  fs.writeFileSync(path.join(outer, 'Secret.tsx'), 'export function Secret() { return <div />; }\n');
+  fs.writeFileSync(path.join(project, 'App.tsx'), "import { Secret } from '../Secret';\nexport const App = () => <Secret />;\n");
+  try {
+    server = new GlideServer(port, 5173, undefined, project);
+    await server.start();
+    const client = await connectLocal(port);
+
+    // 1. Relative file that exists in process.cwd() (package.json) does NOT exist in projectRoot.
+    const openCwd = new Promise<any>(resolve => client.once('message', d => resolve(JSON.parse(String(d)))));
+    client.send(JSON.stringify({ type: 'open_component', file: 'package.json', line: 1, column: 1 }));
+    expect(await openCwd).toMatchObject({ type: 'open_component_status', success: false });
+
+    // 2. resolve_component following relative import outside projectRoot must not disclose/open outer file.
+    const resolveOut = new Promise<any>(resolve => client.once('message', d => resolve(JSON.parse(String(d)))));
+    client.send(JSON.stringify({ type: 'resolve_component', file: 'App.tsx', componentName: 'Secret', openInEditor: false }));
+    expect(await resolveOut).toMatchObject({ type: 'resolved_component', success: false });
+
+    // 3. git-branch-create in a temp project with no .git must fail instead of falling back to process.cwd()!
+    const gitOut = new Promise<any>(resolve => client.once('message', d => resolve(JSON.parse(String(d)))));
+    client.send(JSON.stringify({ type: 'git-branch-create', branchName: 'glide-should-not-create-in-cwd' }));
+    expect(await gitOut).toMatchObject({ type: 'git-status', success: false, action: 'create' });
+
+    client.close();
+  } finally {
+    fs.rmSync(outer, { recursive: true, force: true });
+  }
+});
