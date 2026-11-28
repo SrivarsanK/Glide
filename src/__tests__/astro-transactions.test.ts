@@ -133,3 +133,51 @@ test('Astro double-editing quoted styles and reading HTML entities preserves val
   expect(mergeInlineStyle(dataUri, { color: '' })).toBe('background-image: url(data:image/png;base64,AAAA)');
   expect(mergeInlineStyle('color: red', { '--brandColor': '#ff0000' })).toBe('color: red; --brandColor: #ff0000');
 });
+
+test('Astro scanner handles attrs with <, {a<b}, spaced =, unquoted />, scripts, regex/template braces, uppercase voids, closing prefix, and {id} shorthand', async () => {
+  const {
+    listAstroElements,
+    readAstroClassAt,
+    readAstroTagAt,
+    setAstroClassAt,
+    setAstroTextAt,
+  } = await import('../../packages/adapters/astro/src/template.js');
+
+  // 1. `<word` inside attrs and `{a<b}` are not counted as tags.
+  const tricky = '<div title="<email>">{a<b ? "yes" : "no"}<span>ok</span></div>\n';
+  expect(listAstroElements(tricky)).toEqual([{ line: 1, column: 1 }, { line: 1, column: tricky.indexOf('<span') + 1 }]);
+
+  // 2. Spaced `class = "p-2"` and unquoted `<input type=text/>`.
+  const spaced = '<div class = "p-2"><input type=text/><span>Hi</span></div>\n';
+  expect(readAstroClassAt(spaced, 1, 1)).toBe('p-2');
+  expect(setAstroClassAt(spaced, 1, 1, 'p-4')).toContain('<div class="p-4">');
+  expect(readAstroTagAt(spaced, 1, 1).childTags).toEqual(['input', 'span']);
+
+  // 3. Self-closing `<script />` and `<!--` inside `<script>` do not blank template body.
+  const scripts = '<script src="/a.js" />\n<main><p>Keep</p></main>\n<script>const s = "<!--";</script>\n<section>After</section>\n<!-- real comment -->\n';
+  const tags = listAstroElements(scripts);
+  expect(tags).toEqual([
+    { line: 2, column: 1 },
+    { line: 2, column: 7 },
+    { line: 4, column: 1 },
+  ]);
+
+  // 4. `closeBrace` handles regex literals, comments, and nested template literals.
+  const exprs = '<div data-a={/}/.test(x)} data-b={/* } */ 1} data-c={`x ${ok ? `}` : ""}`} class="p-2">Hi</div>\n';
+  expect(readAstroClassAt(exprs, 1, 1)).toBe('p-2');
+  expect(setAstroClassAt(exprs, 1, 1, 'p-4')).toContain('class="p-4">Hi</div>');
+
+  // 5. Uppercase `<BR>`/`<IMG>` are treated as void tags, not containers.
+  const upperVoid = '<div><BR><IMG src="/a.png"><p>Sibling</p></div>\n';
+  expect(readAstroTagAt(upperVoid, 1, upperVoid.indexOf('<p>') + 1).ancestors).toEqual(['div']);
+
+  // 6. Closing-tag prefix collision (`</p` must not match `</pre>`).
+  expect(() => setAstroTextAt('<p>hello</pre></p>\n', 1, 1, 'world')).toThrow('only literal text');
+
+  // 7. Astro `{id}` shorthand allows editing `class` while refusing dynamic `id`.
+  const shorthand = '<div {id} class="p-2">Hi</div>\n';
+  expect(setAstroClassAt(shorthand, 1, 1, 'p-4')).toBe('<div {id} class="p-4">Hi</div>\n');
+  expect(() => setAstroTextAt(shorthand, 1, 1, 'Yo')).not.toThrow();
+  const { setAstroAttributeAt } = await import('../../packages/adapters/astro/src/template.js');
+  expect(() => setAstroAttributeAt(shorthand, 1, 1, 'id', 'hero')).toThrow(/dynamic Astro id/);
+});

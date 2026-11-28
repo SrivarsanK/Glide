@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { updateVueSFCClass, updateVueSFCStyle, updateVueSFCText } from '../../packages/adapters/vue/src/index.js';
+import {
+  readVueClass,
+  readVueTag,
+  renameVueTag,
+  updateVueSFCAttribute,
+  updateVueSFCClass,
+  updateVueSFCStyle,
+  updateVueSFCText,
+} from '../../packages/adapters/vue/src/index.js';
 
 describe('Vue SFC Transformation Adapter', () => {
   test('targets whole-file CRLF coordinates after script and preserves multiline neighbors', () => {
@@ -47,5 +55,31 @@ describe('Vue SFC Transformation Adapter', () => {
     const updated = updateVueSFCClass(sfc, 'src/App.vue:3:9', 'p-4 shadow');
 
     expect(updated).toContain('<div data-gl-source="src/App.vue:3:9" class="p-4 shadow">');
+  });
+
+  test('readVueClass handles uppercase CLASS and refuses dynamic :class bindings', () => {
+    const upper = '<template><div CLASS="p-2 flex">Hi</div></template>';
+    expect(readVueClass(upper, 'App.vue:1:11')).toBe('p-2 flex');
+    expect(() => readVueClass('<template><div :class="cls">Hi</div></template>', 'App.vue:1:11')).toThrow('UNSUPPORTED_OPERATION');
+  });
+
+  test('readVueTag detects camelCase tabIndex/:tabIndex and ignores @tabindex events', () => {
+    const sfc = '<template><div><span tabIndex="0">A</span><em :tabIndex="0">B</em><b @tabindex="fn">C</b></div></template>';
+    const tag = readVueTag(sfc, 'App.vue:1:11');
+    expect(tag.descendants).toEqual([
+      { tag: 'span', focusable: true },
+      { tag: 'em', focusable: true },
+      { tag: 'b', focusable: false },
+    ]);
+  });
+
+  test('renameVueTag refuses void elements like <img /> and writers throw NODE_NOT_FOUND on missing targets', () => {
+    const img = '<template><img src="/a.png" /></template>';
+    expect(() => renameVueTag(img, 'App.vue:1:11', 'div')).toThrow('UNSUPPORTED_OPERATION');
+    const sfc = '<template><div>Hi</div></template>';
+    expect(() => updateVueSFCClass(sfc, 'App.vue:99:1', 'p-4')).toThrow('NODE_NOT_FOUND');
+    expect(() => updateVueSFCStyle(sfc, 'App.vue:99:1', { color: 'red' })).toThrow('NODE_NOT_FOUND');
+    expect(() => updateVueSFCAttribute(sfc, 'App.vue:99:1', 'title', 'x')).toThrow('NODE_NOT_FOUND');
+    expect(() => updateVueSFCText(sfc, 'App.vue:99:1', 'x')).toThrow('NODE_NOT_FOUND');
   });
 });

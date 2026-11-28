@@ -9,44 +9,174 @@ interface Attribute { name: string; start: number; end: number; value: string | 
 interface Tag { name: string; start: number; end: number; selfClosing: boolean; attributes: Attribute[]; spread: boolean }
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+const REGEX_KEYWORDS = new Set(['return', 'case', 'typeof', 'in', 'of', 'new', 'void', 'delete', 'throw', 'else', 'yield', 'await', 'do']);
 const invalid = (): never => { throw new Error('UNSUPPORTED_OPERATION: This tag has a form Glide cannot read safely. Edit it in source.'); };
 
-/** Frontmatter, comments, scripts and styles blanked out, with every offset kept. */
+/** Treat lowercase and ALL-CAPS HTML void tags (`<br>`, `<BR>`, `<IMG>`) as void, keeping PascalCase Astro components (`<Link>`). */
+function isVoidTag(name: string): boolean {
+  return (name === name.toLowerCase() || name === name.toUpperCase()) && VOID.has(name.toLowerCase());
+}
+
+/** The offset after the closing backtick of a template literal starting at `open`, handling nested `${...}` expressions. */
+function findCloseTemplate(code: string, open: number): number {
+  for (let i = open + 1; i < code.length; i++) {
+    const ch = code[i];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '`') return i + 1;
+    if (ch === '$' && code[i + 1] === '{') {
+      const end = findCloseBrace(code, i + 1);
+      if (end < 0) return -1;
+      i = end - 1;
+    }
+  }
+  return -1;
+}
+
+/** The offset after the `}` that closes `{` at `open`, skipping strings, nested templates, comments, and regex literals. */
+function findCloseBrace(code: string, open: number): number {
+  let depth = 0;
+  let regexAllowed = true;
+  for (let i = open; i < code.length; i++) {
+    const ch = code[i];
+    if (/\s/.test(ch)) continue;
+    if (ch === '"' || ch === "'") {
+      for (i++; i < code.length && code[i] !== ch; i++) if (code[i] === '\\') i++;
+      if (i >= code.length) return -1;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === '`') {
+      const end = findCloseTemplate(code, i);
+      if (end < 0) return -1;
+      i = end - 1;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === '/' && code[i + 1] === '/') {
+      const nl = code.indexOf('\n', i + 2);
+      if (nl < 0) return -1;
+      i = nl;
+      continue;
+    }
+    if (ch === '/' && code[i + 1] === '*') {
+      const end = code.indexOf('*/', i + 2);
+      if (end < 0) return -1;
+      i = end + 1;
+      continue;
+    }
+    if (ch === '/' && regexAllowed) {
+      let inClass = false;
+      for (i++; i < code.length; i++) {
+        const rc = code[i];
+        if (rc === '\\') { i++; continue; }
+        if (rc === '[') inClass = true;
+        else if (rc === ']') inClass = false;
+        else if (rc === '/' && !inClass) break;
+        else if (rc === '\n' || rc === '\r') return -1;
+      }
+      if (i >= code.length) return -1;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === '{') { depth++; regexAllowed = true; continue; }
+    if (ch === '}') {
+      if (--depth === 0) return i + 1;
+      regexAllowed = false;
+      continue;
+    }
+    if (/[a-zA-Z0-9_$]/.test(ch)) {
+      let end = i + 1;
+      while (end < code.length && /[a-zA-Z0-9_$]/.test(code[end])) end++;
+      regexAllowed = REGEX_KEYWORDS.has(code.slice(i, end));
+      i = end - 1;
+      continue;
+    }
+    if ((ch === '+' && code[i + 1] === '+') || (ch === '-' && code[i + 1] === '-')) {
+      i++;
+      regexAllowed = false;
+      continue;
+    }
+    regexAllowed = /[([,;?:=!&|^~+\-*%<>]/.test(ch);
+  }
+  return -1;
+}
+
+/** Frontmatter, comments, scripts, styles, and textarea/title bodies blanked out in one pass, with every offset kept. */
 function mask(code: string): string {
-  const blank = (match: string) => match.replace(/[^\n]/g, ' ');
-  return code.replace(/^\s*---[\s\S]*?\n---/, blank).replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/<script[\s\S]*?<\/script>/gi, blank).replace(/<style[\s\S]*?<\/style>/gi, blank)
-    // Textarea and title hold text, so a `</section>` written inside one is not a tag.
-    .replace(/(<(textarea|title)\b[^>]*>)([\s\S]*?)(?=<\/\2\s*>)/gi, (_match, open: string, _name: string, body: string) => open + blank(body));
+  const blank = (segment: string) => segment.replace(/[^\n]/g, ' ');
+  const out: string[] = [];
+  let cursor = 0;
+  let i = 0;
+  const fm = /^\s*---(?:\r?\n[\s\S]*?)?\r?\n---(?=\r?\n|$)/.exec(code);
+  if (fm) {
+    out.push(blank(fm[0]));
+    i = cursor = fm[0].length;
+  }
+  const flush = (from: number, to: number, replaceWithBlank: boolean) => {
+    if (from > cursor) out.push(code.slice(cursor, from));
+    out.push(replaceWithBlank ? blank(code.slice(from, to)) : code.slice(from, to));
+    cursor = to;
+  };
+  while (i < code.length) {
+    if (code.startsWith('<!--', i)) {
+      const close = code.indexOf('-->', i + 4);
+      const end = close < 0 ? code.length : close + 3;
+      flush(i, end, true);
+      i = end;
+      continue;
+    }
+    if (code[i] === '<') {
+      const rawMatch = /^<(script|style|textarea|title)(?=[\s/>])/i.exec(code.slice(i, i + 20));
+      if (rawMatch) {
+        const tag = tryReadTag(code, i, true);
+        if (tag) {
+          const lower = rawMatch[1].toLowerCase();
+          if (lower === 'script' || lower === 'style') {
+            if (tag.selfClosing) {
+              flush(i, tag.end, true);
+              i = tag.end;
+              continue;
+            }
+            const closeRe = new RegExp(`</${lower}\\s*>`, 'gi');
+            closeRe.lastIndex = tag.end;
+            const closeMatch = closeRe.exec(code);
+            const end = closeMatch ? closeMatch.index + closeMatch[0].length : code.length;
+            flush(i, end, true);
+            i = end;
+            continue;
+          }
+          // Textarea and title hold text, so a `</section>` written inside one is not a tag.
+          if (!tag.selfClosing) {
+            const closeRe = new RegExp(`</${lower}\\s*>`, 'gi');
+            closeRe.lastIndex = tag.end;
+            const closeMatch = closeRe.exec(code);
+            if (closeMatch) {
+              flush(tag.end, closeMatch.index, true);
+              i = closeMatch.index + closeMatch[0].length;
+              continue;
+            }
+          }
+          i = tag.end;
+          continue;
+        }
+      } else if (/[a-zA-Z]/.test(code[i + 1] ?? '')) {
+        const tag = tryReadTag(code, i, true);
+        if (tag) { i = tag.end; continue; }
+      }
+    }
+    i++;
+  }
+  if (cursor < code.length) out.push(code.slice(cursor));
+  return out.join('');
 }
 
 function tagStarts(code: string): number[] {
-  const clean = mask(code), starts: number[] = [];
-  const pattern = /<([a-zA-Z][a-zA-Z0-9.-]*)/g;
-  for (let match; (match = pattern.exec(clean));) {
-    if (['template', 'script', 'style'].includes(match[1].toLowerCase())) continue;
-    if (clean[match.index + 1 + match[1].length] === ':') continue;
-    starts.push(match.index);
-  }
-  return starts;
+  return tree(code).map(node => node.start);
 }
 
 function position(code: string, offset: number): { line: number; column: number } {
   const before = code.slice(0, offset);
   return { line: before.split('\n').length, column: offset - before.lastIndexOf('\n') };
-}
-
-/** The offset after the `}` that closes the `{` at `open`, with strings and nested braces skipped. */
-function closeBrace(code: string, open: number): number {
-  let depth = 0;
-  for (let i = open; i < code.length; i++) {
-    const char = code[i];
-    if (char === '"' || char === "'" || char === '`') {
-      for (i++; i < code.length && code[i] !== char; i++) if (code[i] === '\\') i++;
-    } else if (char === '{') depth++;
-    else if (char === '}' && --depth === 0) return i + 1;
-  }
-  return invalid();
 }
 
 /** Decode HTML character references in a single pass so `&amp;quot;` becomes `&quot;`, not `"`. */
@@ -72,40 +202,76 @@ function decodeHtmlEntities(raw: string): string {
   });
 }
 
-function readTag(code: string, start: number, anyName = false): Tag {
-  const name = /^<([a-zA-Z][a-zA-Z0-9.-]*)/.exec(code.slice(start, start + 80))?.[1] ?? invalid();
-  if (!anyName && !/^[a-z][a-z0-9-]*$/.test(name)) throw new Error('UNSUPPORTED_OPERATION: Components are edited where they are defined. Select an HTML element.');
+function tryReadTag(code: string, start: number, anyName = false): Tag | null {
+  const match = /^<([a-zA-Z][a-zA-Z0-9.-]*)(?=[\s/>])/.exec(code.slice(start, start + 128));
+  if (!match) return null;
+  const name = match[1];
+  if (!anyName && !/^[a-z][a-z0-9-]*$/.test(name)) return null;
   const attributes: Attribute[] = [];
   let spread = false, i = start + 1 + name.length;
   for (;;) {
     while (/\s/.test(code[i] ?? '')) i++;
-    if (i >= code.length) invalid();
+    if (i >= code.length) return null;
     if (code[i] === '>') return { name, start, end: i + 1, selfClosing: false, attributes, spread };
     if (code.startsWith('/>', i)) return { name, start, end: i + 2, selfClosing: true, attributes, spread };
-    if (code[i] === '{') { spread = true; i = closeBrace(code, i); continue; }
+    if (code[i] === '{') {
+      const close = findCloseBrace(code, i);
+      if (close < 0) return null;
+      const inner = code.slice(i + 1, close - 1).trim();
+      // Astro shorthand `{id}` is equivalent to `id={id}`, not a spread attribute.
+      if (!inner.startsWith('...') && /^[a-zA-Z_$][a-zA-Z0-9_$-]*$/.test(inner)) {
+        attributes.push({ name: inner, start: i, end: close, value: null, dynamic: true });
+      } else {
+        spread = true;
+      }
+      i = close;
+      continue;
+    }
+    if (!/[a-zA-Z_:@#$]/.test(code[i])) return null;
     const attributeStart = i;
-    while (i < code.length && !/[\s=>]/.test(code[i]) && !code.startsWith('/>', i)) i++;
+    while (i < code.length && !/[\s=/>"'<{}]/.test(code[i])) i++;
     const attributeName = code.slice(attributeStart, i);
-    if (!attributeName) invalid();
+    if (!attributeName) return null;
+    const nameEnd = i;
+    let eq = i;
+    while (eq < code.length && /\s/.test(code[eq])) eq++;
     let value: string | null = null, dynamic = false;
-    if (code[i] === '=') {
-      i++;
+    if (code[eq] === '=') {
+      i = eq + 1;
+      while (i < code.length && /\s/.test(code[i])) i++;
       const quote = code[i];
       if (quote === '"' || quote === "'") {
         const close = code.indexOf(quote, i + 1);
-        if (close < 0) invalid();
+        if (close < 0) return null;
         value = decodeHtmlEntities(code.slice(i + 1, close));
         i = close + 1;
-      } else if (quote === '{') { dynamic = true; i = closeBrace(code, i); }
-      else if (quote === '`') { dynamic = true; i = code.indexOf('`', i + 1) + 1 || invalid(); }
-      else {
+      } else if (quote === '{') {
+        dynamic = true;
+        const close = findCloseBrace(code, i);
+        if (close < 0) return null;
+        i = close;
+      } else if (quote === '`') {
+        dynamic = true;
+        const close = findCloseTemplate(code, i);
+        if (close < 0) return null;
+        i = close;
+      } else {
         const valueStart = i;
-        while (i < code.length && !/[\s>]/.test(code[i])) i++;
+        while (i < code.length && !/[\s>"'`=]/.test(code[i]) && !code.startsWith('/>', i)) i++;
+        if (i === valueStart) return null;
         value = decodeHtmlEntities(code.slice(valueStart, i));
       }
+    } else {
+      i = nameEnd;
     }
     attributes.push({ name: attributeName, start: attributeStart, end: i, value, dynamic });
   }
+}
+
+function readTag(code: string, start: number, anyName = false): Tag {
+  const name = /^<([a-zA-Z][a-zA-Z0-9.-]*)(?=[\s/>])/.exec(code.slice(start, start + 128))?.[1] ?? invalid();
+  if (!anyName && !/^[a-z][a-z0-9-]*$/.test(name)) throw new Error('UNSUPPORTED_OPERATION: Components are edited where they are defined. Select an HTML element.');
+  return tryReadTag(code, start, anyName) ?? invalid();
 }
 
 function target(code: string, line: number, column: number): Tag | null {
@@ -150,22 +316,39 @@ interface TreeNode { name: string; start: number; parent: number; close: number 
 /** Elements matched to their closing tags. `close` is the offset of `</name`, null for self-closing and void tags. */
 function tree(code: string): TreeNode[] {
   const clean = mask(code), nodes: TreeNode[] = [], open: number[] = [];
-  const pattern = /<(\/?)([a-zA-Z][a-zA-Z0-9.-]*)/g;
-  for (let match; (match = pattern.exec(clean));) {
-    const name = match[2];
-    if (['template', 'script', 'style'].includes(name.toLowerCase()) || clean[match.index + match[0].length] === ':') continue;
-    if (match[1]) {
-      let depth = open.length - 1;
-      while (depth >= 0 && nodes[open[depth]].name !== name) depth--;
-      // A stray closing tag closes nothing; unclosed elements in between keep close = null.
-      if (depth >= 0) { nodes[open[depth]].close = match.index; open.length = depth; }
+  for (let i = 0; i < clean.length;) {
+    if (clean[i] !== '<') { i++; continue; }
+    if (clean[i + 1] === '/') {
+      const closeMatch = /^<\/([a-zA-Z][a-zA-Z0-9.-]*)\s*>/.exec(clean.slice(i, i + 128));
+      if (!closeMatch) { i++; continue; }
+      const name = closeMatch[1];
+      if (!['template', 'script', 'style'].includes(name.toLowerCase())) {
+        let depth = open.length - 1;
+        while (depth >= 0) {
+          const openName = nodes[open[depth]].name;
+          const matches = /^[a-z]/.test(openName) || openName === openName.toUpperCase()
+            ? openName.toLowerCase() === name.toLowerCase()
+            : openName === name;
+          if (matches) break;
+          depth--;
+        }
+        // A stray closing tag closes nothing; unclosed elements in between keep close = null.
+        if (depth >= 0) { nodes[open[depth]].close = i; open.length = depth; }
+      }
+      i += closeMatch[0].length;
       continue;
     }
-    const tag = readTag(code, match.index, true);
-    nodes.push({ name, start: match.index, parent: open.length ? open[open.length - 1] : -1, close: null,
-      focusable: tag.attributes.some(item => item.name.toLowerCase() === 'tabindex') });
-    if (!tag.selfClosing && !VOID.has(name)) open.push(nodes.length - 1);
-    pattern.lastIndex = tag.end;
+    const openMatch = /^<([a-zA-Z][a-zA-Z0-9.-]*)(?=[\s/>])/.exec(clean.slice(i, i + 128));
+    if (!openMatch) { i++; continue; }
+    const name = openMatch[1];
+    const tag = tryReadTag(code, i, true);
+    if (!tag) { i++; continue; }
+    if (!['template', 'script', 'style'].includes(name.toLowerCase())) {
+      nodes.push({ name, start: i, parent: open.length ? open[open.length - 1] : -1, close: null,
+        focusable: tag.attributes.some(item => item.name.toLowerCase() === 'tabindex') });
+      if (!tag.selfClosing && !isVoidTag(name)) open.push(nodes.length - 1);
+    }
+    i = tag.end;
   }
   return nodes;
 }
@@ -187,7 +370,7 @@ export function readAstroTagAt(code: string, line: number, column: number) {
 export function renameAstroTagAt(code: string, line: number, column: number, to: string): string {
   const tag = target(code, line, column);
   if (!tag) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
-  if (VOID.has(tag.name)) throw new Error(`UNSUPPORTED_OPERATION: <${tag.name}> has no content to keep; replace it in source.`);
+  if (isVoidTag(tag.name)) throw new Error(`UNSUPPORTED_OPERATION: <${tag.name}> has no content to keep; replace it in source.`);
   const close = tree(code).find(node => node.start === tag.start)?.close ?? null;
   if (!tag.selfClosing && close === null) throw new Error(`UNSUPPORTED_OPERATION: <${tag.name}> has no closing tag Glide can find; add one in source.`);
   let next = code;
@@ -250,7 +433,8 @@ export function setAstroTextAt(code: string, line: number, column: number, text:
   if (tag.attributes.some(item => item.name.startsWith('set:'))) throw new Error('UNSUPPORTED_OPERATION: Text is controlled by a directive.');
   const close = code.indexOf('<', tag.end);
   const raw = close < 0 ? '' : code.slice(tag.end, close);
-  if (tag.selfClosing || VOID.has(tag.name) || !code.startsWith(`</${tag.name}`, close) || !raw.trim() || (!literalBraces && /[{}]/.test(raw))) {
+  const closeBoundary = close >= 0 && new RegExp(`^</${tag.name}\\s*>`, 'i').test(code.slice(close, close + tag.name.length + 16));
+  if (tag.selfClosing || isVoidTag(tag.name) || !closeBoundary || !raw.trim() || (!literalBraces && /[{}]/.test(raw))) {
     throw new Error('UNSUPPORTED_OPERATION: Select an element that holds only literal text.');
   }
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/{/g, '&#123;').replace(/}/g, '&#125;');

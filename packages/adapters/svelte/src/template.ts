@@ -5,15 +5,35 @@
 import { parse } from 'svelte/compiler';
 import { formattingWhitespace, mergeInlineStyle } from '@srivarsank/core';
 
-function elements(code: string): any[] {
+const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+
+/** Blank non-CSS `<style lang="...">` bodies (preserving newlines and offsets) so Svelte's parser accepts preprocessed styles. */
+function maskPreprocessedStyles(code: string): string {
+  return code.replace(
+    /(<style\b[^>]*\blang\s*=\s*(?:"(?!css")[^"]*"|'(?!css')[^']*'|(?!=css\b)[^\s>]+)[^>]*>)([\s\S]*?)(?=<\/style\s*>)/gi,
+    (_m, open: string, body: string) => open + body.replace(/[^\n]/g, ' ')
+  );
+}
+
+function parseSvelte(code: string): any {
+  try {
+    return parse(code, { modern: true });
+  } catch (err) {
+    const masked = maskPreprocessedStyles(code);
+    if (masked === code) throw err;
+    return parse(masked, { modern: true });
+  }
+}
+
+function collectNodes(code: string, includeComponents: boolean): any[] {
   let root: any;
-  try { root = parse(code, { modern: true }); }
+  try { root = parseSvelte(code); }
   catch { throw new Error('UNSUPPORTED_OPERATION: A valid Svelte component is required.'); }
   const found: any[] = [];
   const walk = (node: any) => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) { node.forEach(walk); return; }
-    if (node.type === 'RegularElement') found.push(node);
+    if (node.type === 'RegularElement' || (includeComponents && node.type === 'Component')) found.push(node);
     for (const [key, child] of Object.entries(node)) {
       // Attributes and expressions hold no template elements.
       if (!['attributes', 'expression', 'test', 'metadata'].includes(key)) walk(child);
@@ -21,6 +41,10 @@ function elements(code: string): any[] {
   };
   walk(root.fragment);
   return found.sort((a, b) => a.start - b.start);
+}
+
+function elements(code: string): any[] {
+  return collectNodes(code, false);
 }
 
 function position(code: string, offset: number): { line: number; column: number } {
@@ -42,7 +66,7 @@ function escape(value: string): string {
 
 function replace(code: string, start: number, end: number, text: string): string {
   const result = code.slice(0, start) + text + code.slice(end);
-  try { parse(result, { modern: true }); }
+  try { parseSvelte(result); }
   catch { throw new Error('INVALID_OUTPUT: The edit produced an invalid Svelte component.'); }
   return result;
 }
@@ -52,8 +76,18 @@ function staticAttribute(node: any, name: string): { attribute: any; value: stri
   if (node.attributes.some((item: any) => item.type === 'SpreadAttribute')) {
     throw new Error(`UNSUPPORTED_OPERATION: ${name} may come from a spread attribute.`);
   }
+  const lower = name.toLowerCase();
+  if (lower === 'style' && node.attributes.some((item: any) => item.type === 'StyleDirective')) {
+    throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Svelte style directive in source.');
+  }
+  if (lower === 'class' && node.attributes.some((item: any) => item.type === 'ClassDirective')) {
+    throw new Error('UNSUPPORTED_OPERATION: Preserve the dynamic Svelte class directive in source.');
+  }
+  if (node.attributes.some((item: any) => item.type === 'BindDirective' && item.name?.toLowerCase() === lower)) {
+    throw new Error(`UNSUPPORTED_OPERATION: Preserve the dynamic Svelte bind:${name} directive in source.`);
+  }
   // HTML attribute names ignore case, and the parser keeps them as written.
-  const matches = node.attributes.filter((item: any) => item.type === 'Attribute' && item.name.toLowerCase() === name.toLowerCase());
+  const matches = node.attributes.filter((item: any) => item.type === 'Attribute' && item.name.toLowerCase() === lower);
   if (matches.length > 1) throw new Error('UNSUPPORTED_OPERATION: Duplicate attributes are ambiguous.');
   const attribute = matches[0];
   if (!attribute) return null;
@@ -78,19 +112,20 @@ function setAttribute(code: string, line: number, column: number, name: string, 
 export function readSvelteTagAt(code: string, line: number, column: number) {
   const node = target(code, line, column);
   if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
-  const all = elements(code);
+  const all = collectNodes(code, true);
   const inside = all.filter(item => item.start > node.start && item.end <= node.end);
   return { name: node.name as string,
     ancestors: all.filter(item => item.start < node.start && item.end >= node.end).reverse().map(item => item.name as string),
     childTags: inside.filter(item => !inside.some(other => other.start < item.start && other.end >= item.end)).map(item => item.name as string),
     descendants: inside.map(item => ({ tag: item.name as string,
-      focusable: item.attributes.some((attribute: any) => attribute.type === 'Attribute' && attribute.name.toLowerCase() === 'tabindex') })) };
+      focusable: (item.attributes || []).some((attribute: any) => attribute.type === 'Attribute' && attribute.name.toLowerCase() === 'tabindex') })) };
 }
 
 /** Rename the element at line:column, opening and closing tag together. */
 export function renameSvelteTagAt(code: string, line: number, column: number, to: string): string {
   const node = target(code, line, column);
   if (!node) throw new Error(`NODE_NOT_FOUND: No template element exists at ${line}:${column}.`);
+  if (VOID.has(node.name.toLowerCase())) throw new Error(`UNSUPPORTED_OPERATION: <${node.name}> has no content to keep; replace it in source.`);
   const selfClosing = code.slice(node.end - 2, node.end) === '/>', closing = `</${node.name}>`;
   if (!selfClosing && !code.slice(node.start, node.end).endsWith(closing)) throw new Error(`UNSUPPORTED_OPERATION: <${node.name}> has no closing tag Glide can find; change it in source.`);
   let next = code;
