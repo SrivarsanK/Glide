@@ -5072,8 +5072,18 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
             get isEmpty() { return this._index.size === 0; }
           };
 
+          /**
+           * A click on the page does not take focus from the properties panel. Blur the field being edited while the
+           * old element is still selected: it commits there, and stops holding that element's value for the next one.
+           */
+          function commitFocusedField() {
+            const focused = document.activeElement;
+            if (focused && focused.closest && focused.closest('.sidebar-right')) focused.blur();
+          }
+
           /** Applies a selection the page reports; a refresh re-reports an element already selected and is not a click. */
           function acceptSelection(data) {
+            if (!data.refresh) commitFocusedField();
             const isShift = data.isShift;
             // A page that has not re-rendered a save yet reports the coordinates from before it.
             const source = pendingStampRemaps.length ? sourceMapping.remap(data.source, pendingStampRemaps, currentFile) : data.source;
@@ -5349,6 +5359,7 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               drawOverlay();
             }
             if (data.type === 'glide:element-deselected') {
+              commitFocusedField();
               isPendingPositionUpdate = false;
               const source = data.source;
               const idx = selectedSources.findIndex(s => isSourceMatch(s, source));

@@ -45,7 +45,7 @@ test('selection bounds remain live while a persisted position update is pending'
     const selectionSnapshots = new Map();
     const document = { querySelectorAll() { return []; } };
     let draws = 0;
-    function drawOverlay() { draws++; } function populatePropsFromComputed() {}
+    function drawOverlay() { draws++; } function populatePropsFromComputed() {} function commitFocusedField() {}
     ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
     const data = { type: 'glide:overlay', source: 'App.tsx:1:1', rect: { x: 40, y: 25, width: 200, height: 50 } };
     (function() { ${branch('glide:overlay')} })();
@@ -62,7 +62,7 @@ test('deselecting one of two selected elements restores the other one\'s tag, st
     let selectedElement, selectedRect, selectedComputedStyles, selectedComputedSource = null, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
     const selectionSnapshots = new Map(), populated = [];
     const document = { querySelectorAll() { return []; } };
-    function drawOverlay() {} function resetEditScope() {} function showNoSelection() {}
+    function drawOverlay() {} function resetEditScope() {} function showNoSelection() {} function commitFocusedField() {}
     function populatePropsFromComputed(styles, rect, text) { populated.push({ styles, rect, text }); }
     ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
     const rectA = { x: 0, y: 0, width: 100, height: 40 };
@@ -97,7 +97,7 @@ test('deselecting after a source remap keeps the remaining element\'s snapshot a
     let glideClipboard = null;
     const selectionSnapshots = new Map(), fileDigests = new Map(), _styleTimers = new Map(), _pendingEdits = [];
     const document = { querySelectorAll() { return []; } };
-    function drawOverlay() {} function populatePropsFromComputed() {} function resetEditScope() {}
+    function drawOverlay() {} function populatePropsFromComputed() {} function commitFocusedField() {} function resetEditScope() {}
     function showNoSelection() {} function clearOverlay() {} function setFileDigest() {} function trackStaleStamps() {}
     ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('applyTransactionMappings')} ${fn('acceptSelection')}
     const rect = { x: 0, y: 0, width: 10, height: 10 };
@@ -131,7 +131,7 @@ test('clearing selection empties selectionSnapshots and computed styles', () => 
     let selectedElement, selectedRect, selectedComputedStyles, selectedComputedSource = null, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
     const selectionSnapshots = new Map();
     const document = { querySelectorAll() { return []; } };
-    function populatePropsFromComputed() {} function clearOverlay() {} function showNoSelection() {}
+    function populatePropsFromComputed() {} function commitFocusedField() {} function clearOverlay() {} function showNoSelection() {}
     ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
     const rect = { x: 0, y: 0, width: 10, height: 10 };
     acceptSelection({ source: 'App.tsx:1:1', rect, computedStyles: { tagName: 'h1' }, textContent: 'Title' });
@@ -260,7 +260,7 @@ test('preview mode ignores glide:overlay and blocks Escape/Delete leaks', () => 
     const selectionSnapshots = new Map();
     const document = { querySelectorAll() { return []; } };
     let draws = 0;
-    function drawOverlay() { draws++; } function populatePropsFromComputed() {}
+    function drawOverlay() { draws++; } function populatePropsFromComputed() {} function commitFocusedField() {}
     ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
     const data = { type: 'glide:overlay', source: 'App.tsx:1:1', rect: { x: 40, y: 25, width: 200, height: 50 } };
     (function() { ${branch('glide:overlay')} })();
@@ -489,4 +489,27 @@ test('Windows drive-letter case normalization, selectedRect x/y coordinates, ifr
   expect(branch('glide:ready')).toContain('resetNavigationState()');
   const renderLayersFn = fn('renderLayersTree');
   expect(renderLayersFn).toMatch(/if\s*\(isComponent\)\s*\{[\s\S]{0,600}clearOverlay\(\)/);
+});
+
+test('a click on the page commits the focused field to its own element, and a refresh leaves it focused', () => {
+  const context = vm.createContext({ createSourceMapping });
+  vm.runInContext(`
+    const sourceMapping = createSourceMapping();
+    let currentFile = 'App.tsx', isPendingPositionUpdate = false;
+    let selectedElement, selectedRect, selectedComputedStyles, selectedComputedSource = null, selectedSources = [], selectedRects = [], pendingStampRemaps = [];
+    const selectionSnapshots = new Map(), blurs = [];
+    const field = { closest: s => (s === '.sidebar-right' ? {} : null), blur() { blurs.push(selectedElement.source); document.activeElement = null; } };
+    const document = { activeElement: field, querySelectorAll() { return []; } };
+    function populatePropsFromComputed() {}
+    ${fn('commitFocusedField')} ${fn('parseSource')} ${fn('normalizePathSlash')} ${fn('isSourceMatch')} ${fn('isSourceSelected')} ${fn('acceptSelection')}
+    const rect = { x: 0, y: 0, width: 10, height: 10 };
+    selectedElement = { source: 'App.tsx:1:1' }; selectedSources = ['App.tsx:1:1']; selectedRects = [rect];
+    acceptSelection({ source: 'App.tsx:1:1', rect, refresh: true, computedStyles: {} });
+    var blursAfterRefresh = blurs.length;
+    acceptSelection({ source: 'App.tsx:2:1', rect, computedStyles: {} });
+  `, context);
+  expect(vm.runInContext('blursAfterRefresh', context)).toBe(0);
+  // Blurred while the old element was still selected, so its pending value commits there.
+  expect(vm.runInContext('blurs', context)).toEqual(['App.tsx:1:1']);
+  expect(vm.runInContext('selectedElement.source', context)).toBe('App.tsx:2:1');
 });

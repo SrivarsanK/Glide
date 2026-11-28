@@ -45,7 +45,7 @@ function editor(names: string[]) {
     function showToast(kind, message) { toasts.push(message); }
     let glideClipboard = null;
     function applyOptimisticStyle() {}
-    function populatePropsFromComputed() {}
+    function populatePropsFromComputed() {} function commitFocusedField() {}
     function clearOverlay() {}
     function showNoSelection() {}
     ${pick(editorScript(), names)}
