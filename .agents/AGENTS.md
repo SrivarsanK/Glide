@@ -112,10 +112,18 @@ Never output all changes in one block and leave sequencing to the user.
 
 ## Release Workflow Automation
 
-Whenever requested to publish or release a new version:
-1. **Auto-Bump Version**: Automatically increment the patch version in `package.json` (or minor/major if specified).
-2. **Update README Badge**: Update version badge in `README.md` to match `vX.Y.Z`.
-3. **Build**: Execute `npm run build` to generate compiled ESM and TypeScript declaration bundles.
-4. **Commit, Tag & Push**: Commit version bump with `chore: bump version to X.Y.Z`, create git tag (`git tag vX.Y.Z`), and push `main` & tags to GitHub (`git push origin main --tags`).
-5. **Create GitHub Release**: Create release via `gh release create vX.Y.Z` (bypass invalid `GITHUB_TOKEN` env var using `$env:GITHUB_TOKEN=""` so keyring auth is used).
-6. **Publish**: Run `npm publish` to deploy the package to npm.
+Whenever requested to publish or release a new version (`X.Y.Z`):
+1. **Auto-Bump Version**: Increment the patch version in `package.json` and `package-lock.json` via `npm version <patch|minor|major> --no-git-tag-version` (default `patch`, or `minor`/`major` if specified). `README.md` uses a dynamic shields.io npm badge, so only update static version references if present.
+2. **Verify Release**: Execute `npm run verify:release` (`build`, `typecheck`, `test`, `test:artifact`, `test:consumer`, `test:hosted`) and confirm all checks pass.
+3. **Commit, Tag & Push**: Commit the version bump with `chore: bump version to X.Y.Z`, create git tag (`git tag vX.Y.Z`), and push `main` & tags to GitHub (`git push origin main --tags`).
+4. **Create GitHub Release & Auto-Publish (npm + GitHub Packages)**:
+   - Create the GitHub Release via `gh release create vX.Y.Z` (bypass invalid `GITHUB_TOKEN` env var on Windows using `$env:GITHUB_TOKEN=""` so keyring auth is used).
+   - Publishing the GitHub Release automatically triggers `.github/workflows/publish.yml` to publish `@srivarsank/glide@X.Y.Z` to **npm** (`--provenance --access public`) and **GitHub Packages**. Wait for the workflow to pass and verify `npm view @srivarsank/glide version` returns `X.Y.Z`. Only run manual `npm run publish:all` if CI publish fails.
+5. **Auto-Update Local Antigravity Plugin (`~/.gemini/config/plugins/glide/`)**:
+   - Bump `"version"` in `~/.gemini/config/plugins/glide/plugin.json` to `X.Y.Z`.
+   - Sync bundled skills (`glide`, `glide-component-segregator`, `glide-setup`, excluding `evals/`) from repo `skills/` into `~/.gemini/config/plugins/glide/skills/`.
+   - Verify live plugin reload via `GetAllPlugins` RPC (`dir: "glide"`, `version: "X.Y.Z"`, `disabled: false`).
+6. **Auto-Update MCP Server (`~/.gemini/config/plugins/glide/mcp_config.json`)**:
+   - Update the pinned package version in `~/.gemini/config/plugins/glide/mcp_config.json` to `@srivarsank/glide@X.Y.Z` (and update the version note in `~/.gemini/config/plugins/glide/README.md`) so `npx` switches off any stale `_npx` cache immediately without slow cold `@latest` lookups at MCP boot.
+   - Pre-warm and smoke-test `cmd /c npx -y @srivarsank/glide@X.Y.Z mcp` with an MCP `initialize` request over stdio and confirm `serverInfo.version` equals `X.Y.Z`.
+   - Remind the user to refresh any per-project MCP configs (`.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`) if pinned to an older version.
