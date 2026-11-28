@@ -2,36 +2,14 @@ import { Plugin } from 'vite';
 import * as babel from '@babel/core';
 import * as path from 'path';
 import glideSourceStampingPlugin from '@srivarsank/babel-plugin';
-import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, trustedWindowMessage, createFrameQueries, stampHTMLTemplate as stampTemplate, type GlideConfig } from '@srivarsank/core';
+import { loadConfigFromDisk, detectProjectMeta, DEFAULT_CONFIG, buildBridgeScript, stampHTMLTemplate as stampTemplate, type GlideConfig } from '@srivarsank/core';
 import { GlideServer } from '@srivarsank/server';
-import { glideBridge } from './bridge.js';
+
+export { buildBridgeScript };
 
 function normalizePath(filePath: string, rootDir: string): string {
   const relativePath = path.relative(rootDir, filePath);
   return relativePath.replace(/\\/g, '/');
-}
-
-/**
- * Inline bridge script injected into the browser — zero Node.js dependencies.
- * Calls glideBridge (bridge.ts), which registers hover/click handlers and
- * posts messages to the parent Glide editor window.
- * @param sourceAttr  data attribute stamped on each element (e.g. 'data-gl-source')
- * @param hoverAttr   data attribute for hover state
- * @param selectedAttr data attribute for selected state
- * @param snapThresholdPx pixel radius for snap-to-object
- */
-export function buildBridgeScript(
-  sourceAttr: string,
-  hoverAttr: string,
-  selectedAttr: string,
-  snapThresholdPx: number
-): string {
-  const call = `(${glideBridge.toString()})(${snapThresholdPx}, ${trustedWindowMessage.toString()}, ${createFrameQueries.toString()});`;
-  // Replacer functions insert the names literally; a replacement string would expand `$&`.
-  return '\n' + call
-    .replace(/__GLIDE_SOURCE_ATTR__/g, () => sourceAttr)
-    .replace(/__GLIDE_HOVER_ATTR__/g, () => hoverAttr)
-    .replace(/__GLIDE_SELECTED_ATTR__/g, () => selectedAttr) + '\n';
 }
 
 /**

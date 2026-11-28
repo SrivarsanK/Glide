@@ -65,6 +65,17 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
     return Array.prototype.slice.call(doc.querySelectorAll('[' + attributes.source + ']'));
   }
 
+  /** Strip a trailing `:hash` appended after remaps so lookups match the DOM's `file:line:col` stamp. */
+  function stripSourceHash(id: unknown): string {
+    return typeof id === 'string' ? id.replace(/^(.+?:\d+:\d+):[a-fA-F0-9]+$/, '$1') : '';
+  }
+
+  function matchSource(el: any, source: string): boolean {
+    const attr = el.getAttribute(attributes.source);
+    if (!attr || !source) return false;
+    return attr === source || attr === stripSourceHash(source);
+  }
+
   /** The first authored block container: where a shape drawn outside the frame is kept. */
   function firstContainer() {
     const root = stampedElements().filter(el => ['div', 'main', 'section', 'article'].indexOf(el.localName) >= 0)[0];
@@ -75,15 +86,19 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
   function exportData(source?: string) {
     let target = null;
     if (source) {
-      target = doc.querySelector('[' + attributes.selected + ']')
-        || stampedElements().filter(el => el.getAttribute(attributes.source) === source)[0] || null;
+      target = stampedElements().filter(el => matchSource(el, source))[0]
+        || doc.querySelector('[' + attributes.selected + ']') || null;
     }
     const label = target ? target.tagName.toLowerCase() : 'canvas';
     if (!target) target = doc.body;
     const rect = target.getBoundingClientRect();
     const size = { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
+    const clone = target.cloneNode(true);
+    const strip = (el: any) => { el.removeAttribute(attributes.selected); el.removeAttribute(attributes.hover); };
+    strip(clone);
+    Array.prototype.forEach.call(clone.querySelectorAll('*'), strip);
     if (target.tagName.toLowerCase() === 'svg') {
-      return { label, width: size.width, height: size.height, svg: new win.XMLSerializer().serializeToString(target) };
+      return { label, width: size.width, height: size.height, svg: new win.XMLSerializer().serializeToString(clone) };
     }
     let css = '';
     for (let s = 0; s < doc.styleSheets.length; s++) {
@@ -92,10 +107,6 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
         for (let r = 0; r < rules.length; r++) css += rules[r].cssText + '\n';
       } catch (_) { /* A stylesheet from another origin cannot be read. */ }
     }
-    const clone = target.cloneNode(true);
-    const strip = (el: any) => { el.removeAttribute(attributes.selected); el.removeAttribute(attributes.hover); };
-    strip(clone);
-    Array.prototype.forEach.call(clone.querySelectorAll('*'), strip);
     // The editor puts this markup in an SVG, which is XML: <input> and <img> must be closed.
     return { label, width: size.width, height: size.height, css, html: new win.XMLSerializer().serializeToString(clone),
       background: win.getComputedStyle(target).backgroundColor || '' };
@@ -108,7 +119,7 @@ export function createFrameQueries(win: any, attributes: { source: string; selec
       case 'first-container': return firstContainer();
       case 'sources': return stampedElements().map(el => el.getAttribute(attributes.source));
       case 'link-info': {
-        const all = stampedElements().filter(item => item.getAttribute(attributes.source) === payload.source), el = all[0];
+        const all = stampedElements().filter(item => matchSource(item, String(payload.source || ''))), el = all[0];
         if (!el) return null;
         const overlayOf = (item: any) => {
           const overlay = item.parentElement && item.parentElement.closest ? item.parentElement.closest('[popover]') : null;

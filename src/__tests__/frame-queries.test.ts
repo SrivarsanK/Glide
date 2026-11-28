@@ -121,3 +121,40 @@ test('a grid item spanning two rows does not merge them', () => {
   document: { elementFromPoint: () => container, querySelectorAll: () => [] } };
   expect(createFrameQueries(win, attributes)('container-at', { x: 115, y: 85 })).toMatchObject({ siblingId: 'App.tsx:6:7', position: 'before' });
 });
+
+test('link-info and export match remapped :hash source IDs and export targets the requested source first', () => {
+  const main = { ...element('main', 'App.tsx:3:5'), attributes: { 'data-glide-selected': '' },
+    cloneNode() { return { removeAttribute() {}, querySelectorAll: () => [] }; } };
+  const svgAttrs = new Map<string, string>([['data-gl-source', 'App.tsx:4:7'], ['data-glide-selected', '']]);
+  const svg: any = {
+    localName: 'svg', tagName: 'SVG', parentElement: main, position: 'static',
+    hasAttribute: (name: string) => svgAttrs.has(name),
+    getAttribute: (name: string) => svgAttrs.get(name) ?? null,
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 40, height: 40 }),
+    cloneNode() {
+      const clonedAttrs = new Map(svgAttrs);
+      return {
+        tagName: 'SVG',
+        removeAttribute: (name: string) => clonedAttrs.delete(name),
+        querySelectorAll: () => [],
+        get _attrs() { return [...clonedAttrs.keys()]; },
+      };
+    },
+  };
+  const win = {
+    scrollX: 0, scrollY: 0,
+    XMLSerializer: class { serializeToString(node: any) { return JSON.stringify(node._attrs || []); } },
+    getComputedStyle: () => ({ position: 'static', transform: 'none', backgroundColor: 'rgb(0, 0, 0)' }),
+    document: {
+      styleSheets: [],
+      body: main,
+      querySelector: (sel: string) => (sel === '[data-glide-selected]' ? main : null),
+      querySelectorAll: (sel: string) => (sel === '[data-gl-source]' ? [main, svg] : []),
+    },
+  };
+  const run = createFrameQueries(win, attributes);
+  expect(run('link-info', { source: 'App.tsx:4:7:deadbeef' })).toMatchObject({ tag: 'svg' });
+  const exported = run('export', { source: 'App.tsx:4:7:deadbeef' }) as any;
+  expect(exported.label).toBe('svg');
+  expect(exported.svg).not.toContain('data-glide-selected');
+});

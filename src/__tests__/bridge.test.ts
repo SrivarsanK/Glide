@@ -346,4 +346,156 @@ describe('Bridge Script Syntax & Integrity', () => {
       { type: 'glide:overlay', source: 'src/App.tsx:1:1', refresh: true },
     ]);
   });
+
+  test('proxy bridge shares the unified bridge implementation with Vite bridge', () => {
+    const raw = buildGlideBridgeInlineScript(DEFAULT_CONFIG);
+    expect(raw).toContain('glide:optimistic-style');
+    expect(raw).toContain('glide:preview-style');
+    expect(raw).toContain('glide:clear-preview');
+    expect(raw).toContain('glide:resize-start');
+    expect(raw).toContain('glide:scroll-by');
+    expect(raw).toContain('glide:marquee-start');
+  });
+
+  test('right-click never starts a phantom drag and zero-button pointermove cancels dragCandidate', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    const messages: any[] = [];
+    const docListeners: Record<string, Function[]> = {};
+    const attrs = new Map<string, string>([['data-gl-source', 'src/App.tsx:1:1']]);
+    const el: any = {
+      nodeType: 1, tagName: 'DIV', className: 'box', isConnected: true,
+      childNodes: [{ nodeType: 3, textContent: 'Box' }], children: [], parentNode: null,
+      contentEditable: 'inherit', style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '', getPropertyPriority: () => '' },
+      getAttribute: (a: string) => attrs.get(a) ?? null, hasAttribute: (a: string) => attrs.has(a),
+      setAttribute: (a: string, v: string) => attrs.set(a, v), removeAttribute: (a: string) => attrs.delete(a),
+      closest: (s: string) => (s === '[data-gl-source]' ? el : null),
+      getBoundingClientRect: () => ({ left: 10, top: 10, right: 110, bottom: 50, width: 100, height: 40 }),
+    };
+    const sandbox: any = {
+      window: {
+        __glide_initialized__: false, get top() { return {}; },
+        parent: { postMessage: (d: any) => messages.push(d) },
+        location: { href: 'http://localhost:5173/', ancestorOrigins: ['http://localhost:5173'] },
+        addEventListener: () => {}, removeEventListener: () => {},
+        getComputedStyle: () => ({ position: 'static', marginLeft: '0px', marginTop: '0px', left: 'auto', top: 'auto', transform: 'none' }),
+      },
+      document: {
+        head: { appendChild: () => {} }, referrer: 'http://localhost:5173/',
+        createElement: () => ({ id: '', textContent: '', appendChild: () => {} }),
+        addEventListener: (ev: string, fn: Function) => { (docListeners[ev] ||= []).push(fn); },
+        readyState: 'complete',
+        body: { tagName: 'BODY', children: [el], querySelectorAll: () => [el] },
+        documentElement: { tagName: 'HTML', setAttribute: () => {}, removeAttribute: () => {} },
+        querySelectorAll: () => [el], querySelector: () => el,
+      },
+      URL, Set, Map, setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {},
+      requestAnimationFrame: () => 1, cancelAnimationFrame: () => {}, Math, String, Number, Boolean, Array, Object, parseInt, isFinite, console,
+    };
+    el.parentNode = sandbox.document.body;
+    sandbox.window.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
+    sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
+    sandbox.window.cancelAnimationFrame = sandbox.cancelAnimationFrame;
+
+    new vm.Script(scriptCode).runInContext(vm.createContext(sandbox));
+    messages.length = 0;
+
+    // Right-click pointerdown (button: 2) followed by mouse move with no buttons held (buttons: 0)
+    docListeners.pointerdown.forEach(fn => fn({ target: el, button: 2, buttons: 2, pointerId: 1, clientX: 20, clientY: 20, preventDefault() {}, stopPropagation() {} }));
+    docListeners.pointermove.forEach(fn => fn({ target: el, buttons: 0, pointerId: 1, clientX: 80, clientY: 60, preventDefault() {}, stopPropagation() {} }));
+    expect(messages.some(m => m.type === 'glide:element-drag-start')).toBe(false);
+    expect(messages.some(m => m.type === 'glide:element-selected')).toBe(false);
+
+    // Left-click down then move with buttons: 0 (e.g. released outside iframe) cancels dragCandidate
+    docListeners.pointerdown.forEach(fn => fn({ target: el, button: 0, buttons: 1, pointerId: 2, clientX: 20, clientY: 20, preventDefault() {}, stopPropagation() {} }));
+    messages.length = 0;
+    docListeners.pointermove.forEach(fn => fn({ target: el, buttons: 0, pointerId: 2, clientX: 80, clientY: 60, preventDefault() {}, stopPropagation() {} }));
+    expect(messages.some(m => m.type === 'glide:element-drag-start')).toBe(false);
+  });
+
+  test('double-click inline edit cleans up keydown on blur, emits only glide:inline-text-edit, and preview blocks scroll/resize', () => {
+    const scriptCode = buildBridgeScript('data-gl-source', 'data-glide-hover', 'data-glide-selected', 5);
+    const messages: any[] = [];
+    const winListeners: Record<string, Function[]> = {};
+    const docListeners: Record<string, Function[]> = {};
+    const elListeners: Record<string, Function[]> = {};
+    const attrs = new Map<string, string>([['data-gl-source', 'src/App.tsx:1:1']]);
+    const el: any = {
+      nodeType: 1, tagName: 'P', className: 'copy', isConnected: true,
+      textContent: 'Alpha Text', childNodes: [{ nodeType: 3, textContent: 'Alpha Text' }], children: [], parentNode: null,
+      contentEditable: 'inherit', isContentEditable: false,
+      style: { outline: '', outlineOffset: '', setProperty() {}, removeProperty() {}, getPropertyValue: () => '', getPropertyPriority: () => '' },
+      focus() {},
+      blur() { (elListeners.blur || []).slice().forEach(fn => fn()); },
+      addEventListener(ev: string, fn: Function) { (elListeners[ev] ||= []).push(fn); },
+      removeEventListener(ev: string, fn: Function) { elListeners[ev] = (elListeners[ev] || []).filter(f => f !== fn); },
+      getAttribute: (a: string) => attrs.get(a) ?? null, hasAttribute: (a: string) => attrs.has(a),
+      setAttribute: (a: string, v: string) => attrs.set(a, v), removeAttribute: (a: string) => attrs.delete(a),
+      closest: (s: string) => (s === '[data-gl-source]' ? el : null),
+      getBoundingClientRect: () => ({ left: 10, top: 10, right: 110, bottom: 30, width: 100, height: 20 }),
+    };
+    const parentWindow = { postMessage: (d: any) => messages.push(d) };
+    const sandbox: any = {
+      window: {
+        __glide_initialized__: false, get top() { return {}; }, parent: parentWindow,
+        location: { href: 'http://localhost:5173/', ancestorOrigins: ['http://localhost:5173'] },
+        addEventListener: (ev: string, fn: Function) => { (winListeners[ev] ||= []).push(fn); },
+        removeEventListener: () => {},
+        getComputedStyle: () => ({ position: 'static', transform: 'none' }),
+        getSelection: () => null,
+      },
+      document: {
+        head: { appendChild: () => {} }, referrer: 'http://localhost:5173/',
+        createElement: () => ({ id: '', textContent: '', appendChild: () => {} }),
+        createRange: () => ({ selectNodeContents() {} }),
+        addEventListener: (ev: string, fn: Function) => { (docListeners[ev] ||= []).push(fn); },
+        readyState: 'complete',
+        body: { tagName: 'BODY', children: [el], querySelectorAll: () => [el] },
+        documentElement: { tagName: 'HTML', setAttribute: () => {}, removeAttribute: () => {} },
+        querySelectorAll: () => [el], querySelector: () => el,
+      },
+      URL, Set, Map, setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {},
+      requestAnimationFrame: () => 1, cancelAnimationFrame: () => {}, Math, String, Number, Boolean, Array, Object, parseInt, isFinite, console,
+    };
+    el.parentNode = sandbox.document.body;
+    sandbox.window.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
+    sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
+    sandbox.window.cancelAnimationFrame = sandbox.cancelAnimationFrame;
+
+    new vm.Script(scriptCode).runInContext(vm.createContext(sandbox));
+    messages.length = 0;
+
+    // Edit #1: change to "Second Edit" and commit via blur
+    docListeners.dblclick.forEach(fn => fn({ target: el, clientX: 20, clientY: 20, preventDefault() {}, stopPropagation() {} }));
+    el.textContent = 'Second Edit';
+    el.blur();
+    expect(messages.filter(m => m.type === 'glide:inline-text-edit')).toHaveLength(1);
+    expect(messages.filter(m => m.type === 'glide:text-edited')).toHaveLength(0);
+    expect(elListeners.keydown || []).toHaveLength(0);
+
+    // Edit #2: type "Aborted Gamma" then press Escape -> must revert to "Second Edit", NOT "Alpha Text"
+    docListeners.dblclick.forEach(fn => fn({ target: el, clientX: 20, clientY: 20, preventDefault() {}, stopPropagation() {} }));
+    el.textContent = 'Aborted Gamma';
+    (elListeners.keydown || []).slice().forEach(fn => fn({ key: 'Escape', preventDefault() {} }));
+    expect(el.textContent).toBe('Second Edit');
+
+    // Preview mode must ignore scroll and resize events (never resurrect selection overlay)
+    windowMessage({ type: 'glide:set-interaction-mode', enabled: true });
+    messages.length = 0;
+    (winListeners.scroll || []).forEach(fn => fn());
+    (winListeners.resize || []).forEach(fn => fn());
+    expect(messages.some(m => m.type === 'glide:overlay' || m.type === 'glide:element-selected')).toBe(false);
+
+    // Preview style and clear-preview must resolve remapped :hash source IDs
+    windowMessage({ type: 'glide:set-interaction-mode', enabled: false });
+    windowMessage({ type: 'glide:preview-style', sourceId: 'src/App.tsx:1:1:deadbeef', styles: { color: 'red' } });
+    expect(el.style.color).toBe('red');
+    windowMessage({ type: 'glide:clear-preview', sourceId: 'src/App.tsx:1:1:deadbeef' });
+    expect(el.style.color).toBe('');
+
+    function windowMessage(data: any) {
+      (winListeners.message || []).forEach(fn => fn({ source: parentWindow, origin: 'http://localhost:5173', data }));
+    }
+  });
 });

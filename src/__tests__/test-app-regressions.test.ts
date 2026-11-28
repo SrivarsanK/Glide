@@ -210,7 +210,6 @@ describe('served scripts', () => {
   // A template literal drops the backslash of an escape it does not know: `/\d+/` reaches the browser as `/d+/`.
   test.each([
     ['packages/overlay/src/editor-html.ts', 'return `', '  `;'],
-    ['packages/server/src/ws-server.ts', 'return `<script data-glide-bridge="1">', '<\\/script>`'],
   ])('no backslash escape in the %s template is silently dropped', (file, start, end) => {
     const lines = fs.readFileSync(file, 'utf8').split('\n');
     const from = lines.findIndex(line => line.trim() === start.trim());
