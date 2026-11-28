@@ -77,4 +77,29 @@ describe('HistoryStore Undo/Redo System', () => {
     const redo2 = store.redo();
     expect(redo2![0].after).toBe('V3');
   });
+
+  test('typing squash preserves intervening external edits instead of overwriting them', () => {
+    store.push({
+      description: 'Type H',
+      squashKey: 'text:App.tsx:1:1:1',
+      diffs: [{ file: 'App.tsx', before: '<p>A</p>', after: '<p>H</p>' }],
+    });
+    // Contiguous keystroke squashes cleanly.
+    store.push({
+      description: 'Type Hi',
+      squashKey: 'text:App.tsx:1:1:1',
+      diffs: [{ file: 'App.tsx', before: '<p>H</p>', after: '<p>Hi</p>' }],
+    });
+    expect(store.getState().stack).toHaveLength(1);
+    expect(store.getState().stack[0].diffs[0]).toEqual({ file: 'App.tsx', before: '<p>A</p>', after: '<p>Hi</p>' });
+
+    // Intervening external edit breaks contiguity (`before !== existing.after`), so it starts a new entry.
+    store.push({
+      description: 'Type Hi!',
+      squashKey: 'text:App.tsx:1:1:1',
+      diffs: [{ file: 'App.tsx', before: '// external\n<p>Hi</p>', after: '// external\n<p>Hi!</p>' }],
+    });
+    expect(store.getState().stack).toHaveLength(2);
+    expect(store.getState().stack[1].diffs[0].before).toBe('// external\n<p>Hi</p>');
+  });
 });

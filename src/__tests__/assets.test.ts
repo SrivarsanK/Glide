@@ -35,3 +35,12 @@ test('rejects filename traversal and a public directory linked outside the proje
   expect(() => saveUploadedAsset(f.project, f.source, 'logo.png')).toThrow('INVALID_PATH');
   expect(fs.existsSync(path.join(f.root, 'assets'))).toBe(false);
 });
+
+test('rejects scriptable/executable extensions and URL-encodes asset URLs', () => {
+  const f = fixture();
+  for (const name of ['evil.html', 'icon.svg', 'payload.js', 'mod.mjs', 'noext']) {
+    expect(() => saveUploadedAsset(f.project, f.source, name)).toThrow('INVALID_ASSET');
+  }
+  expect(saveUploadedAsset(f.project, f.source, 'hero #1.png')).toBe('/assets/hero%20%231.png');
+  expect(fs.existsSync(path.join(f.project, 'public/assets/hero #1.png'))).toBe(true);
+});

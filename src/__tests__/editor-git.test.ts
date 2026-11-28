@@ -31,3 +31,21 @@ test.each(['staged', 'external', 'preexisting'])('refuses %s changes in an owned
   expect(() => finalizeEditorChanges(f.root, f.diffs, 'bad')).toThrow('GIT_CONFLICT');
   expect(f.git('rev-parse', 'HEAD')).toBe(head); expect(f.git('show', ':App.tsx')).toBe(index);
 });
+
+test('finalizes editor changes inside a monorepo package subdirectory and with CRLF autocrlf checkouts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glide-git-mono-')); roots.push(root);
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+  git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Test');
+  git('config', 'core.autocrlf', 'true');
+  const pkgRoot = path.join(root, 'packages', 'web');
+  fs.mkdirSync(pkgRoot, { recursive: true });
+  const appFile = path.join(pkgRoot, 'App.tsx');
+  fs.writeFileSync(appFile, 'const a = 1;\r\nconst b = 2;\r\n');
+  git('add', '.'); git('commit', '-m', 'initial');
+  // Disk has CRLF while HEAD blob has LF under core.autocrlf=true.
+  const beforeCrlf = 'const a = 1;\r\nconst b = 2;\r\n';
+  const afterCrlf = 'const a = 1;\r\nconst b = 3;\r\n';
+  fs.writeFileSync(appFile, afterCrlf);
+  finalizeEditorChanges(pkgRoot, [{ file: 'App.tsx', before: beforeCrlf, after: afterCrlf }], 'monorepo crlf edit');
+  expect(git('show', 'HEAD:packages/web/App.tsx')).toBe('const a = 1;\nconst b = 3;\n');
+});

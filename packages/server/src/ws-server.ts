@@ -365,7 +365,9 @@ function loopbackLiteral(host: string | undefined): boolean {
 }
 
 function normalizePathKey(filePath: string): string {
-  return path.resolve(filePath).replace(/\\/g, '/').toLowerCase();
+  let resolved = path.resolve(filePath);
+  try { resolved = fs.realpathSync.native(resolved); } catch {}
+  return resolved.replace(/\\/g, '/').toLowerCase();
 }
 
 /**
@@ -408,9 +410,10 @@ export class GlideServer {
   private requestHandler: ((req: IncomingMessage, res: ServerResponse, next?: () => void) => void) | null = null;
   private stopRegistry: (() => Promise<void>) | null = null;
 
-  public recordSelfWrite(filePath: string) {
+  public recordSelfWrite(filePath: string, digest?: string) {
     const normPath = normalizePathKey(filePath);
-    if (fs.existsSync(filePath)) this.lastSelfWrites.set(normPath, contentDigest(fs.readFileSync(filePath, 'utf8')));
+    const recorded = digest ?? (fs.existsSync(filePath) ? contentDigest(fs.readFileSync(filePath, 'utf8')) : undefined);
+    if (recorded !== undefined) this.lastSelfWrites.set(normPath, recorded);
     this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
   }
 
@@ -426,11 +429,17 @@ export class GlideServer {
 
   constructor(port = 7777, targetPort = 5173, config: GlideConfig = DEFAULT_CONFIG, projectRoot = process.cwd()) {
     this.projectPaths = new ProjectPaths(projectRoot);
-    this.mutations = new MutationService(this.projectPaths.root, { onPersist: (diffs, operations) => {
-      if (!diffs.length) return;
-      this.history.push({ description: 'Apply source changes', diffs, ...typingStep(operations) });
-      for (const diff of diffs) this.recordSelfWrite(diff.file);
-    } });
+    this.mutations = new MutationService(this.projectPaths.root, {
+      onPersist: (diffs, operations) => {
+        if (!diffs.length) return;
+        // Record precomputed digests synchronously before pushing history so no disk re-read can throw after commit.
+        for (const diff of diffs) this.recordSelfWrite(diff.file, contentDigest(diff.after));
+        this.history.push({ description: 'Apply source changes', diffs, ...typingStep(operations) });
+      },
+      onRestore: diffs => {
+        for (const diff of diffs) this.recordSelfWrite(diff.file, contentDigest(diff.after));
+      },
+    });
     this.port = port;
     this.targetPort = targetPort;
     this.config = {
@@ -455,7 +464,14 @@ export class GlideServer {
       this.hosted.onListening = onListening;
       httpServer.once('listening', onListening);
     }
-    await this.start();
+    try {
+      await this.start();
+    } catch (error) {
+      if (this.hosted?.onListening) httpServer.off('listening', this.hosted.onListening);
+      if (this.hosted?.onUpgrade) httpServer.off('upgrade', this.hosted.onUpgrade);
+      this.hosted = null;
+      throw error;
+    }
     // The glide command writes the component registry itself; attached, nothing else would.
     this.stopRegistry = maintainRegistryFile(this.projectPaths.root, () => {});
     return (req, res, next) => this.requestHandler ? this.requestHandler(req, res, next) : next();
@@ -542,6 +558,8 @@ export class GlideServer {
   /** A source file changed: bump its generation and send open editors the new elements, tree and digest. */
   private announceDrift(filePath: string): void {
     const normPath = normalizePathKey(filePath);
+    // Clear stale self-write digest so a subsequent external revert back to that revision is never suppressed.
+    this.lastSelfWrites.delete(normPath);
     this.fileGenerations.set(normPath, (this.fileGenerations.get(normPath) || 0) + 1);
     console.log(`[Glide] File drift detected on ${normPath}, bumping generation counter to ${this.fileGenerations.get(normPath)}`);
 
@@ -1138,14 +1156,23 @@ export class GlideServer {
               }
 
               if (['undo', 'UNDO', 'redo', 'REDO', 'JUMP_TO_HISTORY'].includes(message.type)) {
-                const action = message.type === 'JUMP_TO_HISTORY' ? message.index : message.type.toLowerCase();
                 const transactionId = message.transactionId || randomUUID();
+                if (message.type === 'JUMP_TO_HISTORY' && !Number.isInteger(message.index)) {
+                  ws.send(JSON.stringify({
+                    type: 'status',
+                    action: message.index,
+                    transactionId,
+                    success: false,
+                    error: 'INVALID_HISTORY: JUMP_TO_HISTORY requires an integer index.',
+                  }));
+                  return;
+                }
+                const action = message.type === 'JUMP_TO_HISTORY' ? message.index : message.type.toLowerCase();
                 try {
                   const result = await this.mutations.restoreHistory(
                     transactionId, this.history, action
                   );
                   if (result.success) {
-                    for (const file of result.changedFiles) this.recordSelfWrite(file.path);
                     ws.send(JSON.stringify({ type: 'HISTORY_UPDATE', ...this.history.getState() }));
                   }
                   ws.send(JSON.stringify({ type: 'status', action, ...result }));
@@ -1182,7 +1209,10 @@ export class GlideServer {
           });
         });
 
+        let settled = false;
         const cleanupFailedStart = async (err: unknown) => {
+          if (settled) return;
+          settled = true;
           this.requestHandler = null;
           if (this.watcher) {
             const w = this.watcher;
@@ -1203,6 +1233,7 @@ export class GlideServer {
         });
 
         if (this.hosted) {
+          settled = true;
           resolve();
           return;
         }
@@ -1213,10 +1244,15 @@ export class GlideServer {
         });
 
         this.server!.listen(this.port, this.config.remoteAccess?.bindAddress ?? '127.0.0.1', () => {
+          settled = true;
           this.writeMcpRunFile();
           resolve();
         });
       } catch (err) {
+        this.requestHandler = null;
+        if (this.watcher) { const w = this.watcher; this.watcher = null; void w.close().catch(() => {}); }
+        if (this.wss) { const wss = this.wss; this.wss = null; try { wss.close(); } catch {} }
+        this.server = null;
         reject(err);
       }
     });
@@ -1228,6 +1264,7 @@ export class GlideServer {
     // An attached dev server belongs to its owner; only stop listening for Glide's events on it.
     if (this.hosted?.onUpgrade) this.hosted.httpServer.off('upgrade', this.hosted.onUpgrade);
     if (this.hosted?.onListening) this.hosted.httpServer.off('listening', this.hosted.onListening);
+    this.hosted = null;
     if (this.stopRegistry) {
       try { await this.stopRegistry(); } catch (err) { console.error('[Glide] Error closing registry watcher:', err); }
       this.stopRegistry = null;
@@ -1268,8 +1305,8 @@ export class GlideServer {
 
   private closeHttpServer(resolve: () => void, reject: (err: Error) => void) {
     if (this.server) {
-      this.server.closeAllConnections?.();
-      this.server.close((err) => {
+      const server = this.server;
+      server.close((err) => {
         if (err) {
           reject(err);
         } else {
@@ -1277,6 +1314,7 @@ export class GlideServer {
           resolve();
         }
       });
+      server.closeAllConnections?.();
     } else {
       resolve();
     }

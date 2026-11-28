@@ -70,9 +70,11 @@ async function answer(message: unknown, ctx: McpContext): Promise<unknown> {
 
 /** `file:line:column` (columns from one) or the editor's `line:L:col:C` form. */
 export function parseReference(reference: unknown): { file: string; line: number; column: number } {
-  const match = typeof reference === 'string' && reference.match(/^(.*):(\d+):(\d+)(?::[a-fA-F0-9]+)?$/);
-  if (!match || !match[1]) throw new Error('INVALID_TARGET: Pass a source reference such as src/App.tsx:12:5.');
-  return { file: match[1], line: Number(match[2]), column: Number(match[3]) };
+  const match = typeof reference === 'string' && reference.match(/^(.*?):(\d+):(\d+)(?::[a-fA-F0-9]+)?$/);
+  const line = match ? Number(match[2]) : 0;
+  const column = match ? Number(match[3]) : 0;
+  if (!match || !match[1] || line < 1 || column < 1) throw new Error('INVALID_TARGET: Pass a source reference such as src/App.tsx:12:5.');
+  return { file: match[1], line, column };
 }
 
 async function callTool(name: string, args: any, ctx: McpContext): Promise<unknown> {
