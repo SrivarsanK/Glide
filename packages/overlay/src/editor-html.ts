@@ -6973,6 +6973,11 @@ export function getEditorHTML(config: GlideConfig = DEFAULT_CONFIG, sessionToken
               if (charCount) charCount.textContent = text.length + ' chars';
               sendEdit({ type: 'text', value: text });
             });
+            // Enter ends the edit, as in the other fields; it must not write a line break into the source.
+            // Shift+Enter still adds one.
+            elTextContent.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.target.blur(); }
+            });
           }
 
           // Font family

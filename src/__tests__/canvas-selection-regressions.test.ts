@@ -23,6 +23,27 @@ function extract(predicate: (node: any) => boolean): string {
 const fn = (name: string) => extract(node => node.type === 'FunctionDeclaration' && node.id?.name === name);
 const branch = (name: string) => extract(node => node.type === 'IfStatement' && script.slice(node.start, node.consequent.start).includes(`data.type === '${name}'`));
 
+test('Enter in the text field ends the edit instead of writing a line break; Shift+Enter still adds one', () => {
+  const textField = extract(node => node.type === 'IfStatement' && node.test.type === 'Identifier' && node.test.name === 'elTextContent');
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const listeners = {};
+    const elTextContent = { blurs: 0, addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, blur() { this.blurs++; } };
+    const document = { getElementById: () => null };
+    function sendEdit() {}
+    ${textField}
+    function press(shiftKey) {
+      const event = { key: 'Enter', shiftKey, isComposing: false, target: elTextContent, prevented: false, preventDefault() { this.prevented = true; } };
+      listeners.keydown.forEach(fn => fn(event));
+      return event.prevented;
+    }
+    var enter = press(false), shiftEnter = press(true);
+  `, context);
+  expect(vm.runInContext('enter', context)).toBe(true);
+  expect(vm.runInContext('shiftEnter', context)).toBe(false);
+  expect(vm.runInContext('elTextContent.blurs', context)).toBe(1);
+});
+
 test('hovering another component never requests its tree or replaces the active file', () => {
   const context = vm.createContext({ createSourceMapping });
   vm.runInContext(`
